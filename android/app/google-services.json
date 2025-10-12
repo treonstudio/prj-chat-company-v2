@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "598634546671",
+    "project_id": "chatkuu-24a0a",
+    "storage_bucket": "chatkuu-24a0a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:598634546671:android:f360f47da2ea4561efa21a",
+        "android_client_info": {
+          "package_name": "com.treonstudio.chatku"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDQOjmeCSfLt-qxG2QhRl3yr5svHBXR72s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
