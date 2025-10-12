@@ -34,10 +34,7 @@ export function Sidebar({ isCollapsed = false }: SidebarProps) {
 
   const handleLogout = async () => {
     try {
-      // Clear localStorage for default admin
-      localStorage.removeItem('adminAuth')
-
-      // Sign out from Firebase if user is logged in via Firebase
+      // Sign out from Firebase
       await signOut(auth)
 
       router.push("/signin")

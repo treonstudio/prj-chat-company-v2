@@ -1,19 +1,47 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSidebar } from "@/context/SidebarContext"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
+import { useAuthContext } from "@/context/AuthContext"
+import { useRouter } from "next/navigation"
 
 export default function UsageControlPage() {
   const { toggleSidebar } = useSidebar()
+  const { user, loading } = useAuthContext()
+  const router = useRouter()
   const [callsAllowed, setCallsAllowed] = useState(true)
   const [textMessageAllowed, setTextMessageAllowed] = useState(true)
   const [mediaSendAllowed, setMediaSendAllowed] = useState(true)
   const [maxFileSize, setMaxFileSize] = useState("60")
+
+  // Protect the page - redirect if not authenticated
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/signin")
+    }
+  }, [user, loading, router])
+
+  // Show loading state while checking auth
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Don't render if not authenticated
+  if (!user) {
+    return null
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

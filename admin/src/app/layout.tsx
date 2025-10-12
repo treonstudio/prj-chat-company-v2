@@ -1,5 +1,6 @@
 import { AuthContextProvider } from '@/context/AuthContext';
 import { Inter } from 'next/font/google';
+import { Toaster } from 'sonner';
 import './globals.css';
 
 // Load the Inter font with 'latin' subset
@@ -7,8 +8,8 @@ const inter = Inter({ subsets: ['latin'] });
 
 // Metadata for the application
 export const metadata = {
-  title: 'Next.js + Firebase Starter',
-  description: 'Template to use Next.js with Firebase',
+  title: 'Chatku by Treonstudio',
+  description: 'Chatku by Treonstudio',
 };
 
 // Root layout component for the application
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Wrap the children with the AuthContextProvider to provide authentication context */}
         <AuthContextProvider>
           {children}
+          <Toaster position="top-right" richColors />
         </AuthContextProvider>
       </body>
     </html>

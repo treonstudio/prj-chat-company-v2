@@ -4,21 +4,54 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 function Page() {
-  // Access the user object from the authentication context
-  // const { user } = useAuthContext();
-  const { user } = useAuthContext() as { user: any }; // Use 'as' to assert the type as { user: any }
+  const { user, loading } = useAuthContext();
   const router = useRouter();
 
   useEffect(() => {
-    // Redirect to the home page if the user is not logged in
-    if (user == null) {
-      router.push("/");
+    // Wait for loading to complete before checking auth
+    if (!loading && user == null) {
+      router.push("/signin");
     }
-    // }, [ user ] );
-  }, [user, router]); // Include 'router' in the dependency array to resolve eslint warning
+  }, [user, loading, router]);
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show content only if user is authenticated
+  if (!user) {
+    return null;
+  }
 
   return (
-    <h1>Only logged-in users can view this page</h1>
+    <div className="min-h-screen bg-gray-50 p-8">
+      <div className="mx-auto max-w-4xl">
+        <div className="rounded-lg bg-white p-8 shadow-sm">
+          <h1 className="mb-4 text-3xl font-bold text-gray-900">
+            Welcome, {user.email || user.displayName || 'User'}!
+          </h1>
+          <p className="text-gray-600">
+            Only logged-in users can view this page.
+          </p>
+          <div className="mt-6 rounded-lg bg-emerald-50 p-4">
+            <p className="text-sm text-emerald-800">
+              <strong>User ID:</strong> {user.uid}
+            </p>
+            <p className="text-sm text-emerald-800">
+              <strong>Email:</strong> {user.email}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

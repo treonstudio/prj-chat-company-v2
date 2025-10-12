@@ -6,11 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Eye, EyeOff } from "lucide-react";
+import { toast } from "sonner";
 
 function Page() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
@@ -19,38 +22,102 @@ function Page() {
   const handleForm = async (event: { preventDefault: () => void }) => {
     event.preventDefault();
     setError('');
+    setEmailError('');
+    setPasswordError('');
+
+    // Client-side validation
+    let hasError = false;
+
+    if (!email.trim()) {
+      setEmailError('Email tidak boleh kosong');
+      hasError = true;
+    } else {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        setEmailError('Format email tidak valid');
+        hasError = true;
+      }
+    }
+
+    if (!password) {
+      setPasswordError('Password tidak boleh kosong');
+      hasError = true;
+    }
+
+    if (hasError) {
+      return;
+    }
+
     setLoading(true);
 
-    // Check for default admin credentials first
-    if (email === 'admin@gmail.com' && password === 'Admin1234') {
-      // Store admin session in localStorage
-      localStorage.setItem('adminAuth', JSON.stringify({
-        email: 'admin@gmail.com',
-        uid: 'admin-default',
-        displayName: 'Admin',
-        isDefaultAdmin: true
-      }));
+    try {
+      // Try Firebase authentication
+      const { result, error } = await signIn(email, password);
 
-      // Redirect to dashboard
+      if (error) {
+        // Handle specific Firebase errors
+        const firebaseError = error as any;
+
+        if (firebaseError.code === 'auth/user-not-found') {
+          setEmailError('Tidak ada akun dengan email ini');
+          toast.error('Login gagal', {
+            description: 'Tidak ada akun dengan email ini'
+          });
+        } else if (firebaseError.code === 'auth/wrong-password') {
+          setPasswordError('Password salah');
+          toast.error('Login gagal', {
+            description: 'Password salah'
+          });
+        } else if (firebaseError.code === 'auth/invalid-email') {
+          setEmailError('Format email tidak valid');
+          toast.error('Login gagal', {
+            description: 'Format email tidak valid'
+          });
+        } else if (firebaseError.code === 'auth/user-disabled') {
+          setError('Akun ini telah dinonaktifkan');
+          toast.error('Login gagal', {
+            description: 'Akun ini telah dinonaktifkan'
+          });
+        } else if (firebaseError.code === 'auth/too-many-requests') {
+          setError('Terlalu banyak percobaan gagal. Silakan coba lagi nanti.');
+          toast.error('Login gagal', {
+            description: 'Terlalu banyak percobaan gagal. Silakan coba lagi nanti.'
+          });
+        } else if (firebaseError.code === 'auth/invalid-credential') {
+          setError('Email atau password salah. Silakan periksa kembali.');
+          toast.error('Login gagal', {
+            description: 'Email atau password salah'
+          });
+        } else {
+          setError('Terjadi kesalahan. Silakan coba lagi.');
+          toast.error('Login gagal', {
+            description: 'Terjadi kesalahan'
+          });
+        }
+
+        setLoading(false);
+        return;
+      }
+
+      // Sign in successful
+      console.log('User signed in successfully:', result);
+
+      // Show success toast
+      toast.success('Login berhasil!', {
+        description: 'Mengalihkan ke dashboard...'
+      });
+
+      // Redirect to the dashboard
       router.push("/dashboard");
-      return;
-    }
-
-    // If not default admin, try Firebase authentication
-    const { result, error } = await signIn(email, password);
-
-    if (error) {
-      // Display and log any sign-in errors
-      setError('Invalid email or password. Please try again.');
+    } catch (err) {
+      console.error('Unexpected error during sign in:', err);
+      const errorMsg = 'Terjadi kesalahan yang tidak terduga. Silakan coba lagi.';
+      setError(errorMsg);
+      toast.error('Login gagal', {
+        description: errorMsg
+      });
       setLoading(false);
-      return;
     }
-
-    // Sign in successful
-    console.log(result);
-
-    // Redirect to the dashboard
-    router.push("/dashboard");
   }
 
   return (
@@ -87,15 +154,21 @@ function Page() {
                 Email
               </label>
               <Input
-                onChange={(e) => setEmail(e.target.value)}
-                required
+                onChange={(e) => {
+                  setEmail(e.target.value)
+                  setEmailError('')
+                }}
                 type="email"
                 name="email"
                 id="email"
-                placeholder="admin@gmail.com"
-                className="h-12"
+                placeholder="your.email@example.com"
+                className={`h-12 ${emailError ? "border-red-500 focus:border-red-500" : ""}`}
                 value={email}
+                disabled={loading}
               />
+              {emailError && (
+                <p className="mt-1 text-xs text-red-600">{emailError}</p>
+              )}
             </div>
 
             <div>
@@ -104,19 +177,23 @@ function Page() {
               </label>
               <div className="relative">
                 <Input
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
+                  onChange={(e) => {
+                    setPassword(e.target.value)
+                    setPasswordError('')
+                  }}
                   type={showPassword ? "text" : "password"}
                   name="password"
                   id="password"
                   placeholder="Enter your password"
-                  className="h-12 pr-10"
+                  className={`h-12 pr-10 ${passwordError ? "border-red-500 focus:border-red-500" : ""}`}
                   value={password}
+                  disabled={loading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  disabled={loading}
                 >
                   {showPassword ? (
                     <EyeOff className="h-5 w-5" />
@@ -125,6 +202,9 @@ function Page() {
                   )}
                 </button>
               </div>
+              {passwordError && (
+                <p className="mt-1 text-xs text-red-600">{passwordError}</p>
+              )}
             </div>
 
             <Button
@@ -134,12 +214,6 @@ function Page() {
             >
               {loading ? 'Signing in...' : 'Sign In'}
             </Button>
-
-            <div className="mt-4 rounded-lg bg-gray-50 p-4">
-              <p className="text-xs text-gray-600">Default Admin Account:</p>
-              <p className="text-sm font-medium text-gray-900">admin@gmail.com</p>
-              <p className="text-sm font-medium text-gray-900">Admin1234</p>
-            </div>
           </form>
         </CardContent>
       </Card>
