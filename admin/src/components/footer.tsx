@@ -1,6 +1,6 @@
 "use client"
 
-import { version } from "../../package.json"
+import packageJson from "../../package.json"
 import buildInfo from "../build-info.json"
 
 export function Footer() {
@@ -25,7 +25,7 @@ export function Footer() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span>Version {version}</span>
+            <span>Version {packageJson.version}</span>
             <span className="text-gray-300">•</span>
             <span title={`Build time: ${buildInfo.buildTime}`}>
               {buildInfo.commitHash}

@@ -109,7 +109,8 @@ export default function DashboardPage() {
   // Fetch users count
   useEffect(() => {
     const fetchUsersCount = async () => {
-      const { count, error } = await getUsersCount()
+      // Exclude current user from count
+      const { count, error } = await getUsersCount(user?.uid)
       if (!error) {
         setTotalUsers(count)
         setTotalPages(Math.ceil(count / pageSize))
@@ -148,7 +149,8 @@ export default function DashboardPage() {
     const fetchUsers = async () => {
       setUsersLoading(true)
       console.log("Fetching users...")
-      const { result, error, lastVisible } = await getUsers(pageSize)
+      // Exclude current user from list
+      const { result, error, lastVisible } = await getUsers(pageSize, undefined, user?.uid)
 
       console.log("Users result:", result)
       console.log("Users error:", error)
@@ -175,7 +177,8 @@ export default function DashboardPage() {
     if (!lastDoc) return
 
     setUsersLoading(true)
-    const { result, error, lastVisible } = await getUsers(pageSize, lastDoc)
+    // Exclude current user from list
+    const { result, error, lastVisible } = await getUsers(pageSize, lastDoc, user?.uid)
 
     if (!error && result) {
       setUsers(result as User[])
@@ -195,7 +198,8 @@ export default function DashboardPage() {
 
     setUsersLoading(true)
     // Reset to first page for now (simplified pagination)
-    const { result, error, lastVisible } = await getUsers(pageSize)
+    // Exclude current user from list
+    const { result, error, lastVisible } = await getUsers(pageSize, undefined, user?.uid)
 
     if (!error && result) {
       setUsers(result as User[])
@@ -212,15 +216,16 @@ export default function DashboardPage() {
   // Reload users after adding new user
   const reloadUsers = async () => {
     setUsersLoading(true)
-    const { result, error, lastVisible } = await getUsers(pageSize)
+    // Exclude current user from list
+    const { result, error, lastVisible } = await getUsers(pageSize, undefined, user?.uid)
 
     if (!error && result) {
       setUsers(result as User[])
       setLastDoc(lastVisible || null)
       setCurrentPage(1)
 
-      // Update count
-      const { count } = await getUsersCount()
+      // Update count (exclude current user)
+      const { count } = await getUsersCount(user?.uid)
       setTotalUsers(count)
       setTotalPages(Math.ceil(count / pageSize))
     }

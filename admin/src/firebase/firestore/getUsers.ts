@@ -2,13 +2,14 @@ import firebase_app from "../config";
 import * as firestore from "firebase/firestore";
 
 // Function to get users with pagination
-export async function getUsers(pageSize: number = 10, lastDoc?: firestore.DocumentSnapshot) {
+export async function getUsers(pageSize: number = 10, lastDoc?: firestore.DocumentSnapshot, excludeUserId?: string) {
   let result: any[] = [];
   let error = null;
   let lastVisible = null;
 
   try {
     console.log("[getUsers] Starting...");
+    console.log("[getUsers] Exclude user ID:", excludeUserId);
 
     // Get Firestore instance
     const db = firestore.getFirestore(firebase_app);
@@ -37,10 +38,12 @@ export async function getUsers(pageSize: number = 10, lastDoc?: firestore.Docume
     const querySnapshot = await firestore.getDocs(q);
     console.log("[getUsers] Query snapshot size:", querySnapshot.size);
 
-    result = querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    result = querySnapshot.docs
+      .map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+      .filter((user) => !excludeUserId || user.id !== excludeUserId); // Exclude current user if specified
 
     // Sort in memory by createdAt descending
     result.sort((a, b) => {
@@ -49,7 +52,7 @@ export async function getUsers(pageSize: number = 10, lastDoc?: firestore.Docume
       return dateB - dateA; // desc order
     });
 
-    console.log("[getUsers] Mapped results:", result.length, "users");
+    console.log("[getUsers] Mapped results:", result.length, "users (after exclusion)");
     console.log("[getUsers] Results:", result);
 
     // Get last visible document for pagination
@@ -64,12 +67,13 @@ export async function getUsers(pageSize: number = 10, lastDoc?: firestore.Docume
 }
 
 // Function to get total count of users
-export async function getUsersCount() {
+export async function getUsersCount(excludeUserId?: string) {
   let count = 0;
   let error = null;
 
   try {
     console.log("[getUsersCount] Starting...");
+    console.log("[getUsersCount] Exclude user ID:", excludeUserId);
 
     // Get Firestore instance
     const db = firestore.getFirestore(firebase_app);
@@ -77,9 +81,15 @@ export async function getUsersCount() {
 
     console.log("[getUsersCount] Fetching all docs...");
     const querySnapshot = await firestore.getDocs(usersRef);
-    count = querySnapshot.size;
 
-    console.log("[getUsersCount] Total count:", count);
+    if (excludeUserId) {
+      // Count all users except the excluded one
+      count = querySnapshot.docs.filter(doc => doc.id !== excludeUserId).length;
+    } else {
+      count = querySnapshot.size;
+    }
+
+    console.log("[getUsersCount] Total count:", count, "(after exclusion)");
   } catch (e) {
     console.error("[getUsersCount] ERROR:", e);
     error = e;

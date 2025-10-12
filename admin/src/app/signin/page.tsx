@@ -29,10 +29,7 @@ function Page() {
     let hasError = false;
 
     if (!username.trim()) {
-      setUsernameError('Username tidak boleh kosong');
-      hasError = true;
-    } else if (username.length < 3) {
-      setUsernameError('Username harus minimal 3 karakter');
+      setUsernameError('Email atau Username tidak boleh kosong');
       hasError = true;
     }
 
@@ -56,9 +53,9 @@ function Page() {
         const firebaseError = error as any;
 
         if (firebaseError.code === 'auth/user-not-found') {
-          setUsernameError('Username tidak ditemukan');
+          setUsernameError('Email atau Username tidak ditemukan');
           toast.error('Login gagal', {
-            description: 'Username tidak ditemukan'
+            description: 'Email atau Username tidak ditemukan'
           });
         } else if (firebaseError.code === 'auth/wrong-password') {
           setPasswordError('Password salah');
@@ -66,9 +63,9 @@ function Page() {
             description: 'Password salah'
           });
         } else if (firebaseError.code === 'auth/invalid-email') {
-          setUsernameError('Format username tidak valid');
+          setUsernameError('Format email tidak valid');
           toast.error('Login gagal', {
-            description: 'Format username tidak valid'
+            description: 'Format email tidak valid'
           });
         } else if (firebaseError.code === 'auth/user-disabled') {
           setError('Akun ini telah dinonaktifkan');
@@ -81,9 +78,9 @@ function Page() {
             description: 'Terlalu banyak percobaan gagal. Silakan coba lagi nanti.'
           });
         } else if (firebaseError.code === 'auth/invalid-credential') {
-          setError('Username atau password salah. Silakan periksa kembali.');
+          setError('Email/Username atau password salah. Silakan periksa kembali.');
           toast.error('Login gagal', {
-            description: 'Username atau password salah'
+            description: 'Email/Username atau password salah'
           });
         } else if (firebaseError.code === 'auth/access-denied') {
           setError('Akses ditolak. Hanya admin yang dapat login.');
@@ -153,7 +150,7 @@ function Page() {
 
             <div>
               <label htmlFor="username" className="mb-2 block text-sm font-medium text-gray-700">
-                Username
+                Email / Username
               </label>
               <Input
                 onChange={(e) => {
@@ -163,7 +160,7 @@ function Page() {
                 type="text"
                 name="username"
                 id="username"
-                placeholder="johndoe"
+                placeholder="admin@example.com or admin"
                 className={`h-12 ${usernameError ? "border-red-500 focus:border-red-500" : ""}`}
                 value={username}
                 disabled={loading}
