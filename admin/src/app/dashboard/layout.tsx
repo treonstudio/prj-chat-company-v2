@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
+import { Footer } from "@/components/footer"
 import { SidebarProvider } from "@/context/SidebarContext"
 import { useAuthContext } from "@/context/AuthContext"
 
@@ -10,7 +11,12 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen bg-gray-50">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto">{children}</main>
+      <main className="flex-1 overflow-y-auto">
+        <div className="min-h-full flex flex-col">
+          <div className="flex-1">{children}</div>
+          <Footer />
+        </div>
+      </main>
     </div>
   )
 }

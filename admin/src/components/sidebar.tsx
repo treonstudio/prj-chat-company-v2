@@ -43,71 +43,74 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Overlay for mobile */}
-      {!isCollapsed && (
-        <div
-          className="fixed inset-0 z-20 bg-black/50 md:hidden"
-          onClick={toggleSidebar}
-        />
-      )}
-
       {/* Sidebar */}
       <div
         className={cn(
-          "fixed left-0 top-0 z-30 flex h-screen w-[200px] flex-col bg-[#1a1f2e] text-white transition-transform duration-300 md:relative md:translate-x-0",
-          isCollapsed ? "-translate-x-full" : "translate-x-0"
+          "relative flex h-screen flex-col bg-[#1a1f2e] text-white transition-all duration-300",
+          isCollapsed ? "w-[70px]" : "w-[200px]"
         )}
       >
-      {/* Logo */}
-      <div className="flex items-center gap-2 px-6 py-6">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            className="h-6 w-6"
-          >
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-        </div>
-        <span className="text-xl font-semibold">Chatku</span>
-      </div>
-
-      {/* Menu Items */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
-        {menuItems.map((item) => {
-          const Icon = item.icon
-          const isActive = pathname === item.href
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-emerald-500 text-white"
-                  : "text-gray-400 hover:bg-gray-800 hover:text-white"
-              )}
+        {/* Logo */}
+        <div className={cn(
+          "flex items-center gap-2 px-6 py-6",
+          isCollapsed && "justify-center px-3"
+        )}>
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-500">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              className="h-6 w-6"
             >
-              <Icon className="h-5 w-5" />
-              {item.title}
-            </Link>
-          )
-        })}
-      </nav>
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </div>
+          {!isCollapsed && (
+            <span className="text-xl font-semibold whitespace-nowrap">Chatku</span>
+          )}
+        </div>
 
-      {/* Logout */}
-      <div className="border-t border-gray-800 px-3 py-4">
-        <button
-          onClick={handleLogout}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
-        >
-          <LogOut className="h-5 w-5" />
-          Logout
-        </button>
-      </div>
+        {/* Menu Items */}
+        <nav className="flex-1 space-y-1 px-3 py-4">
+          {menuItems.map((item) => {
+            const Icon = item.icon
+            const isActive = pathname === item.href
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-emerald-500 text-white"
+                    : "text-gray-400 hover:bg-gray-800 hover:text-white",
+                  isCollapsed && "justify-center"
+                )}
+                title={isCollapsed ? item.title : undefined}
+              >
+                <Icon className="h-5 w-5 flex-shrink-0" />
+                {!isCollapsed && <span className="whitespace-nowrap">{item.title}</span>}
+              </Link>
+            )
+          })}
+        </nav>
+
+        {/* Logout */}
+        <div className="border-t border-gray-800 px-3 py-4">
+          <button
+            onClick={handleLogout}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-white",
+              isCollapsed && "justify-center"
+            )}
+            title={isCollapsed ? "Logout" : undefined}
+          >
+            <LogOut className="h-5 w-5 flex-shrink-0" />
+            {!isCollapsed && <span className="whitespace-nowrap">Logout</span>}
+          </button>
+        </div>
       </div>
     </>
   )
