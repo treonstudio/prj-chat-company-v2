@@ -9,6 +9,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { useAuthContext } from "@/context/AuthContext"
 import { useRouter } from "next/navigation"
+import getUsageControls from "@/firebase/firestore/getUsageControls"
+import updateUsageControls from "@/firebase/firestore/updateUsageControls"
+import getMaxFileSize from "@/firebase/firestore/getMaxFileSize"
+import updateMaxFileSize from "@/firebase/firestore/updateMaxFileSize"
+import { toast } from "sonner"
 
 export default function UsageControlPage() {
   const { toggleSidebar } = useSidebar()
@@ -18,6 +23,8 @@ export default function UsageControlPage() {
   const [textMessageAllowed, setTextMessageAllowed] = useState(true)
   const [mediaSendAllowed, setMediaSendAllowed] = useState(true)
   const [maxFileSize, setMaxFileSize] = useState("60")
+  const [isLoadingData, setIsLoadingData] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
 
   // Protect the page - redirect if not authenticated
   useEffect(() => {
@@ -26,13 +33,85 @@ export default function UsageControlPage() {
     }
   }, [user, loading, router])
 
+  // Fetch usage controls from Firebase on component mount
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user) return
+
+      setIsLoadingData(true)
+
+      // Fetch usage controls from features collection
+      const { result: usageResult, error: usageError } = await getUsageControls()
+
+      // Fetch max file size from usageControls collection
+      const { result: maxFileSizeResult, error: maxFileSizeError } = await getMaxFileSize()
+
+      if (usageError) {
+        console.error("Error fetching usage controls:", usageError)
+        toast.error("Error loading usage controls data")
+      } else if (usageResult) {
+        setCallsAllowed(usageResult.allowCall ?? true)
+        setTextMessageAllowed(usageResult.allowChat ?? true)
+        setMediaSendAllowed(usageResult.allowCreateGroup ?? true)
+      }
+
+      if (maxFileSizeError) {
+        console.error("Error fetching max file size:", maxFileSizeError)
+        toast.error("Error loading max file size data")
+      } else if (maxFileSizeResult !== null) {
+        setMaxFileSize(maxFileSizeResult.toString())
+      }
+
+      setIsLoadingData(false)
+    }
+
+    fetchData()
+  }, [user])
+
+  // Handle update button click
+  const handleUpdate = async () => {
+    setIsSaving(true)
+
+    try {
+      // Update usage controls in features collection
+      const { error: usageError } = await updateUsageControls({
+        allowCall: callsAllowed,
+        allowChat: textMessageAllowed,
+        allowCreateGroup: mediaSendAllowed,
+      })
+
+      // Update max file size in usageControls collection
+      const { error: maxFileSizeError } = await updateMaxFileSize(
+        parseInt(maxFileSize) || 64
+      )
+
+      if (usageError || maxFileSizeError) {
+        console.error("Error updating:", usageError || maxFileSizeError)
+        toast.error("Failed to save changes. Please try again.")
+      } else {
+        toast.success("Changes saved successfully!")
+      }
+    } catch (error) {
+      console.error("Unexpected error:", error)
+      toast.error("An unexpected error occurred")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   // Show loading state while checking auth
-  if (loading) {
+  if (loading || isLoadingData) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+      <div className="min-h-screen bg-gray-50">
+        <div className="border-b bg-white px-8 py-4">
+          <div className="h-8 w-48 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+        <div className="p-8">
+          <div className="mx-auto max-w-7xl space-y-8">
+            <div className="h-64 bg-gray-200 rounded-lg animate-pulse"></div>
+            <div className="h-48 bg-gray-200 rounded-lg animate-pulse"></div>
+            <div className="h-16 bg-gray-200 rounded-lg animate-pulse"></div>
+          </div>
         </div>
       </div>
     )
@@ -129,8 +208,12 @@ export default function UsageControlPage() {
 
           {/* Update Button */}
           <div className="flex justify-end">
-            <Button className="bg-emerald-500 px-12 py-6 text-base text-white hover:bg-emerald-600">
-              Update
+            <Button
+              onClick={handleUpdate}
+              disabled={isSaving}
+              className="bg-emerald-400 px-12 py-6 text-base text-white hover:bg-emerald-500 disabled:opacity-50"
+            >
+              {isSaving ? "Saving..." : "Update"}
             </Button>
           </div>
         </div>

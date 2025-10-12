@@ -1,12 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Menu } from "lucide-react"
+import { Menu, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSidebar } from "@/context/SidebarContext"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Switch } from "@/components/ui/switch"
 import {
   Table,
@@ -16,21 +15,26 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import createUser from "@/firebase/auth/createUser"
 import { useAuthContext } from "@/context/AuthContext"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { getUsers, getUsersCount } from "@/firebase/firestore/getUsers"
 import updateUser from "@/firebase/firestore/updateUser"
+import deleteUser from "@/firebase/firestore/deleteUser"
 import { DocumentSnapshot } from "firebase/firestore"
-
-const topActiveUsers = [
-  { name: "edoedo", avatar: "/avatars/1.jpg", time: "Just now" },
-  { name: "susiaja", avatar: "/avatars/2.jpg", time: "Just now" },
-  { name: "coba ganti", avatar: "/avatars/3.jpg", time: "21h ago" },
-  { name: "ushiushi", avatar: null, time: "2d ago" },
-  { name: "irfanirfan", avatar: null, time: "12d ago" },
-]
+import getCalls from "@/firebase/firestore/getCalls"
 
 interface User {
   id: string
@@ -60,6 +64,11 @@ export default function DashboardPage() {
   const [pageSize] = useState(10)
   const [totalPages, setTotalPages] = useState(0)
 
+  // Calls state
+  const [totalCalls, setTotalCalls] = useState(0)
+  const [totalCallDuration, setTotalCallDuration] = useState(0)
+  const [callsLoading, setCallsLoading] = useState(true)
+
   // Protect the page - redirect if not authenticated
   useEffect(() => {
     if (!loading && !user) {
@@ -81,6 +90,28 @@ export default function DashboardPage() {
       fetchUsersCount()
     }
   }, [user, pageSize])
+
+  // Fetch calls data
+  useEffect(() => {
+    const fetchCalls = async () => {
+      setCallsLoading(true)
+      const { result, error } = await getCalls()
+
+      if (!error && result) {
+        setTotalCalls(result.totalCalls)
+        setTotalCallDuration(result.totalDuration)
+      } else {
+        console.error("Error fetching calls:", error)
+        toast.error("Gagal memuat data calls")
+      }
+
+      setCallsLoading(false)
+    }
+
+    if (user) {
+      fetchCalls()
+    }
+  }, [user])
 
   // Fetch users data
   useEffect(() => {
@@ -188,6 +219,29 @@ export default function DashboardPage() {
     } catch (err) {
       console.error("Error updating user status:", err)
       toast.error("Terjadi kesalahan saat mengubah status user")
+    }
+  }
+
+  const handleDeleteUser = async (userId: string) => {
+    try {
+      const { error } = await deleteUser(userId)
+
+      if (error) {
+        console.error("Error deleting user:", error)
+        toast.error("Gagal menghapus user")
+      } else {
+        // Update local state - remove deleted user
+        setUsers((prevUsers) => prevUsers.filter((u) => u.id !== userId))
+
+        // Update count
+        setTotalUsers((prev) => prev - 1)
+        setTotalPages(Math.ceil((totalUsers - 1) / pageSize))
+
+        toast.success("User berhasil dihapus")
+      }
+    } catch (err) {
+      console.error("Error deleting user:", err)
+      toast.error("Terjadi kesalahan saat menghapus user")
     }
   }
 
@@ -302,10 +356,17 @@ export default function DashboardPage() {
   // Show loading state while checking auth
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <div className="w-full max-w-7xl p-8 space-y-8">
+          <div className="h-8 w-64 bg-gray-200 rounded animate-pulse"></div>
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="space-y-6">
+              <div className="h-32 bg-gray-200 rounded-lg animate-pulse"></div>
+              <div className="h-32 bg-gray-200 rounded-lg animate-pulse"></div>
+            </div>
+            <div className="lg:col-span-2 h-40 bg-gray-200 rounded-lg animate-pulse"></div>
+          </div>
+          <div className="h-96 bg-gray-200 rounded-lg animate-pulse"></div>
         </div>
       </div>
     )
@@ -409,7 +470,7 @@ export default function DashboardPage() {
                   <Button
                     onClick={handleAddUser}
                     disabled={isLoading}
-                    className="bg-emerald-500 px-8 text-white hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-emerald-400 px-8 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isLoading ? "Menambahkan..." : "Tambah User"}
                   </Button>
@@ -418,84 +479,60 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Stats and Top Users */}
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Stats Cards */}
-            <div className="space-y-6">
-              <Card className="border-0 shadow-sm">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Total User</p>
-                      <p className="mt-2 text-3xl font-semibold text-emerald-600">{totalUsers}</p>
-                    </div>
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-emerald-500">
-                      <svg
-                        className="h-8 w-8 text-emerald-500"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-                        />
-                      </svg>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-0 shadow-sm">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Total Calls</p>
-                      <p className="mt-2 text-3xl font-semibold text-emerald-600">65</p>
-                    </div>
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-emerald-500">
-                      <svg
-                        className="h-8 w-8 text-emerald-500"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-                        />
-                      </svg>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Top Active Users */}
-            <Card className="border-0 shadow-sm lg:col-span-2">
+          {/* Stats Cards */}
+          <div className="grid gap-6 grid-cols-1 md:grid-cols-2">
+            <Card className="border-0 shadow-sm">
               <CardContent className="p-6">
-                <h3 className="mb-6 text-lg font-semibold text-gray-900">
-                  Top Active Users
-                </h3>
-                <div className="flex gap-8">
-                  {topActiveUsers.map((user, index) => (
-                    <div key={index} className="flex flex-col items-center">
-                      <Avatar className="h-16 w-16">
-                        <AvatarImage src={user.avatar || undefined} />
-                        <AvatarFallback className="bg-gray-200">
-                          {user.name.substring(0, 2).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <p className="mt-2 text-sm font-medium text-gray-900">
-                        {user.name}
-                      </p>
-                      <p className="text-xs text-gray-500">{user.time}</p>
-                    </div>
-                  ))}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total User</p>
+                    <p className="mt-2 text-3xl font-semibold text-emerald-400">{totalUsers}</p>
+                  </div>
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-emerald-300 bg-emerald-50">
+                    <svg
+                      className="h-8 w-8 text-emerald-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                      />
+                    </svg>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600">Total Calls</p>
+                    {callsLoading ? (
+                      <div className="mt-2 h-8 w-16 animate-pulse bg-gray-200 rounded"></div>
+                    ) : (
+                      <p className="mt-2 text-3xl font-semibold text-emerald-400">{totalCalls}</p>
+                    )}
+                  </div>
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-emerald-300 bg-emerald-50">
+                    <svg
+                      className="h-8 w-8 text-emerald-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                      />
+                    </svg>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -512,8 +549,12 @@ export default function DashboardPage() {
               </div>
 
               {usersLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
+                <div className="space-y-4">
+                  <div className="h-12 bg-gray-200 rounded animate-pulse"></div>
+                  <div className="h-12 bg-gray-100 rounded animate-pulse"></div>
+                  <div className="h-12 bg-gray-200 rounded animate-pulse"></div>
+                  <div className="h-12 bg-gray-100 rounded animate-pulse"></div>
+                  <div className="h-12 bg-gray-200 rounded animate-pulse"></div>
                 </div>
               ) : users.length === 0 ? (
                 <div className="py-8 text-center text-gray-500">
@@ -541,7 +582,8 @@ export default function DashboardPage() {
                         try {
                           if (user.createdAt) {
                             // If it's a Firestore Timestamp, it will have toDate() method
-                            const date = user.createdAt.toDate ? user.createdAt.toDate() : new Date(user.createdAt);
+                            const createdAt = user.createdAt as any;
+                            const date = createdAt.toDate ? createdAt.toDate() : new Date(user.createdAt);
                             dateStr = date.toLocaleDateString('id-ID');
                           }
                         } catch (e) {
@@ -563,13 +605,36 @@ export default function DashboardPage() {
                               />
                             </TableCell>
                             <TableCell>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="border-emerald-500 text-emerald-600 hover:bg-emerald-50"
-                              >
-                                Edit
-                              </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-red-300 text-red-400 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Hapus User</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Apakah Anda yakin ingin menghapus user &quot;{user.displayName || user.email}&quot;?
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel className="bg-gray-100 text-gray-700 hover:bg-gray-200">
+                                      Batal
+                                    </AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => handleDeleteUser(user.id)}
+                                      className="bg-red-400 text-white hover:bg-red-500"
+                                    >
+                                      Hapus
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
                             </TableCell>
                           </TableRow>
                         );
