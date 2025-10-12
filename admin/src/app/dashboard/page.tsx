@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Menu, Trash2, Eye, EyeOff } from "lucide-react"
+import { Menu, Trash2, Eye, EyeOff, Users, Phone } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSidebar } from "@/context/SidebarContext"
 import { Input } from "@/components/ui/input"
@@ -534,19 +534,7 @@ export default function DashboardPage() {
                     <p className="mt-2 text-3xl font-semibold text-emerald-400">{totalUsers}</p>
                   </div>
                   <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-emerald-300 bg-emerald-50">
-                    <svg
-                      className="h-8 w-8 text-emerald-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-                      />
-                    </svg>
+                    <Users className="h-8 w-8 text-emerald-400" />
                   </div>
                 </div>
               </CardContent>
@@ -564,19 +552,7 @@ export default function DashboardPage() {
                     )}
                   </div>
                   <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-emerald-300 bg-emerald-50">
-                    <svg
-                      className="h-8 w-8 text-emerald-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-                      />
-                    </svg>
+                    <Phone className="h-8 w-8 text-emerald-400" />
                   </div>
                 </div>
               </CardContent>
@@ -614,7 +590,6 @@ export default function DashboardPage() {
                         <TableHead className="font-semibold text-gray-900">
                           JOINING DATE
                         </TableHead>
-                        <TableHead className="font-semibold text-gray-900">ROLE</TableHead>
                         <TableHead className="font-semibold text-gray-900">
                           ACTIVE/DEACTIVE
                         </TableHead>
@@ -643,15 +618,6 @@ export default function DashboardPage() {
                             </TableCell>
                             <TableCell>
                               {dateStr}
-                            </TableCell>
-                            <TableCell>
-                              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                                user.role === 'admin'
-                                  ? 'bg-purple-100 text-purple-800'
-                                  : 'bg-blue-100 text-blue-800'
-                              }`}>
-                                {user.role === 'admin' ? 'Admin' : 'User'}
-                              </span>
                             </TableCell>
                             <TableCell>
                               <Switch

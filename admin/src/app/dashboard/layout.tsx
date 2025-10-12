@@ -3,15 +3,13 @@
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
-import { SidebarProvider, useSidebar } from "@/context/SidebarContext"
+import { SidebarProvider } from "@/context/SidebarContext"
 import { useAuthContext } from "@/context/AuthContext"
 
 function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
-  const { isCollapsed } = useSidebar()
-
   return (
     <div className="flex h-screen bg-gray-50">
-      <Sidebar isCollapsed={isCollapsed} />
+      <Sidebar />
       <main className="flex-1 overflow-y-auto">{children}</main>
     </div>
   )

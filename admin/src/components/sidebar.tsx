@@ -23,14 +23,10 @@ const menuItems = [
   },
 ]
 
-interface SidebarProps {
-  isCollapsed?: boolean
-}
-
-export function Sidebar({ isCollapsed = false }: SidebarProps) {
+export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const { toggleSidebar } = useSidebar()
+  const { isCollapsed, toggleSidebar } = useSidebar()
 
   const handleLogout = async () => {
     try {
