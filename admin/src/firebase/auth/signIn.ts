@@ -18,7 +18,10 @@ export default async function signIn(username: string, password: string) {
       throw getUserError;
     }
 
-    if (!userData || !userData.email) {
+    // Type assertion for userData with email and role fields
+    const userWithData = userData as { id: string; email?: string; role?: string } | null;
+
+    if (!userWithData || !userWithData.email) {
       // If user not found, create a custom error similar to Firebase auth errors
       const notFoundError: any = new Error("User not found");
       notFoundError.code = "auth/user-not-found";
@@ -26,14 +29,14 @@ export default async function signIn(username: string, password: string) {
     }
 
     // Check if user has admin role
-    if (userData.role !== "admin") {
+    if (userWithData.role !== "admin") {
       const notAdminError: any = new Error("Access denied. Admin role required.");
       notAdminError.code = "auth/access-denied";
       throw notAdminError;
     }
 
     // Now sign in with the email associated with this username
-    result = await signInWithEmailAndPassword(auth, userData.email, password);
+    result = await signInWithEmailAndPassword(auth, userWithData.email, password);
   } catch (e) {
     error = e; // Catch and store any error that occurs during sign-in
   }

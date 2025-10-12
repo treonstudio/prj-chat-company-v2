@@ -92,7 +92,10 @@ export default function DashboardPage() {
           return
         }
 
-        if (userData.role !== "admin") {
+        // Type assertion for userData with role field
+        const userWithRole = userData as { id: string; role?: string }
+
+        if (userWithRole.role !== "admin") {
           toast.error("Akses ditolak", {
             description: "Hanya admin yang dapat mengakses dashboard"
           })
