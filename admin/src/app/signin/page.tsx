@@ -9,10 +9,10 @@ import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 function Page() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [emailError, setEmailError] = useState('');
+  const [usernameError, setUsernameError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -22,21 +22,18 @@ function Page() {
   const handleForm = async (event: { preventDefault: () => void }) => {
     event.preventDefault();
     setError('');
-    setEmailError('');
+    setUsernameError('');
     setPasswordError('');
 
     // Client-side validation
     let hasError = false;
 
-    if (!email.trim()) {
-      setEmailError('Email tidak boleh kosong');
+    if (!username.trim()) {
+      setUsernameError('Username tidak boleh kosong');
       hasError = true;
-    } else {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        setEmailError('Format email tidak valid');
-        hasError = true;
-      }
+    } else if (username.length < 3) {
+      setUsernameError('Username harus minimal 3 karakter');
+      hasError = true;
     }
 
     if (!password) {
@@ -51,17 +48,17 @@ function Page() {
     setLoading(true);
 
     try {
-      // Try Firebase authentication
-      const { result, error } = await signIn(email, password);
+      // Try Firebase authentication with username
+      const { result, error } = await signIn(username, password);
 
       if (error) {
         // Handle specific Firebase errors
         const firebaseError = error as any;
 
         if (firebaseError.code === 'auth/user-not-found') {
-          setEmailError('Tidak ada akun dengan email ini');
+          setUsernameError('Username tidak ditemukan');
           toast.error('Login gagal', {
-            description: 'Tidak ada akun dengan email ini'
+            description: 'Username tidak ditemukan'
           });
         } else if (firebaseError.code === 'auth/wrong-password') {
           setPasswordError('Password salah');
@@ -69,9 +66,9 @@ function Page() {
             description: 'Password salah'
           });
         } else if (firebaseError.code === 'auth/invalid-email') {
-          setEmailError('Format email tidak valid');
+          setUsernameError('Format username tidak valid');
           toast.error('Login gagal', {
-            description: 'Format email tidak valid'
+            description: 'Format username tidak valid'
           });
         } else if (firebaseError.code === 'auth/user-disabled') {
           setError('Akun ini telah dinonaktifkan');
@@ -84,9 +81,14 @@ function Page() {
             description: 'Terlalu banyak percobaan gagal. Silakan coba lagi nanti.'
           });
         } else if (firebaseError.code === 'auth/invalid-credential') {
-          setError('Email atau password salah. Silakan periksa kembali.');
+          setError('Username atau password salah. Silakan periksa kembali.');
           toast.error('Login gagal', {
-            description: 'Email atau password salah'
+            description: 'Username atau password salah'
+          });
+        } else if (firebaseError.code === 'auth/access-denied') {
+          setError('Akses ditolak. Hanya admin yang dapat login.');
+          toast.error('Login gagal', {
+            description: 'Akses ditolak. Hanya admin yang dapat login.'
           });
         } else {
           setError('Terjadi kesalahan. Silakan coba lagi.');
@@ -138,7 +140,7 @@ function Page() {
                 </svg>
               </div>
             </div>
-            <h1 className="text-3xl font-bold text-gray-900">Chatzy Admin</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Chatku Admin</h1>
             <p className="mt-2 text-sm text-gray-600">Sign in to your account</p>
           </div>
 
@@ -150,24 +152,24 @@ function Page() {
             )}
 
             <div>
-              <label htmlFor="email" className="mb-2 block text-sm font-medium text-gray-700">
-                Email
+              <label htmlFor="username" className="mb-2 block text-sm font-medium text-gray-700">
+                Username
               </label>
               <Input
                 onChange={(e) => {
-                  setEmail(e.target.value)
-                  setEmailError('')
+                  setUsername(e.target.value)
+                  setUsernameError('')
                 }}
-                type="email"
-                name="email"
-                id="email"
-                placeholder="your.email@example.com"
-                className={`h-12 ${emailError ? "border-red-500 focus:border-red-500" : ""}`}
-                value={email}
+                type="text"
+                name="username"
+                id="username"
+                placeholder="johndoe"
+                className={`h-12 ${usernameError ? "border-red-500 focus:border-red-500" : ""}`}
+                value={username}
                 disabled={loading}
               />
-              {emailError && (
-                <p className="mt-1 text-xs text-red-600">{emailError}</p>
+              {usernameError && (
+                <p className="mt-1 text-xs text-red-600">{usernameError}</p>
               )}
             </div>
 

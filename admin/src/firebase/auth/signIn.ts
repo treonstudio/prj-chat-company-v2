@@ -1,16 +1,39 @@
 import firebase_app from "../config";
 import { signInWithEmailAndPassword, getAuth } from "firebase/auth";
+import getUserByUsername from "../firestore/getUserByUsername";
 
 // Get the authentication instance using the Firebase app
 const auth = getAuth(firebase_app);
 
-// Function to sign in with email and password
-export default async function signIn(email: string, password: string) {
+// Function to sign in with username and password (admin only)
+export default async function signIn(username: string, password: string) {
   let result = null, // Variable to store the sign-in result
     error = null; // Variable to store any error that occurs
 
   try {
-    result = await signInWithEmailAndPassword(auth, email, password); // Sign in with email and password
+    // First, get the user from Firestore by username to retrieve the email
+    const { result: userData, error: getUserError } = await getUserByUsername(username);
+
+    if (getUserError) {
+      throw getUserError;
+    }
+
+    if (!userData || !userData.email) {
+      // If user not found, create a custom error similar to Firebase auth errors
+      const notFoundError: any = new Error("User not found");
+      notFoundError.code = "auth/user-not-found";
+      throw notFoundError;
+    }
+
+    // Check if user has admin role
+    if (userData.role !== "admin") {
+      const notAdminError: any = new Error("Access denied. Admin role required.");
+      notAdminError.code = "auth/access-denied";
+      throw notAdminError;
+    }
+
+    // Now sign in with the email associated with this username
+    result = await signInWithEmailAndPassword(auth, userData.email, password);
   } catch (e) {
     error = e; // Catch and store any error that occurs during sign-in
   }

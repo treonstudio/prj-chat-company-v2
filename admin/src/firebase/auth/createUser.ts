@@ -6,12 +6,16 @@ import addData from "../firestore/addData";
 // Get the authentication instance using the Firebase app
 const auth = getAuth(firebase_app);
 
-// Function to create a new user with email and password and save to Firestore
-export default async function createUser(email: string, password: string, additionalData?: any) {
+// Function to create a new user with username and password and save to Firestore
+export default async function createUser(username: string, password: string, additionalData?: any) {
   let result = null;
   let error = null;
 
   try {
+    // Generate a unique email from username for Firebase Auth
+    // Firebase Auth requires email, so we create a pseudo-email
+    const email = `${username}@chatzy.local`;
+
     // Create user in Firebase Authentication
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     result = userCredential;
@@ -19,9 +23,11 @@ export default async function createUser(email: string, password: string, additi
     // Save additional user data to Firestore
     if (userCredential.user) {
       const userData = {
-        email: email,
+        username: username, // Store the actual username
+        email: email, // Store the generated email
         createdAt: serverTimestamp(), // Use Firestore server timestamp
         isActive: true,
+        role: additionalData?.role || "user", // Default role is "user", can be overridden
         ...additionalData,
       };
 

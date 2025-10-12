@@ -96,4 +96,23 @@
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
   }
+
+  /* Placeholder styling with grey opacity 0.2 */
+  input::placeholder,
+  textarea::placeholder {
+    color: rgb(107 114 128);
+    opacity: 0.2;
+  }
+
+  input::-webkit-input-placeholder,
+  textarea::-webkit-input-placeholder {
+    color: rgb(107 114 128);
+    opacity: 0.2;
+  }
+
+  input::-moz-placeholder,
+  textarea::-moz-placeholder {
+    color: rgb(107 114 128);
+    opacity: 0.2;
+  }
 }

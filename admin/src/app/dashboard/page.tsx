@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Menu, Trash2 } from "lucide-react"
+import { Menu, Trash2, Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSidebar } from "@/context/SidebarContext"
 import { Input } from "@/components/ui/input"
@@ -35,13 +35,16 @@ import updateUser from "@/firebase/firestore/updateUser"
 import deleteUser from "@/firebase/firestore/deleteUser"
 import { DocumentSnapshot } from "firebase/firestore"
 import getCalls from "@/firebase/firestore/getCalls"
+import getUserData from "@/firebase/firestore/getUserData"
 
 interface User {
   id: string
   email: string
+  username?: string
   displayName?: string
   createdAt: string
   isActive: boolean
+  role: string
 }
 
 export default function DashboardPage() {
@@ -49,8 +52,9 @@ export default function DashboardPage() {
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
-  const [emailError, setEmailError] = useState("")
+  const [usernameError, setUsernameError] = useState("")
   const [passwordError, setPasswordError] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const { toggleSidebar } = useSidebar()
   const { user, loading } = useAuthContext()
   const router = useRouter()
@@ -69,11 +73,35 @@ export default function DashboardPage() {
   const [totalCallDuration, setTotalCallDuration] = useState(0)
   const [callsLoading, setCallsLoading] = useState(true)
 
-  // Protect the page - redirect if not authenticated
+  // Protect the page - redirect if not authenticated or not admin
   useEffect(() => {
-    if (!loading && !user) {
-      router.push("/signin")
+    const checkAdminAccess = async () => {
+      if (!loading && !user) {
+        router.push("/signin")
+        return
+      }
+
+      if (user) {
+        // Check if user has admin role
+        const { result: userData, error } = await getUserData(user.uid)
+
+        if (error || !userData) {
+          console.error("Error fetching user data:", error)
+          toast.error("Terjadi kesalahan saat memuat data user")
+          router.push("/signin")
+          return
+        }
+
+        if (userData.role !== "admin") {
+          toast.error("Akses ditolak", {
+            description: "Hanya admin yang dapat mengakses dashboard"
+          })
+          router.push("/signin")
+        }
+      }
     }
+
+    checkAdminAccess()
   }, [user, loading, router])
 
   // Fetch users count
@@ -248,26 +276,25 @@ export default function DashboardPage() {
   const handleAddUser = async () => {
     // Clear previous messages and errors
     setMessage(null)
-    setEmailError("")
+    setUsernameError("")
     setPasswordError("")
 
     console.log("=== Starting Add User ===")
-    console.log("Email:", username)
+    console.log("Username:", username)
     console.log("Password length:", password.length)
 
     let hasError = false
 
     // Validation
     if (!username.trim()) {
-      setEmailError("Email tidak boleh kosong")
+      setUsernameError("Username tidak boleh kosong")
       hasError = true
-    } else {
-      // Email validation (basic)
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(username)) {
-        setEmailError("Format email tidak valid. Contoh: user@example.com")
-        hasError = true
-      }
+    } else if (username.length < 3) {
+      setUsernameError("Username harus minimal 3 karakter")
+      hasError = true
+    } else if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      setUsernameError("Username hanya boleh mengandung huruf, angka, dan underscore")
+      hasError = true
     }
 
     if (!password) {
@@ -287,7 +314,8 @@ export default function DashboardPage() {
     try {
       console.log("Creating user with Firebase...")
       const { result, error } = await createUser(username, password, {
-        displayName: username.split("@")[0],
+        displayName: username,
+        role: "user", // Always set role to "user" by default
       })
 
       if (error) {
@@ -296,14 +324,14 @@ export default function DashboardPage() {
         console.error("Firebase error:", firebaseError)
 
         if (firebaseError.code === "auth/email-already-in-use") {
-          setEmailError("Email sudah terdaftar")
+          setUsernameError("Username sudah terdaftar")
           toast.error("Gagal menambahkan user", {
-            description: "Email sudah terdaftar"
+            description: "Username sudah terdaftar"
           })
         } else if (firebaseError.code === "auth/invalid-email") {
-          setEmailError("Format email tidak valid")
+          setUsernameError("Format username tidak valid")
           toast.error("Gagal menambahkan user", {
-            description: "Format email tidak valid"
+            description: "Format username tidak valid"
           })
         } else if (firebaseError.code === "auth/weak-password") {
           setPasswordError("Password terlalu lemah (minimal 6 karakter)")
@@ -326,7 +354,7 @@ export default function DashboardPage() {
 
         // Show success toast
         toast.success("User berhasil ditambahkan!", {
-          description: `Email: ${username}`
+          description: `Username: ${username}`
         })
 
         // Clear form
@@ -419,26 +447,26 @@ export default function DashboardPage() {
               )}
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="email" className="mb-2 block text-sm font-medium text-gray-700">
-                    Email <span className="text-red-500">*</span>
+                  <label htmlFor="username" className="mb-2 block text-sm font-medium text-gray-700">
+                    Username <span className="text-red-500">*</span>
                   </label>
                   <Input
-                    id="email"
-                    placeholder="contoh: user@example.com"
-                    type="email"
+                    id="username"
+                    placeholder="contoh: johndoe"
+                    type="text"
                     value={username}
                     onChange={(e) => {
                       setUsername(e.target.value)
-                      setEmailError("")
+                      setUsernameError("")
                     }}
-                    className={`h-12 ${emailError ? "border-red-500 focus:border-red-500" : "border-gray-200"}`}
+                    className={`h-12 ${usernameError ? "border-red-500 focus:border-red-500" : "border-gray-200"}`}
                     disabled={isLoading}
                   />
-                  {emailError ? (
-                    <p className="mt-1 text-xs text-red-600">{emailError}</p>
+                  {usernameError ? (
+                    <p className="mt-1 text-xs text-red-600">{usernameError}</p>
                   ) : (
                     <p className="mt-1 text-xs text-gray-500">
-                      Masukkan email yang valid (harus mengandung @)
+                      Username harus minimal 3 karakter (huruf, angka, underscore)
                     </p>
                   )}
                 </div>
@@ -446,18 +474,32 @@ export default function DashboardPage() {
                   <label htmlFor="password" className="mb-2 block text-sm font-medium text-gray-700">
                     Password <span className="text-red-500">*</span>
                   </label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Minimal 6 karakter"
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value)
-                      setPasswordError("")
-                    }}
-                    className={`h-12 ${passwordError ? "border-red-500 focus:border-red-500" : "border-gray-200"}`}
-                    disabled={isLoading}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Minimal 6 karakter"
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value)
+                        setPasswordError("")
+                      }}
+                      className={`h-12 pr-10 ${passwordError ? "border-red-500 focus:border-red-500" : "border-gray-200"}`}
+                      disabled={isLoading}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
+                      disabled={isLoading}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-5 w-5" />
+                      ) : (
+                        <Eye className="h-5 w-5" />
+                      )}
+                    </button>
+                  </div>
                   {passwordError ? (
                     <p className="mt-1 text-xs text-red-600">{passwordError}</p>
                   ) : (
@@ -569,6 +611,7 @@ export default function DashboardPage() {
                         <TableHead className="font-semibold text-gray-900">
                           JOINING DATE
                         </TableHead>
+                        <TableHead className="font-semibold text-gray-900">ROLE</TableHead>
                         <TableHead className="font-semibold text-gray-900">
                           ACTIVE/DEACTIVE
                         </TableHead>
@@ -593,10 +636,19 @@ export default function DashboardPage() {
                         return (
                           <TableRow key={user.id}>
                             <TableCell className="font-medium">
-                              {user.displayName || user.email}
+                              {user.username || user.displayName || user.email}
                             </TableCell>
                             <TableCell>
                               {dateStr}
+                            </TableCell>
+                            <TableCell>
+                              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                user.role === 'admin'
+                                  ? 'bg-purple-100 text-purple-800'
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}>
+                                {user.role === 'admin' ? 'Admin' : 'User'}
+                              </span>
                             </TableCell>
                             <TableCell>
                               <Switch
