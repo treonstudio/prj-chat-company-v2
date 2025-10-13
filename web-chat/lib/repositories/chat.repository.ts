@@ -30,7 +30,7 @@ export class ChatRepository {
     try {
       // Create a deterministic chat ID based on user IDs (sorted)
       const participants = [currentUserId, otherUserId].sort();
-      const chatId = `direct_${participants[0]}_${participants[1]}`;
+      const chatId = `${participants[0]}_${participants[1]}`;
 
       const chatRef = doc(db, this.DIRECT_CHATS_COLLECTION, chatId);
       const chatDoc = await getDoc(chatRef);
