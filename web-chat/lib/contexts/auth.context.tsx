@@ -27,38 +27,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Listen to auth state changes
     const unsubscribe = authRepository.onAuthStateChange(async (user) => {
-      setCurrentUser(user);
-
       if (user) {
-        // Fetch user data from Firestore
-        const result = await userRepository.getUserById(user.uid);
-        if (result.status === 'success') {
-          setUserData(result.data);
-        } else if (result.status === 'error') {
-          // If user data not found or error, logout the user
-          console.error('Failed to fetch user data:', result.message);
+        // Fetch user data from Firestore first before setting current user
+        try {
+          const result = await userRepository.getUserById(user.uid);
+          if (result.status === 'success') {
+            // Only set user if data is found
+            setCurrentUser(user);
+            setUserData(result.data);
+            setLoading(false);
+          } else if (result.status === 'error') {
+            // If user data not found or error, logout the user immediately
+            // Use safe logging for client-side only
+            if (typeof window !== 'undefined') {
+              console.error('Failed to fetch user data:', result.message);
+            }
+            // Sign out silently without updating state first
+            await authRepository.signOut();
+            setUserData(null);
+            setCurrentUser(null);
+            setLoading(false);
+          }
+        } catch (error) {
+          // Handle any unexpected errors
+          if (typeof window !== 'undefined') {
+            console.error('Unexpected error fetching user data:', error);
+          }
           await authRepository.signOut();
           setUserData(null);
           setCurrentUser(null);
+          setLoading(false);
         }
       } else {
+        // User logged out
+        setCurrentUser(null);
         setUserData(null);
+        setLoading(false);
       }
-
-      setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const result = await authRepository.signIn(email, password);
-    if (result.status === 'success') {
-      return { success: true };
-    } else if (result.status === 'error') {
-      return { success: false, error: result.message };
-    } else {
-      return { success: false, error: 'Unknown error occurred' };
+    try {
+      const result = await authRepository.signIn(email, password);
+      if (result.status === 'success' && result.data) {
+        // Verify user data exists in Firestore
+        const userResult = await userRepository.getUserById(result.data.uid);
+        if (userResult.status === 'success') {
+          return { success: true };
+        } else {
+          // User authenticated but no user data found
+          await authRepository.signOut();
+          return { success: false, error: 'User data not found. Please contact administrator.' };
+        }
+      } else if (result.status === 'error') {
+        return { success: false, error: result.message };
+      } else {
+        return { success: false, error: 'Unknown error occurred' };
+      }
+    } catch (error) {
+      return { success: false, error: 'An unexpected error occurred during sign in' };
     }
   };
 

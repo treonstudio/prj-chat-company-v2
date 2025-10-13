@@ -34,7 +34,7 @@ export default function Page() {
 
   return (
     <main className="theme-mint h-dvh overflow-hidden">
-      <div className="mx-auto flex h-dvh max-w-[1400px] flex-col overflow-hidden md:flex-row min-h-0">
+      <div className="flex h-dvh w-full flex-col overflow-hidden md:flex-row min-h-0">
         <aside className="h-full w-full overflow-hidden border-b md:w-[360px] md:border-r md:border-b-0 min-h-0">
           <Sidebar
             currentUserId={currentUser.uid}
@@ -53,6 +53,11 @@ export default function Page() {
               currentUserName={userData.displayName}
               currentUserAvatar={userData.avatarUrl}
               isGroupChat={selectedChatIsGroup}
+              onLeaveGroup={() => {
+                // Reset to no chat selected after leaving
+                setSelectedChatId(null);
+                setSelectedChatIsGroup(false);
+              }}
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-muted-foreground">

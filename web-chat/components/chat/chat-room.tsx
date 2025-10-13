@@ -19,6 +19,18 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
+import { LogOut, Loader2 } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 const userRepository = new UserRepository()
 const chatRepository = new ChatRepository()
@@ -29,12 +41,14 @@ export function ChatRoom({
   currentUserName,
   currentUserAvatar,
   isGroupChat,
+  onLeaveGroup,
 }: {
   chatId: string
   currentUserId: string
   currentUserName: string
   currentUserAvatar?: string
   isGroupChat: boolean
+  onLeaveGroup?: () => void
 }) {
   const {
     messages,
@@ -53,6 +67,8 @@ export function ChatRoom({
   const [roomTitle, setRoomTitle] = useState<string>('Chat')
   const [groupMembers, setGroupMembers] = useState<User[]>([])
   const [showMembersDialog, setShowMembersDialog] = useState(false)
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false)
+  const [leaving, setLeaving] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Load room title and group members
@@ -115,6 +131,20 @@ export function ChatRoom({
     return `${names.slice(0, 3).join(', ')}, +${names.length - 3}`
   }
 
+  // Handle leave group
+  const handleLeaveGroup = async () => {
+    setLeaving(true)
+    const result = await chatRepository.leaveGroupChat(currentUserId, chatId)
+    setLeaving(false)
+
+    if (result.status === 'success') {
+      setShowLeaveDialog(false)
+      onLeaveGroup?.()
+    } else if (result.status === 'error') {
+      alert(`Failed to leave group: ${result.message}`)
+    }
+  }
+
   return (
     <div className="flex h-full w-full min-h-0 flex-col">
       <header className="flex items-center justify-between border-b px-4 py-3">
@@ -153,6 +183,16 @@ export function ChatRoom({
             <p className="text-xs text-muted-foreground">Messages are end-to-end encrypted</p>
           ) : null}
         </div>
+        {isGroupChat && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowLeaveDialog(true)}
+            className="ml-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
+        )}
       </header>
       <ScrollArea className="flex-1 min-h-0">
         {loading ? (
@@ -234,6 +274,38 @@ export function ChatRoom({
           uploading={uploading}
         />
       </div>
+
+      {/* Leave Group Confirmation Dialog */}
+      <AlertDialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave {roomTitle}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to leave this group? You will no longer receive messages from this group and will need to be re-added by a member to rejoin.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={leaving}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleLeaveGroup()
+              }}
+              disabled={leaving}
+              className="bg-red-400 text-white hover:bg-red-500 disabled:bg-red-400/50"
+            >
+              {leaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Leaving...
+                </>
+              ) : (
+                "Leave Group"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

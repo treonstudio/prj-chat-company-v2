@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Trash2, Eye, EyeOff, Users, Phone } from "lucide-react"
+import { Trash2, Eye, EyeOff, Users, Phone, Key } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -33,6 +33,7 @@ import { toast } from "sonner"
 import { getUsers, getUsersCount } from "@/firebase/firestore/getUsers"
 import updateUser from "@/firebase/firestore/updateUser"
 import deleteUser from "@/firebase/firestore/deleteUser"
+import updateUserPassword from "@/firebase/firestore/updateUserPassword"
 import { DocumentSnapshot } from "firebase/firestore"
 import getCalls from "@/firebase/firestore/getCalls"
 import getUserData from "@/firebase/firestore/getUserData"
@@ -71,6 +72,13 @@ export default function DashboardPage() {
   const [totalCalls, setTotalCalls] = useState(0)
   const [totalCallDuration, setTotalCallDuration] = useState(0)
   const [callsLoading, setCallsLoading] = useState(true)
+
+  // Change password state
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [newPassword, setNewPassword] = useState("")
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
+  const [newPasswordError, setNewPasswordError] = useState("")
 
   // Protect the page - redirect if not authenticated or not admin
   useEffect(() => {
@@ -148,15 +156,10 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchUsers = async () => {
       setUsersLoading(true)
-      console.log("Fetching users...")
       // Exclude current user from list
       const { result, error, lastVisible } = await getUsers(pageSize, undefined, user?.uid)
 
-      console.log("Users result:", result)
-      console.log("Users error:", error)
-
       if (!error && result) {
-        console.log("Setting users:", result.length, "users")
         setUsers(result as User[])
         setLastDoc(lastVisible || null)
       } else {
@@ -280,15 +283,57 @@ export default function DashboardPage() {
     }
   }
 
+  const handleOpenPasswordDialog = (userId: string) => {
+    setSelectedUserId(userId)
+    setNewPassword("")
+    setNewPasswordError("")
+    setShowNewPassword(false)
+    setPasswordDialogOpen(true)
+  }
+
+  const handleChangePassword = async () => {
+    if (!selectedUserId) return
+
+    // Validation
+    setNewPasswordError("")
+
+    if (!newPassword) {
+      setNewPasswordError("Password tidak boleh kosong")
+      return
+    }
+
+    if (newPassword.length < 6) {
+      setNewPasswordError("Password harus minimal 6 karakter")
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      const { error } = await updateUserPassword(selectedUserId, newPassword)
+
+      if (error) {
+        console.error("Error updating password:", error)
+        toast.error("Gagal mengubah password")
+      } else {
+        toast.success("Password berhasil diubah")
+        setPasswordDialogOpen(false)
+        setNewPassword("")
+        setSelectedUserId(null)
+      }
+    } catch (err) {
+      console.error("Error updating password:", err)
+      toast.error("Terjadi kesalahan saat mengubah password")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleAddUser = async () => {
     // Clear previous messages and errors
     setMessage(null)
     setUsernameError("")
     setPasswordError("")
-
-    console.log("=== Starting Add User ===")
-    console.log("Username:", username)
-    console.log("Password length:", password.length)
 
     let hasError = false
 
@@ -319,7 +364,6 @@ export default function DashboardPage() {
     setIsLoading(true)
 
     try {
-      console.log("Creating user with Firebase...")
       const { result, error } = await createUser(username, password, {
         displayName: username,
         role: "user", // Always set role to "user" by default
@@ -356,7 +400,6 @@ export default function DashboardPage() {
           })
         }
       } else {
-        console.log("User created successfully:", result)
         setMessage({ type: "success", text: "User berhasil ditambahkan!" })
 
         // Show success toast
@@ -615,36 +658,46 @@ export default function DashboardPage() {
                               />
                             </TableCell>
                             <TableCell>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="border-red-300 text-red-400 hover:bg-red-50"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Hapus User</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Apakah Anda yakin ingin menghapus user &quot;{user.displayName || user.email}&quot;?
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel className="bg-gray-100 text-gray-700 hover:bg-gray-200">
-                                      Batal
-                                    </AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => handleDeleteUser(user.id)}
-                                      className="bg-red-400 text-white hover:bg-red-500"
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOpenPasswordDialog(user.id)}
+                                  className="border-blue-300 text-blue-400 hover:bg-blue-50"
+                                >
+                                  <Key className="h-4 w-4" />
+                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="border-red-300 text-red-400 hover:bg-red-50"
                                     >
-                                      Hapus
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Hapus User</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Apakah Anda yakin ingin menghapus user &quot;{user.displayName || user.email}&quot;?
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel className="bg-gray-100 text-gray-700 hover:bg-gray-200">
+                                        Batal
+                                      </AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => handleDeleteUser(user.id)}
+                                        className="bg-red-400 text-white hover:bg-red-500"
+                                      >
+                                        Hapus
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
                             </TableCell>
                           </TableRow>
                         );
@@ -684,6 +737,67 @@ export default function DashboardPage() {
           </Card>
         </div>
       </div>
+
+      {/* Change Password Dialog */}
+      <AlertDialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ubah Password User</AlertDialogTitle>
+            <AlertDialogDescription>
+              Masukkan password baru untuk user ini
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <label htmlFor="newPassword" className="mb-2 block text-sm font-medium text-gray-700">
+              Password Baru <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <Input
+                id="newPassword"
+                type={showNewPassword ? "text" : "password"}
+                placeholder="Minimal 6 karakter"
+                value={newPassword}
+                onChange={(e) => {
+                  setNewPassword(e.target.value)
+                  setNewPasswordError("")
+                }}
+                className={`h-12 pr-10 ${newPasswordError ? "border-red-500 focus:border-red-500" : "border-gray-200"}`}
+                disabled={isLoading}
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
+                disabled={isLoading}
+              >
+                {showNewPassword ? (
+                  <EyeOff className="h-5 w-5" />
+                ) : (
+                  <Eye className="h-5 w-5" />
+                )}
+              </button>
+            </div>
+            {newPasswordError && (
+              <p className="mt-1 text-xs text-red-600">{newPasswordError}</p>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              className="bg-gray-100 text-gray-700 hover:bg-gray-200"
+              disabled={isLoading}
+            >
+              Batal
+            </AlertDialogCancel>
+            <Button
+              onClick={handleChangePassword}
+              disabled={isLoading}
+              className="bg-blue-400 text-white hover:bg-blue-500 disabled:opacity-50"
+            >
+              {isLoading ? "Mengubah..." : "Ubah Password"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

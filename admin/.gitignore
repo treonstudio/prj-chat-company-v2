@@ -37,3 +37,6 @@ next-env.d.ts
 
 # build info
 src/build-info.json
+
+# Firebase service account key
+serviceAccountKey.json

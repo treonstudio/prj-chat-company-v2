@@ -94,7 +94,7 @@ export class ChatRepository {
       const newGroupChat: GroupChat = {
         chatId,
         name: groupName,
-        avatarUrl,
+        ...(avatarUrl && { avatarUrl }),
         participants,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
@@ -260,6 +260,67 @@ export class ChatRepository {
       return Resource.success(chat.chatId);
     } catch (error: any) {
       return Resource.error(error.message || 'Failed to start chat');
+    }
+  }
+
+  /**
+   * Leave a group chat
+   */
+  async leaveGroupChat(
+    userId: string,
+    chatId: string
+  ): Promise<Resource<void>> {
+    try {
+      // Get group chat to verify it exists and user is a participant
+      const groupChatRef = doc(db, this.GROUP_CHATS_COLLECTION, chatId);
+      const groupChatDoc = await getDoc(groupChatRef);
+
+      if (!groupChatDoc.exists()) {
+        return Resource.error('Group chat not found');
+      }
+
+      const groupChat = groupChatDoc.data() as GroupChat;
+
+      // Check if user is a participant
+      if (!groupChat.participants.includes(userId)) {
+        return Resource.error('You are not a member of this group');
+      }
+
+      // Use batch to update group chat and user's chat list
+      const batch = writeBatch(db);
+
+      // Remove user from group participants
+      const updatedParticipants = groupChat.participants.filter(
+        (id) => id !== userId
+      );
+
+      // If this is the last participant, optionally delete the group
+      // Or keep it for history - we'll keep it here
+      batch.update(groupChatRef, {
+        participants: updatedParticipants,
+        updatedAt: Timestamp.now(),
+      });
+
+      // Remove chat from user's chat list
+      const userChatsRef = doc(db, this.USER_CHATS_COLLECTION, userId);
+      const userChatsDoc = await getDoc(userChatsRef);
+
+      if (userChatsDoc.exists()) {
+        const userData = userChatsDoc.data() as UserChats;
+        const updatedChats = userData.chats.filter(
+          (chat) => chat.chatId !== chatId
+        );
+
+        batch.update(userChatsRef, {
+          chats: updatedChats,
+          updatedAt: Timestamp.now(),
+        });
+      }
+
+      await batch.commit();
+      return Resource.success(undefined);
+    } catch (error: any) {
+      return Resource.error(error.message || 'Failed to leave group chat');
     }
   }
 

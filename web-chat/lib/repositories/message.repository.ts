@@ -481,12 +481,8 @@ export class MessageRepository {
 
       const newUnreadCount = isSender ? 0 : currentUnreadCount + 1;
 
-      // Create chat item
-      const chatItem = {
-        chatId,
-        chatType: 'DIRECT',
-        otherUserId,
-        otherUserName,
+      // Create chat item update
+      const chatItemUpdate = {
         lastMessage,
         lastMessageTime,
         unreadCount: newUnreadCount,
@@ -501,9 +497,17 @@ export class MessageRepository {
         const updatedChats =
           existingChatIndex !== -1
             ? existingChats.map((chat, index) =>
-              index === existingChatIndex ? chatItem : chat
+              index === existingChatIndex
+                ? { ...chat, ...chatItemUpdate } // Merge to preserve existing fields
+                : chat
             )
-            : [chatItem, ...existingChats];
+            : [{
+                chatId,
+                chatType: 'DIRECT',
+                otherUserId,
+                otherUserName,
+                ...chatItemUpdate,
+              }, ...existingChats];
 
         await updateDoc(userChatRef, {
           chats: updatedChats,
@@ -512,7 +516,13 @@ export class MessageRepository {
       } else {
         await setDoc(userChatRef, {
           userId,
-          chats: [chatItem],
+          chats: [{
+            chatId,
+            chatType: 'DIRECT',
+            otherUserId,
+            otherUserName,
+            ...chatItemUpdate,
+          }],
           updatedAt: lastMessageTime,
         });
       }
@@ -537,6 +547,10 @@ export class MessageRepository {
       const userChatRef = doc(db, 'userChats', userId);
       const userChatSnapshot = await getDoc(userChatRef);
 
+      // Get sender name for display
+      const senderDoc = await getDoc(doc(db, 'users', senderId));
+      const senderName = senderDoc.exists() ? senderDoc.get('displayName') : 'Unknown';
+
       // Determine unread count
       const isSender = senderId === userId;
       let currentUnreadCount = 0;
@@ -549,13 +563,12 @@ export class MessageRepository {
 
       const newUnreadCount = isSender ? 0 : currentUnreadCount + 1;
 
-      // Create chat item for group
-      const chatItem = {
-        chatId,
-        chatType: 'GROUP',
-        groupName,
-        groupAvatar,
-        lastMessage,
+      // Format message with sender name for group chats
+      const displayMessage = isSender ? lastMessage : `${senderName}: ${lastMessage}`;
+
+      // Create chat item update (only fields that can change)
+      const chatItemUpdate: any = {
+        lastMessage: displayMessage,
         lastMessageTime,
         unreadCount: newUnreadCount,
       };
@@ -569,9 +582,17 @@ export class MessageRepository {
         const updatedChats =
           existingChatIndex !== -1
             ? existingChats.map((chat, index) =>
-              index === existingChatIndex ? chatItem : chat
+              index === existingChatIndex
+                ? { ...chat, ...chatItemUpdate } // Merge to preserve groupName, groupAvatar, etc
+                : chat
             )
-            : [chatItem, ...existingChats];
+            : [{
+                chatId,
+                chatType: 'GROUP',
+                groupName,
+                ...(groupAvatar && { groupAvatar }),
+                ...chatItemUpdate,
+              }, ...existingChats];
 
         await updateDoc(userChatRef, {
           chats: updatedChats,
@@ -580,7 +601,13 @@ export class MessageRepository {
       } else {
         await setDoc(userChatRef, {
           userId,
-          chats: [chatItem],
+          chats: [{
+            chatId,
+            chatType: 'GROUP',
+            groupName,
+            ...(groupAvatar && { groupAvatar }),
+            ...chatItemUpdate,
+          }],
           updatedAt: lastMessageTime,
         });
       }

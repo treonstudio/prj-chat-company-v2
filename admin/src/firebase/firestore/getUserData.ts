@@ -7,8 +7,6 @@ export default async function getUserData(userId: string) {
   let error = null;
 
   try {
-    console.log("[getUserData] Getting user data for:", userId);
-
     // Get Firestore instance
     const db = firestore.getFirestore(firebase_app);
 
@@ -23,9 +21,6 @@ export default async function getUserData(userId: string) {
         id: docSnap.id,
         ...docSnap.data(),
       };
-      console.log("[getUserData] User data found:", result);
-    } else {
-      console.log("[getUserData] No user found with ID:", userId);
     }
   } catch (e) {
     console.error("[getUserData] ERROR:", e);
