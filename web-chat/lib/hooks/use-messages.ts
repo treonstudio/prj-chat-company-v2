@@ -12,8 +12,13 @@ export function useMessages(chatId: string | null, isGroupChat: boolean) {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingMessage, setUploadingMessage] = useState<Message | null>(null);
 
   useEffect(() => {
+    // Reset uploading state when chatId changes
+    setUploadingMessage(null);
+    setUploading(false);
+
     if (!chatId) {
       setLoading(false);
       return;
@@ -67,20 +72,38 @@ export function useMessages(chatId: string | null, isGroupChat: boolean) {
       currentUserId: string,
       currentUserName: string,
       imageFile: File,
-      shouldCompress: boolean
+      shouldCompress: boolean,
+      currentUserAvatar?: string
     ) => {
       if (!chatId) return;
 
+      // Create temporary uploading message
+      const tempMessage: Message = {
+        messageId: `temp_${Date.now()}`,
+        senderId: currentUserId,
+        senderName: currentUserName,
+        senderAvatar: currentUserAvatar,
+        text: '🖼️ Photo',
+        type: MessageType.IMAGE,
+        readBy: {},
+        deliveredTo: {},
+      };
+
       setUploading(true);
+      setUploadingMessage(tempMessage);
+
       const result = await messageRepository.uploadAndSendImage(
         chatId,
         currentUserId,
         currentUserName,
         imageFile,
         isGroupChat,
-        shouldCompress
+        shouldCompress,
+        currentUserAvatar
       );
+
       setUploading(false);
+      setUploadingMessage(null);
 
       if (result.status === 'error') {
         setError(result.message);
@@ -90,18 +113,35 @@ export function useMessages(chatId: string | null, isGroupChat: boolean) {
   );
 
   const sendVideo = useCallback(
-    async (currentUserId: string, currentUserName: string, videoFile: File) => {
+    async (currentUserId: string, currentUserName: string, videoFile: File, currentUserAvatar?: string) => {
       if (!chatId) return;
 
+      // Create temporary uploading message
+      const tempMessage: Message = {
+        messageId: `temp_${Date.now()}`,
+        senderId: currentUserId,
+        senderName: currentUserName,
+        senderAvatar: currentUserAvatar,
+        text: '🎥 Video',
+        type: MessageType.VIDEO,
+        readBy: {},
+        deliveredTo: {},
+      };
+
       setUploading(true);
+      setUploadingMessage(tempMessage);
+
       const result = await messageRepository.uploadAndSendVideo(
         chatId,
         currentUserId,
         currentUserName,
         videoFile,
-        isGroupChat
+        isGroupChat,
+        currentUserAvatar
       );
+
       setUploading(false);
+      setUploadingMessage(null);
 
       if (result.status === 'error') {
         setError(result.message);
@@ -111,18 +151,35 @@ export function useMessages(chatId: string | null, isGroupChat: boolean) {
   );
 
   const sendDocument = useCallback(
-    async (currentUserId: string, currentUserName: string, documentFile: File) => {
+    async (currentUserId: string, currentUserName: string, documentFile: File, currentUserAvatar?: string) => {
       if (!chatId) return;
 
+      // Create temporary uploading message
+      const tempMessage: Message = {
+        messageId: `temp_${Date.now()}`,
+        senderId: currentUserId,
+        senderName: currentUserName,
+        senderAvatar: currentUserAvatar,
+        text: `📄 ${documentFile.name}`,
+        type: MessageType.DOCUMENT,
+        readBy: {},
+        deliveredTo: {},
+      };
+
       setUploading(true);
+      setUploadingMessage(tempMessage);
+
       const result = await messageRepository.uploadAndSendDocument(
         chatId,
         currentUserId,
         currentUserName,
         documentFile,
-        isGroupChat
+        isGroupChat,
+        currentUserAvatar
       );
+
       setUploading(false);
+      setUploadingMessage(null);
 
       if (result.status === 'error') {
         setError(result.message);
@@ -146,6 +203,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean) {
     error,
     sending,
     uploading,
+    uploadingMessage,
     sendTextMessage,
     sendImage,
     sendVideo,

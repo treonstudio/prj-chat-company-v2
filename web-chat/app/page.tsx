@@ -51,6 +51,7 @@ export default function Page() {
               chatId={selectedChatId}
               currentUserId={currentUser.uid}
               currentUserName={userData.displayName}
+              currentUserAvatar={userData.avatarUrl}
               isGroupChat={selectedChatIsGroup}
             />
           ) : (

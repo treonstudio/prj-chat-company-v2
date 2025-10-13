@@ -118,20 +118,20 @@ export function Sidebar({
                     )}
                     aria-current={activeId === c.chatId ? "page" : undefined}
                   >
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-9 w-9">
+                    <div className="flex items-start gap-3">
+                      <Avatar className="h-10 w-10 shrink-0">
                         <AvatarImage src={avatar || "/placeholder-user.jpg"} alt="" />
                         <AvatarFallback aria-hidden>{name?.slice(0, 2).toUpperCase()}</AvatarFallback>
                       </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="truncate text-sm font-medium">{name}</p>
-                          <span className="shrink-0 text-xs text-muted-foreground">{timeAgo.replace('about ', '')}</span>
+                      <div className="min-w-0 flex-1 pt-0.5">
+                        <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                          <p className="truncate text-sm font-semibold flex-1 leading-tight">{name}</p>
+                          <span className="shrink-0 text-[11px] text-muted-foreground whitespace-nowrap leading-tight">{timeAgo.replace('about ', '')}</span>
                         </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="truncate text-xs text-muted-foreground">{c.lastMessage}</p>
+                        <div className="flex items-center justify-between gap-2 mt-1">
+                          <p className="truncate text-xs text-muted-foreground flex-1 line-clamp-1 leading-tight">{c.lastMessage}</p>
                           {c.unreadCount > 0 ? (
-                            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
+                            <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground shrink-0">
                               {c.unreadCount}
                             </span>
                           ) : null}

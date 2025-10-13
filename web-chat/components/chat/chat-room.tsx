@@ -10,7 +10,15 @@ import { UserRepository } from "@/lib/repositories/user.repository"
 import { ChatRepository } from "@/lib/repositories/chat.repository"
 import { format } from "date-fns"
 import { useState } from "react"
-import { ChatType } from "@/types/models"
+import { ChatType, User } from "@/types/models"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 const userRepository = new UserRepository()
 const chatRepository = new ChatRepository()
@@ -19,11 +27,13 @@ export function ChatRoom({
   chatId,
   currentUserId,
   currentUserName,
+  currentUserAvatar,
   isGroupChat,
 }: {
   chatId: string
   currentUserId: string
   currentUserName: string
+  currentUserAvatar?: string
   isGroupChat: boolean
 }) {
   const {
@@ -31,20 +41,39 @@ export function ChatRoom({
     loading,
     error,
     sending,
+    uploading,
+    uploadingMessage,
     sendTextMessage,
+    sendImage,
+    sendVideo,
+    sendDocument,
     markAsRead,
   } = useMessages(chatId, isGroupChat)
 
   const [roomTitle, setRoomTitle] = useState<string>('Chat')
+  const [groupMembers, setGroupMembers] = useState<User[]>([])
+  const [showMembersDialog, setShowMembersDialog] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Load room title
+  // Load room title and group members
   useEffect(() => {
     async function loadRoomInfo() {
       if (isGroupChat) {
-        // For group chats, we'd need to fetch group info
-        // For now, just use chatId
-        setRoomTitle('Group Chat')
+        // For group chats, fetch group info
+        const groupResult = await chatRepository.getGroupChat(chatId)
+        if (groupResult.status === 'success') {
+          setRoomTitle(groupResult.data.name)
+
+          // Fetch all group members
+          const memberPromises = groupResult.data.participants.map(userId =>
+            userRepository.getUserById(userId)
+          )
+          const memberResults = await Promise.all(memberPromises)
+          const members = memberResults
+            .filter(r => r.status === 'success')
+            .map(r => r.data)
+          setGroupMembers(members)
+        }
       } else {
         // For direct chats, get the other user's name
         const parts = chatId.replace('direct_', '').split('_')
@@ -76,12 +105,53 @@ export function ChatRoom({
     }
   }, [messages])
 
+  // Format member names for display
+  const getMemberNamesDisplay = () => {
+    if (groupMembers.length === 0) return ''
+    const names = groupMembers.map(m => m.displayName)
+    if (names.length <= 3) {
+      return names.join(', ')
+    }
+    return `${names.slice(0, 3).join(', ')}, +${names.length - 3}`
+  }
+
   return (
     <div className="flex h-full w-full min-h-0 flex-col">
       <header className="flex items-center justify-between border-b px-4 py-3">
-        <div>
+        <div className="flex-1 min-w-0">
           <h1 className="text-balance text-base font-semibold">{roomTitle}</h1>
-          <p className="text-xs text-muted-foreground">Messages are end-to-end encrypted</p>
+          {isGroupChat && groupMembers.length > 0 ? (
+            <Dialog open={showMembersDialog} onOpenChange={setShowMembersDialog}>
+              <DialogTrigger asChild>
+                <button className="text-xs text-muted-foreground hover:text-foreground transition-colors text-left truncate block max-w-full">
+                  {getMemberNamesDisplay()}
+                </button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Group Members ({groupMembers.length})</DialogTitle>
+                </DialogHeader>
+                <ScrollArea className="max-h-[400px] pr-4">
+                  <div className="space-y-3">
+                    {groupMembers.map((member) => (
+                      <div key={member.userId} className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={member.avatarUrl} alt="" />
+                          <AvatarFallback>{member.displayName.slice(0, 2).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{member.displayName}</p>
+                          <p className="text-xs text-muted-foreground truncate">{member.email}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </DialogContent>
+            </Dialog>
+          ) : !isGroupChat ? (
+            <p className="text-xs text-muted-foreground">Messages are end-to-end encrypted</p>
+          ) : null}
         </div>
       </header>
       <ScrollArea className="flex-1 min-h-0">
@@ -105,15 +175,19 @@ export function ChatRoom({
                   const timestamp = m.timestamp?.toDate()
                   const timeStr = timestamp ? format(timestamp, 'HH:mm') : ''
 
+                  // Map message type to ChatMessage type format
+                  const messageType = m.type === 'DOCUMENT' ? 'doc' : m.type.toLowerCase()
+
                   return (
                     <div key={m.messageId}>
                       <ChatMessage
                         data={{
                           id: m.messageId,
-                          type: m.type.toLowerCase() as any,
+                          type: messageType as any,
                           content: m.mediaUrl || m.text,
                           fileName: m.mediaMetadata?.fileName,
                           fileSize: m.mediaMetadata?.fileSize ? `${(m.mediaMetadata.fileSize / 1024 / 1024).toFixed(2)} MB` : undefined,
+                          mimeType: m.mediaMetadata?.mimeType,
                           senderId: m.senderId,
                           senderName: m.senderName,
                           timestamp: timeStr,
@@ -124,6 +198,25 @@ export function ChatRoom({
                     </div>
                   )
                 })}
+
+                {/* Uploading message bubble */}
+                {uploadingMessage && (
+                  <div key="uploading-bubble" className="flex w-full justify-end">
+                    <div className="inline-flex flex-col gap-2 rounded-xl px-3 py-2 text-sm ml-auto bg-primary text-primary-foreground rounded-br-none items-end max-w-[40%]">
+                      {isGroupChat && (
+                        <span className="text-xs font-bold">{uploadingMessage.senderName}</span>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent"></div>
+                        <p className="text-sm opacity-80">Uploading...</p>
+                      </div>
+                      <span className="text-[11px] self-end text-right opacity-70">
+                        {format(new Date(), 'HH:mm')}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 <div ref={scrollRef} />
               </>
             )}
@@ -131,10 +224,16 @@ export function ChatRoom({
         )}
       </ScrollArea>
       <Separator />
-      <MessageComposer
-        onSendText={(text) => sendTextMessage(currentUserId, currentUserName, text)}
-        disabled={sending}
-      />
+      <div className="relative">
+        <MessageComposer
+          onSendText={(text) => sendTextMessage(currentUserId, currentUserName, text)}
+          onSendImage={(file, shouldCompress) => sendImage(currentUserId, currentUserName, file, shouldCompress, currentUserAvatar)}
+          onSendVideo={(file) => sendVideo(currentUserId, currentUserName, file, currentUserAvatar)}
+          onSendDocument={(file) => sendDocument(currentUserId, currentUserName, file, currentUserAvatar)}
+          disabled={sending}
+          uploading={uploading}
+        />
+      </div>
     </div>
   )
 }

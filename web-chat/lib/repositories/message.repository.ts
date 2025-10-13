@@ -18,10 +18,53 @@ import { Message, MessageType, MediaMetadata } from '@/types/models';
 import { Resource } from '@/types/resource';
 import imageCompression from 'browser-image-compression';
 
+/**
+ * Generate a UUID compatible with all browsers
+ */
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 export class MessageRepository {
   private readonly DIRECT_CHATS_COLLECTION = 'directChats';
   private readonly GROUP_CHATS_COLLECTION = 'groupChats';
   private readonly MESSAGES_SUBCOLLECTION = 'messages';
+
+  /**
+   * Get file extension from File object
+   */
+  private getFileExtension(file: File): string {
+    // Try to get from filename first
+    const parts = file.name.split('.');
+    if (parts.length > 1) {
+      return parts[parts.length - 1];
+    }
+
+    // Fallback to MIME type mapping
+    const mimeMap: Record<string, string> = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'video/mp4': 'mp4',
+      'video/quicktime': 'mov',
+      'video/x-msvideo': 'avi',
+      'application/pdf': 'pdf',
+      'application/msword': 'doc',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+      'application/vnd.ms-excel': 'xls',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+      'application/vnd.ms-powerpoint': 'ppt',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+      'text/plain': 'txt',
+    };
+
+    return mimeMap[file.type] || 'bin';
+  }
 
   /**
    * Get messages with real-time updates
@@ -151,7 +194,9 @@ export class MessageRepository {
     currentUserName: string,
     imageFile: File,
     isGroupChat: boolean,
-    shouldCompress: boolean
+    shouldCompress: boolean,
+    currentUserAvatar?: string,
+    onProgress?: (progress: number) => void
   ): Promise<Resource<void>> {
     try {
       let fileToUpload = imageFile;
@@ -166,13 +211,15 @@ export class MessageRepository {
         fileToUpload = await imageCompression(imageFile, options);
       }
 
-      // Upload to Firebase Storage
+      // Generate filename with timestamp and proper extension
+      const extension = this.getFileExtension(fileToUpload);
+      const fileName = `IMG_${Date.now()}.${extension}`;
+
+      // Upload to Firebase Storage with proper path structure
       const collection_name = isGroupChat ? 'group' : 'direct';
-      const fileName = `IMG_${Date.now()}.${fileToUpload.name.split('.').pop()}`;
-      const storageRef = ref(
-        storage,
-        `chats/${collection_name}/${chatId}/${crypto.randomUUID()}/${fileName}`
-      );
+      const randomId = generateUUID();
+      const storagePath = `chats/${collection_name}/${chatId}/${randomId}/${fileName}`;
+      const storageRef = ref(storage, storagePath);
 
       await uploadBytes(storageRef, fileToUpload);
       const downloadUrl = await getDownloadURL(storageRef);
@@ -182,7 +229,7 @@ export class MessageRepository {
         fileName,
         fileSize: fileToUpload.size,
         mimeType: fileToUpload.type,
-        thumbnailUrl: downloadUrl, // For images, use the same URL
+        thumbnailUrl: downloadUrl, // For images, use the same URL as mediaUrl
       };
 
       // Send message with image
@@ -190,11 +237,13 @@ export class MessageRepository {
         messageId: '',
         senderId: currentUserId,
         senderName: currentUserName,
+        ...(currentUserAvatar && { senderAvatar: currentUserAvatar }),
         text: '🖼️ Photo',
         type: MessageType.IMAGE,
         mediaUrl: downloadUrl,
         mediaMetadata,
         readBy: {},
+        deliveredTo: {},
       };
 
       return await this.sendMessage(chatId, message, isGroupChat);
@@ -212,21 +261,25 @@ export class MessageRepository {
     currentUserId: string,
     currentUserName: string,
     videoFile: File,
-    isGroupChat: boolean
+    isGroupChat: boolean,
+    currentUserAvatar?: string,
+    onProgress?: (progress: number) => void
   ): Promise<Resource<void>> {
     try {
-      // Upload to Firebase Storage
+      // Generate filename with timestamp and proper extension
+      const extension = this.getFileExtension(videoFile);
+      const fileName = `VID_${Date.now()}.${extension}`;
+
+      // Upload to Firebase Storage with proper path structure
       const collection_name = isGroupChat ? 'group' : 'direct';
-      const fileName = `VID_${Date.now()}.${videoFile.name.split('.').pop()}`;
-      const storageRef = ref(
-        storage,
-        `chats/${collection_name}/${chatId}/${crypto.randomUUID()}/${fileName}`
-      );
+      const randomId = generateUUID();
+      const storagePath = `chats/${collection_name}/${chatId}/${randomId}/${fileName}`;
+      const storageRef = ref(storage, storagePath);
 
       await uploadBytes(storageRef, videoFile);
       const downloadUrl = await getDownloadURL(storageRef);
 
-      // Create media metadata
+      // Create media metadata (no thumbnailUrl for videos)
       const mediaMetadata: MediaMetadata = {
         fileName,
         fileSize: videoFile.size,
@@ -238,11 +291,13 @@ export class MessageRepository {
         messageId: '',
         senderId: currentUserId,
         senderName: currentUserName,
+        ...(currentUserAvatar && { senderAvatar: currentUserAvatar }),
         text: '🎥 Video',
         type: MessageType.VIDEO,
         mediaUrl: downloadUrl,
         mediaMetadata,
         readBy: {},
+        deliveredTo: {},
       };
 
       return await this.sendMessage(chatId, message, isGroupChat);
@@ -260,37 +315,44 @@ export class MessageRepository {
     currentUserId: string,
     currentUserName: string,
     documentFile: File,
-    isGroupChat: boolean
+    isGroupChat: boolean,
+    currentUserAvatar?: string,
+    onProgress?: (progress: number) => void
   ): Promise<Resource<void>> {
     try {
-      // Upload to Firebase Storage
+      // Use original filename for documents (with timestamp prefix for uniqueness)
+      const extension = this.getFileExtension(documentFile);
+      const originalName = documentFile.name;
+      const fileName = `DOC_${Date.now()}_${originalName}`;
+
+      // Upload to Firebase Storage with proper path structure (documents subfolder)
       const collection_name = isGroupChat ? 'group' : 'direct';
-      const fileName = documentFile.name;
-      const storageRef = ref(
-        storage,
-        `chats/${collection_name}/${chatId}/documents/${crypto.randomUUID()}/${fileName}`
-      );
+      const randomId = generateUUID();
+      const storagePath = `chats/${collection_name}/${chatId}/documents/${randomId}/${fileName}`;
+      const storageRef = ref(storage, storagePath);
 
       await uploadBytes(storageRef, documentFile);
       const downloadUrl = await getDownloadURL(storageRef);
 
-      // Create media metadata
+      // Create media metadata (no thumbnailUrl for documents)
       const mediaMetadata: MediaMetadata = {
-        fileName,
+        fileName: originalName, // Store original filename for display
         fileSize: documentFile.size,
-        mimeType: documentFile.type,
+        mimeType: documentFile.type || 'application/octet-stream',
       };
 
-      // Send message with document
+      // Send message with document (text format: 📄 {fileName})
       const message: Message = {
         messageId: '',
         senderId: currentUserId,
         senderName: currentUserName,
-        text: `📄 ${fileName}`,
+        ...(currentUserAvatar && { senderAvatar: currentUserAvatar }),
+        text: `📄 ${originalName}`,
         type: MessageType.DOCUMENT,
         mediaUrl: downloadUrl,
         mediaMetadata,
         readBy: {},
+        deliveredTo: {},
       };
 
       return await this.sendMessage(chatId, message, isGroupChat);

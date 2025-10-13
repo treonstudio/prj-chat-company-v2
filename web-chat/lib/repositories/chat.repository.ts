@@ -9,7 +9,7 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
-import { DirectChat, UserChats, ChatItem } from '@/types/models';
+import { DirectChat, UserChats, ChatItem, GroupChat } from '@/types/models';
 import { Resource } from '@/types/resource';
 
 export class ChatRepository {
@@ -49,6 +49,25 @@ export class ChatRepository {
       return Resource.success(newChat);
     } catch (error: any) {
       return Resource.error(error.message || 'Failed to get or create chat');
+    }
+  }
+
+  /**
+   * Get group chat by ID
+   */
+  async getGroupChat(chatId: string): Promise<Resource<GroupChat>> {
+    try {
+      const chatRef = doc(db, this.GROUP_CHATS_COLLECTION, chatId);
+      const chatDoc = await getDoc(chatRef);
+
+      if (!chatDoc.exists()) {
+        return Resource.error('Group chat not found');
+      }
+
+      const data = chatDoc.data() as GroupChat;
+      return Resource.success({ ...data, chatId });
+    } catch (error: any) {
+      return Resource.error(error.message || 'Failed to get group chat');
     }
   }
 
