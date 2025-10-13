@@ -40,7 +40,7 @@ export default async function createUser(username: string, password: string, add
   try {
     // Generate a unique email from username for Firebase Auth
     // Firebase Auth requires email, so we create a pseudo-email
-    const email = `${username}@chatzy.local`;
+    const email = `${username}@chatapp.com`;
 
     // Create user in Firebase Authentication using secondary auth instance
     // This prevents the current admin session from being logged out
