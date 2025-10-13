@@ -22,7 +22,22 @@ export function useChatList(userId: string | null) {
     const unsubscribe = chatRepository.getUserChats(
       userId,
       (chats) => {
-        setChats(chats);
+        // Remove duplicates based on chatId (keep the most recent one)
+        const uniqueChats = chats.reduce((acc: ChatItem[], chat) => {
+          const existingIndex = acc.findIndex((c) => c.chatId === chat.chatId);
+          if (existingIndex === -1) {
+            // Chat doesn't exist, add it
+            acc.push(chat);
+          } else {
+            // Chat exists, keep the one with more recent timestamp
+            if (chat.lastMessageTime.seconds > acc[existingIndex].lastMessageTime.seconds) {
+              acc[existingIndex] = chat;
+            }
+          }
+          return acc;
+        }, []);
+
+        setChats(uniqueChats);
         setLoading(false);
         setError(null);
       },

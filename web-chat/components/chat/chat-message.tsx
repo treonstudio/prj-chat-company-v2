@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Download, X } from "lucide-react"
+import download from "downloadjs"
 
 type Base = {
   id: string
@@ -26,6 +27,7 @@ type DocMsg = Base & {
   content: string
   fileName?: string
   fileSize?: string
+  mimeType?: string
 }
 
 export type ChatMessageUnion = TextMsg | ImageMsg | VideoMsg | DocMsg
@@ -41,6 +43,61 @@ export function ChatMessage({
 }) {
   const [showImagePreview, setShowImagePreview] = useState(false)
   const [showVideoPreview, setShowVideoPreview] = useState(false)
+  const [imageLoaded, setImageLoaded] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+
+  const handleDownload = async (url: string, filename?: string, mimeType?: string) => {
+    setDownloading(true)
+    try {
+      // Fetch the file as blob
+      const response = await fetch(url, {
+        mode: 'cors',
+        credentials: 'include',
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const blob = await response.blob()
+
+      // Use downloadjs to trigger download
+      download(blob, filename || `download-${Date.now()}`, mimeType || blob.type)
+
+      // Small delay before resetting downloading state
+      setTimeout(() => {
+        setDownloading(false)
+      }, 1000)
+    } catch (error) {
+      console.error('Download failed, trying alternative method:', error)
+
+      // Try alternative download method using blob URL
+      try {
+        const response = await fetch(url)
+        const blob = await response.blob()
+
+        // Create object URL and download
+        const blobUrl = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = blobUrl
+        link.download = filename || `download-${Date.now()}`
+        link.style.display = 'none'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+
+        // Clean up blob URL
+        setTimeout(() => {
+          URL.revokeObjectURL(blobUrl)
+          setDownloading(false)
+        }, 100)
+      } catch (fallbackError) {
+        console.error('All download methods failed:', fallbackError)
+        setDownloading(false)
+        alert('Download gagal. Silakan coba lagi atau hubungi administrator.')
+      }
+    }
+  }
 
   const bubble = cn(
     "inline-flex flex-col gap-2 rounded-xl text-sm",
@@ -66,15 +123,55 @@ export function ChatMessage({
         {data.type === "text" && <p className="text-pretty leading-relaxed">{data.content}</p>}
 
         {data.type === "image" && (
-          <>
+          <div className="relative min-h-[200px] group">
+            {/* Skeleton loader */}
+            {!imageLoaded && (
+              <div className="absolute inset-0 bg-muted rounded-md animate-pulse flex items-center justify-center">
+                <svg
+                  className="w-12 h-12 text-muted-foreground/30"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
+              </div>
+            )}
             <img
               src={data.content || "/placeholder.svg?height=320&width=480&query=pastel%20green%20chat%20image"}
               alt="Shared image"
-              className="h-auto w-full rounded-md cursor-pointer hover:opacity-90 transition-opacity"
+              className={cn(
+                "h-auto w-full rounded-md cursor-pointer hover:opacity-90 transition-opacity",
+                !imageLoaded && "opacity-0"
+              )}
               loading="lazy"
+              onLoad={() => setImageLoaded(true)}
               onClick={() => setShowImagePreview(true)}
             />
-          </>
+            {/* Download button - appears on hover */}
+            {imageLoaded && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleDownload(data.content, `image-${data.id}.jpg`, 'image/jpeg')
+                }}
+                disabled={downloading}
+                className="absolute top-2 right-2 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                aria-label="Download image"
+              >
+                {downloading ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <Download className="h-4 w-4 text-white" />
+                )}
+              </button>
+            )}
+          </div>
         )}
 
         {data.type === "video" && (
@@ -125,11 +222,22 @@ export function ChatMessage({
                 <p className="text-sm font-medium leading-snug break-words">{data.fileName || "Document"}</p>
                 {data.fileSize ? <p className="text-xs opacity-70 mt-0.5">{data.fileSize}</p> : null}
               </div>
-              <a href={data.content} download={data.fileName}>
-                <Button size="sm" variant={isMe ? "secondary" : "default"} className="w-full">
-                  Download
-                </Button>
-              </a>
+              <Button
+                size="sm"
+                variant={isMe ? "secondary" : "default"}
+                className="w-full"
+                onClick={() => handleDownload(data.content, data.fileName, data.mimeType)}
+                disabled={downloading}
+              >
+                {downloading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    <span>Downloading...</span>
+                  </div>
+                ) : (
+                  "Download"
+                )}
+              </Button>
             </div>
           </div>
         )}
@@ -145,14 +253,20 @@ export function ChatMessage({
         <DialogContent className="max-w-4xl p-0 overflow-hidden">
           <DialogHeader className="absolute top-0 right-0 z-10 p-4 bg-gradient-to-b from-black/50 to-transparent">
             <div className="flex items-center justify-end gap-2">
-              <a
-                href={data.content}
-                download
-                onClick={(e) => e.stopPropagation()}
-                className="p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleDownload(data.content, `image-${data.id}.jpg`, 'image/jpeg')
+                }}
+                disabled={downloading}
+                className="p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors disabled:opacity-50"
               >
-                <Download className="h-5 w-5 text-white" />
-              </a>
+                {downloading ? (
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <Download className="h-5 w-5 text-white" />
+                )}
+              </button>
               <button
                 onClick={() => setShowImagePreview(false)}
                 className="p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
@@ -178,14 +292,20 @@ export function ChatMessage({
         <DialogContent className="max-w-4xl p-0 overflow-hidden">
           <DialogHeader className="absolute top-0 right-0 z-10 p-4 bg-gradient-to-b from-black/50 to-transparent">
             <div className="flex items-center justify-end gap-2">
-              <a
-                href={data.content}
-                download
-                onClick={(e) => e.stopPropagation()}
-                className="p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleDownload(data.content, `video-${data.id}.mp4`, data.mimeType || 'video/mp4')
+                }}
+                disabled={downloading}
+                className="p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors disabled:opacity-50"
               >
-                <Download className="h-5 w-5 text-white" />
-              </a>
+                {downloading ? (
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <Download className="h-5 w-5 text-white" />
+                )}
+              </button>
               <button
                 onClick={() => setShowVideoPreview(false)}
                 className="p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors"

@@ -1,4 +1,4 @@
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { User } from '@/types/models';
 import { Resource } from '@/types/resource';
@@ -35,6 +35,66 @@ export class UserRepository {
       return Resource.success(undefined);
     } catch (error: any) {
       return Resource.error(error.message || 'Failed to update FCM token');
+    }
+  }
+
+  /**
+   * Search users by display name
+   */
+  async searchUsers(searchQuery: string, currentUserId: string, maxResults: number = 20): Promise<Resource<User[]>> {
+    try {
+      if (!searchQuery || searchQuery.trim().length === 0) {
+        return Resource.success([]);
+      }
+
+      const searchTerm = searchQuery.toLowerCase().trim();
+      const usersRef = collection(db, this.COLLECTION);
+
+      // Get all users and filter client-side (Firestore doesn't support case-insensitive search directly)
+      const q = query(usersRef, limit(100)); // Get more users to filter
+      const snapshot = await getDocs(q);
+
+      const users: User[] = [];
+      snapshot.forEach((doc) => {
+        const userData = doc.data() as User;
+        const user = { ...userData, userId: doc.id };
+
+        // Filter out current user and search by displayName or email
+        if (user.userId !== currentUserId) {
+          const displayName = (user.displayName || '').toLowerCase();
+          const email = (user.email || '').toLowerCase();
+
+          if (displayName.includes(searchTerm) || email.includes(searchTerm)) {
+            users.push(user);
+          }
+        }
+      });
+
+      // Limit results
+      return Resource.success(users.slice(0, maxResults));
+    } catch (error: any) {
+      return Resource.error(error.message || 'Failed to search users');
+    }
+  }
+
+  /**
+   * Get multiple users by IDs
+   */
+  async getUsersByIds(userIds: string[]): Promise<Resource<User[]>> {
+    try {
+      const users: User[] = [];
+
+      for (const userId of userIds) {
+        const userDoc = await getDoc(doc(db, this.COLLECTION, userId));
+        if (userDoc.exists()) {
+          const userData = userDoc.data() as User;
+          users.push({ ...userData, userId: userDoc.id });
+        }
+      }
+
+      return Resource.success(users);
+    } catch (error: any) {
+      return Resource.error(error.message || 'Failed to fetch users');
     }
   }
 }

@@ -11,6 +11,9 @@ import { useMemo, useState, useEffect } from "react"
 import { useChatList } from "@/lib/hooks/use-chat-list"
 import { useAuth } from "@/lib/contexts/auth.context"
 import { formatDistanceToNow } from "date-fns"
+import { NewChatDialog } from "./new-chat-dialog"
+import { GroupChatDialog } from "./group-chat-dialog"
+import { MessageSquarePlus } from "lucide-react"
 
 export function Sidebar({
   currentUserId,
@@ -23,6 +26,8 @@ export function Sidebar({
 }) {
   const [query, setQuery] = useState("")
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [showNewChatDialog, setShowNewChatDialog] = useState(false)
+  const [showGroupChatDialog, setShowGroupChatDialog] = useState(false)
   const { signOut } = useAuth()
   const { chats, loading, error } = useChatList(currentUserId)
 
@@ -43,6 +48,11 @@ export function Sidebar({
     await signOut()
   }
 
+  const handleChatCreated = (chatId: string, isGroup: boolean) => {
+    setActiveId(chatId)
+    onChatSelect(chatId, isGroup)
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Sticky header: user info + search */}
@@ -59,18 +69,34 @@ export function Sidebar({
             </div>
           </div>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label="Open user menu">
-                <span aria-hidden className="text-xl leading-none">
-                  {"⋯"}
-                </span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-40">
-              <DropdownMenuItem onSelect={handleLogout}>Log out</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="New chat"
+              onClick={() => setShowNewChatDialog(true)}
+            >
+              <MessageSquarePlus className="h-5 w-5" />
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="Open user menu">
+                  <span aria-hidden className="text-xl leading-none">
+                    {"⋯"}
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-40">
+                <DropdownMenuItem onSelect={() => setShowNewChatDialog(true)}>
+                  New Chat
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setShowGroupChatDialog(true)}>
+                  New Group
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={handleLogout}>Log out</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
         <div className="px-4 pb-3">
           <Input
@@ -145,6 +171,22 @@ export function Sidebar({
           </ul>
         )}
       </ScrollArea>
+
+      {/* Dialogs */}
+      <NewChatDialog
+        open={showNewChatDialog}
+        onOpenChange={setShowNewChatDialog}
+        currentUserId={currentUserId}
+        currentUserName={currentUserName}
+        onChatCreated={handleChatCreated}
+      />
+
+      <GroupChatDialog
+        open={showGroupChatDialog}
+        onOpenChange={setShowGroupChatDialog}
+        currentUserId={currentUserId}
+        onGroupCreated={handleChatCreated}
+      />
     </div>
   )
 }
