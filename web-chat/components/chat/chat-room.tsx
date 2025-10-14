@@ -218,6 +218,16 @@ export function ChatRoom({
                   // Map message type to ChatMessage type format
                   const messageType = m.type === 'DOCUMENT' ? 'doc' : m.type.toLowerCase()
 
+                  // Skip rendering the latest message if it matches the uploading message
+                  // This prevents duplicate bubbles during upload
+                  if (uploadingMessage &&
+                      m.senderId === uploadingMessage.senderId &&
+                      m.type === uploadingMessage.type &&
+                      timestamp && timestamp.getTime() > Date.now() - 5000) {
+                    // If message was created within last 5 seconds and matches uploading message, skip it
+                    return null
+                  }
+
                   return (
                     <div key={m.messageId}>
                       <ChatMessage

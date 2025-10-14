@@ -36,7 +36,7 @@ export function NewChatDialog({
   const [searchQuery, setSearchQuery] = useState("")
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(false)
-  const [creating, setCreating] = useState(false)
+  const [creatingUserId, setCreatingUserId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -78,7 +78,7 @@ export function NewChatDialog({
   }, [searchQuery, currentUserId])
 
   const handleUserClick = async (user: User) => {
-    setCreating(true)
+    setCreatingUserId(user.userId)
     setError(null)
 
     const result = await chatRepository.startDirectChat(
@@ -89,7 +89,7 @@ export function NewChatDialog({
       user.imageURL || user.imageUrl
     )
 
-    setCreating(false)
+    setCreatingUserId(null)
 
     if (result.status === 'success') {
       onChatCreated(result.data, false)
@@ -116,7 +116,7 @@ export function NewChatDialog({
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
               autoFocus
-              disabled={creating}
+              disabled={creatingUserId !== null}
             />
           </div>
 
@@ -147,7 +147,7 @@ export function NewChatDialog({
                   <button
                     key={user.userId}
                     onClick={() => handleUserClick(user)}
-                    disabled={creating}
+                    disabled={creatingUserId !== null}
                     className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Avatar className="h-10 w-10 shrink-0">
@@ -160,7 +160,7 @@ export function NewChatDialog({
                         @{user.email.split('@')[0]}
                       </p>
                     </div>
-                    {creating && (
+                    {creatingUserId === user.userId && (
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
                     )}
                   </button>
