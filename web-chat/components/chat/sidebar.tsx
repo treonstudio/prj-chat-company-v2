@@ -77,7 +77,7 @@ export function Sidebar({
             onClick={() => setShowProfile(true)}
           >
             <Avatar className="h-8 w-8">
-              <AvatarImage src={currentUserData.avatarUrl || "/placeholder-user.jpg"} alt="" />
+              <AvatarImage src={currentUserData.imageURL || currentUserData.imageUrl || "/placeholder-user.jpg"} alt="" />
               <AvatarFallback aria-hidden>{currentUserName?.slice(0, 2).toUpperCase() || 'U'}</AvatarFallback>
             </Avatar>
             <div className="min-w-0">

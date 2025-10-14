@@ -222,7 +222,7 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
         <div className="flex flex-col items-center py-8 bg-muted/30">
           <div className="relative group">
             <Avatar className="h-40 w-40">
-              <AvatarImage src={user.avatarUrl || "/placeholder-user.jpg"} alt="" />
+              <AvatarImage src={user.imageURL || user.imageUrl || "/placeholder-user.jpg"} alt="" />
               <AvatarFallback className="text-4xl">
                 {user.displayName?.slice(0, 2).toUpperCase()}
               </AvatarFallback>

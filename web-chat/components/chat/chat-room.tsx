@@ -166,7 +166,7 @@ export function ChatRoom({
                     {groupMembers.map((member) => (
                       <div key={member.userId} className="flex items-center gap-3">
                         <Avatar className="h-10 w-10">
-                          <AvatarImage src={member.avatarUrl} alt="" />
+                          <AvatarImage src={member.imageURL || member.imageUrl} alt="" />
                           <AvatarFallback>{member.displayName.slice(0, 2).toUpperCase()}</AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">

@@ -52,7 +52,7 @@ export default function Page() {
               chatId={selectedChatId}
               currentUserId={currentUser.uid}
               currentUserName={userData.displayName}
-              currentUserAvatar={userData.avatarUrl}
+              currentUserAvatar={userData.imageURL || userData.imageUrl}
               isGroupChat={selectedChatIsGroup}
               onLeaveGroup={() => {
                 // Reset to no chat selected after leaving

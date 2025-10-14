@@ -99,12 +99,12 @@ export class UserRepository {
   }
 
   /**
-   * Update user avatar URL
+   * Update user image URL
    */
-  async updateAvatar(userId: string, avatarUrl: string): Promise<Resource<void>> {
+  async updateAvatar(userId: string, imageUrl: string): Promise<Resource<void>> {
     try {
       await updateDoc(doc(db, this.COLLECTION, userId), {
-        avatarUrl: avatarUrl
+        imageURL: imageUrl // Use imageURL (capital URL) to match Firebase field naming
       });
       return Resource.success(undefined);
     } catch (error: any) {

@@ -256,7 +256,7 @@ export function GroupChatDialog({
                         >
                           <Avatar className="h-10 w-10 shrink-0">
                             <AvatarImage
-                              src={user.avatarUrl || "/placeholder-user.jpg"}
+                              src={user.imageURL || user.imageUrl || "/placeholder-user.jpg"}
                               alt=""
                             />
                             <AvatarFallback>

@@ -81,7 +81,7 @@ export class ChatRepository {
     groupName: string,
     creatorId: string,
     memberIds: string[],
-    avatarUrl?: string
+    imageUrl?: string
   ): Promise<Resource<GroupChat>> {
     try {
       // Create unique group chat ID
@@ -94,7 +94,7 @@ export class ChatRepository {
       const newGroupChat: GroupChat = {
         chatId,
         name: groupName,
-        ...(avatarUrl && { avatarUrl }),
+        ...(imageUrl && { avatarUrl: imageUrl }),
         participants,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
@@ -111,7 +111,7 @@ export class ChatRepository {
         chatId,
         chatType: ChatType.GROUP,
         groupName,
-        ...(avatarUrl && { groupAvatar: avatarUrl }),
+        ...(imageUrl && { groupAvatar: imageUrl }),
         lastMessage: 'Group created',
         lastMessageTime: Timestamp.now(),
         unreadCount: 0,

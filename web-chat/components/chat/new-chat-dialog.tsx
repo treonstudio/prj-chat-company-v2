@@ -86,7 +86,7 @@ export function NewChatDialog({
       currentUserName,
       user.userId,
       user.displayName,
-      user.avatarUrl
+      user.imageURL || user.imageUrl
     )
 
     setCreating(false)
@@ -151,7 +151,7 @@ export function NewChatDialog({
                     className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Avatar className="h-10 w-10 shrink-0">
-                      <AvatarImage src={user.avatarUrl || "/placeholder-user.jpg"} alt="" />
+                      <AvatarImage src={user.imageURL || user.imageUrl || "/placeholder-user.jpg"} alt="" />
                       <AvatarFallback>{user.displayName?.slice(0, 2).toUpperCase()}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1 text-left min-w-0">

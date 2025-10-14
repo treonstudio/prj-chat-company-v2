@@ -10,7 +10,8 @@ export interface User {
   userId: string;
   displayName: string;
   email: string;
-  avatarUrl?: string;
+  imageURL?: string; // Firebase uses imageURL (capital URL)
+  imageUrl?: string; // Fallback for backward compatibility
   status: UserStatus;
   isActive?: boolean;
   lastSeen?: Timestamp;

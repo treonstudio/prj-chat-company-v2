@@ -50,13 +50,13 @@ export class StorageRepository {
 
   /**
    * Delete avatar image from Firebase Storage
-   * @param avatarUrl - The full URL of the avatar to delete
+   * @param imageUrl - The full URL of the image to delete
    * @returns Resource indicating success or failure
    */
-  async deleteAvatar(avatarUrl: string): Promise<Resource<void>> {
+  async deleteAvatar(imageUrl: string): Promise<Resource<void>> {
     try {
       // Extract the path from the URL
-      const storageRef = ref(storage, avatarUrl);
+      const storageRef = ref(storage, imageUrl);
       await deleteObject(storageRef);
       return Resource.success(undefined);
     } catch (error: any) {

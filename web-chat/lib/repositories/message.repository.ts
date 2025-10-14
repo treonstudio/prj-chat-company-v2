@@ -160,7 +160,7 @@ export class MessageRepository {
               participantId,
               chatId,
               chatSnapshot.get('name') || 'Group Chat',
-              chatSnapshot.get('avatarUrl'),
+              chatSnapshot.get('avatarUrl'), // Keep as avatarUrl from GroupChat
               message.text,
               timestamp,
               message.senderId
@@ -467,7 +467,7 @@ export class MessageRepository {
       }
 
       const otherUserName = otherUserDoc.get('displayName') || 'Unknown';
-      const otherUserAvatar = otherUserDoc.get('avatarUrl');
+      const otherUserAvatar = otherUserDoc.get('imageURL') || otherUserDoc.get('imageUrl');
 
       // Determine unread count
       const isSender = senderId === userId;
