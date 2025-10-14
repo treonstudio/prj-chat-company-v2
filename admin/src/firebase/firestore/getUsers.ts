@@ -1,13 +1,25 @@
 import firebase_app from "../config";
 import * as firestore from "firebase/firestore";
 
+// Interface for user data
+interface UserData {
+  id: string;
+  email?: string;
+  username?: string;
+  displayName?: string;
+  createdAt?: any;
+  isActive?: boolean;
+  role?: string;
+  [key: string]: any;
+}
+
 // Cache untuk menyimpan semua users yang sudah di-sort
-let sortedUsersCache: any[] | null = null;
+let sortedUsersCache: UserData[] | null = null;
 let cacheTimestamp: number = 0;
 const CACHE_DURATION = 5000; // 5 seconds
 
 // Function to get all users, sorted
-async function getAllUsersSorted(excludeUserId?: string) {
+async function getAllUsersSorted(excludeUserId?: string): Promise<UserData[]> {
   // Check if cache is still valid
   const now = Date.now();
   if (sortedUsersCache && (now - cacheTimestamp) < CACHE_DURATION) {
@@ -22,11 +34,11 @@ async function getAllUsersSorted(excludeUserId?: string) {
   const querySnapshot = await firestore.getDocs(usersCol);
 
   // Map and filter out excluded user
-  const allUsers = querySnapshot.docs
+  const allUsers: UserData[] = querySnapshot.docs
     .map((doc) => ({
       id: doc.id,
       ...doc.data(),
-    }))
+    } as UserData))
     .filter((user) => !excludeUserId || user.id !== excludeUserId);
 
   // Sort in memory by createdAt descending
@@ -51,9 +63,9 @@ export function invalidateUsersCache() {
 
 // Function to get users with pagination
 export async function getUsers(pageSize: number = 10, lastDoc?: firestore.DocumentSnapshot, excludeUserId?: string) {
-  let result: any[] = [];
+  let result: UserData[] = [];
   let error = null;
-  let lastVisible = null;
+  let lastVisible: firestore.DocumentSnapshot | null = null;
 
   try {
     // Get all users sorted
