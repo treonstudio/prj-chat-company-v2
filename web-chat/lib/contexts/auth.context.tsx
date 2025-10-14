@@ -25,8 +25,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let unsubscribeUserData: (() => void) | null = null;
+
     // Listen to auth state changes
-    const unsubscribe = authRepository.onAuthStateChange(async (user) => {
+    const unsubscribeAuth = authRepository.onAuthStateChange(async (user) => {
       if (user) {
         // Fetch user data from Firestore first before setting current user
         try {
@@ -36,9 +38,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setCurrentUser(user);
             setUserData(result.data);
             setLoading(false);
+
+            // Setup real-time listener to detect if user is deleted from Firestore
+            unsubscribeUserData = userRepository.listenToUser(
+              user.uid,
+              (userData) => {
+                // User data updated
+                setUserData(userData);
+              },
+              async (error) => {
+                // User document deleted or error occurred
+                if (typeof window !== 'undefined') {
+                  console.error('User document deleted or error:', error);
+                }
+                // Auto logout
+                await authRepository.signOut();
+                setUserData(null);
+                setCurrentUser(null);
+              }
+            );
           } else if (result.status === 'error') {
             // If user data not found or error, logout the user immediately
-            // Use safe logging for client-side only
             if (typeof window !== 'undefined') {
               console.error('Failed to fetch user data:', result.message);
             }
@@ -63,10 +83,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCurrentUser(null);
         setUserData(null);
         setLoading(false);
+
+        // Cleanup user data listener if exists
+        if (unsubscribeUserData) {
+          unsubscribeUserData();
+          unsubscribeUserData = null;
+        }
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeUserData) {
+        unsubscribeUserData();
+      }
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {

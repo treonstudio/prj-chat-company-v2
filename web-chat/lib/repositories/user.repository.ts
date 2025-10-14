@@ -1,4 +1,4 @@
-import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { User } from '@/types/models';
 import { Resource } from '@/types/resource';
@@ -96,5 +96,35 @@ export class UserRepository {
     } catch (error: any) {
       return Resource.error(error.message || 'Failed to fetch users');
     }
+  }
+
+  /**
+   * Listen to user document changes in real-time
+   * Used to detect if user is deleted or updated
+   */
+  listenToUser(
+    userId: string,
+    onUpdate: (user: User) => void,
+    onError: (error: string) => void
+  ): () => void {
+    const userRef = doc(db, this.COLLECTION, userId);
+
+    const unsubscribe = onSnapshot(
+      userRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const userData = snapshot.data() as User;
+          onUpdate({ ...userData, userId: snapshot.id });
+        } else {
+          // User document has been deleted
+          onError('User document has been deleted');
+        }
+      },
+      (error) => {
+        onError(error.message || 'Failed to listen to user changes');
+      }
+    );
+
+    return unsubscribe;
   }
 }
