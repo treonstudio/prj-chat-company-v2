@@ -111,7 +111,7 @@ export function NewChatDialog({
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by name or email..."
+              placeholder="Search by name or username..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
@@ -156,7 +156,9 @@ export function NewChatDialog({
                     </Avatar>
                     <div className="flex-1 text-left min-w-0">
                       <p className="text-sm font-medium truncate">{user.displayName}</p>
-                      <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        @{user.email.split('@')[0]}
+                      </p>
                     </div>
                     {creating && (
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />

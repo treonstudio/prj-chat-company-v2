@@ -87,38 +87,31 @@ export function Sidebar({
           </button>
 
           <div className="flex items-center gap-2">
-            {featureFlags.allowChat && (
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="New chat"
-                onClick={() => setShowNewChatDialog(true)}
-              >
-                <MessageSquarePlus className="h-5 w-5" />
-              </Button>
+            {(featureFlags.allowChat || featureFlags.allowCreateGroup) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="New chat menu"
+                  >
+                    <MessageSquarePlus className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-40">
+                  {featureFlags.allowChat && (
+                    <DropdownMenuItem onSelect={() => setShowNewChatDialog(true)}>
+                      New Chat
+                    </DropdownMenuItem>
+                  )}
+                  {featureFlags.allowCreateGroup && (
+                    <DropdownMenuItem onSelect={() => setShowGroupChatDialog(true)}>
+                      New Group
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label="Open user menu">
-                  <span aria-hidden className="text-xl leading-none">
-                    {"⋯"}
-                  </span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="min-w-40">
-                {featureFlags.allowChat && (
-                  <DropdownMenuItem onSelect={() => setShowNewChatDialog(true)}>
-                    New Chat
-                  </DropdownMenuItem>
-                )}
-                {featureFlags.allowCreateGroup && (
-                  <DropdownMenuItem onSelect={() => setShowGroupChatDialog(true)}>
-                    New Group
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem onSelect={handleLogout}>Log out</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
         <div className="px-4 pb-3">
