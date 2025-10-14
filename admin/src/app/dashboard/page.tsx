@@ -30,7 +30,7 @@ import createUser from "@/firebase/auth/createUser"
 import { useAuthContext } from "@/context/AuthContext"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { getUsers, getUsersCount } from "@/firebase/firestore/getUsers"
+import { getUsers, getUsersCount, invalidateUsersCache } from "@/firebase/firestore/getUsers"
 import updateUser from "@/firebase/firestore/updateUser"
 import deleteUser from "@/firebase/firestore/deleteUser"
 import updateUserPassword from "@/firebase/firestore/updateUserPassword"
@@ -219,6 +219,8 @@ export default function DashboardPage() {
   // Reload users after adding new user
   const reloadUsers = async () => {
     setUsersLoading(true)
+    // Invalidate cache first
+    invalidateUsersCache()
     // Exclude current user from list
     const { result, error, lastVisible } = await getUsers(pageSize, undefined, user?.uid)
 
@@ -268,6 +270,9 @@ export default function DashboardPage() {
         console.error("Error deleting user:", error)
         toast.error("Gagal menghapus user")
       } else {
+        // Invalidate cache
+        invalidateUsersCache()
+
         // Update local state - remove deleted user
         setUsers((prevUsers) => prevUsers.filter((u) => u.id !== userId))
 

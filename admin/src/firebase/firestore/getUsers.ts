@@ -1,6 +1,54 @@
 import firebase_app from "../config";
 import * as firestore from "firebase/firestore";
 
+// Cache untuk menyimpan semua users yang sudah di-sort
+let sortedUsersCache: any[] | null = null;
+let cacheTimestamp: number = 0;
+const CACHE_DURATION = 5000; // 5 seconds
+
+// Function to get all users, sorted
+async function getAllUsersSorted(excludeUserId?: string) {
+  // Check if cache is still valid
+  const now = Date.now();
+  if (sortedUsersCache && (now - cacheTimestamp) < CACHE_DURATION) {
+    return sortedUsersCache;
+  }
+
+  // Get Firestore instance
+  const db = firestore.getFirestore(firebase_app);
+  const usersCol = firestore.collection(db, "users");
+
+  // Fetch all users
+  const querySnapshot = await firestore.getDocs(usersCol);
+
+  // Map and filter out excluded user
+  const allUsers = querySnapshot.docs
+    .map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }))
+    .filter((user) => !excludeUserId || user.id !== excludeUserId);
+
+  // Sort in memory by createdAt descending
+  allUsers.sort((a, b) => {
+    const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt || 0).getTime();
+    const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt || 0).getTime();
+    return dateB - dateA; // desc order
+  });
+
+  // Update cache
+  sortedUsersCache = allUsers;
+  cacheTimestamp = now;
+
+  return allUsers;
+}
+
+// Function to invalidate cache (call this after adding/deleting users)
+export function invalidateUsersCache() {
+  sortedUsersCache = null;
+  cacheTimestamp = 0;
+}
+
 // Function to get users with pagination
 export async function getUsers(pageSize: number = 10, lastDoc?: firestore.DocumentSnapshot, excludeUserId?: string) {
   let result: any[] = [];
@@ -8,43 +56,26 @@ export async function getUsers(pageSize: number = 10, lastDoc?: firestore.Docume
   let lastVisible = null;
 
   try {
-    // Get Firestore instance
-    const db = firestore.getFirestore(firebase_app);
+    // Get all users sorted
+    const allUsers = await getAllUsersSorted(excludeUserId);
 
-    // Create collection reference
-    const usersCol = firestore.collection(db, "users");
-
-    // Simple query without orderBy (to avoid index requirement)
-    let q;
-
+    // If lastDoc is provided, find the index and paginate from there
+    let startIndex = 0;
     if (lastDoc) {
-      q = firestore.query(
-        usersCol,
-        firestore.startAfter(lastDoc),
-        firestore.limit(pageSize)
-      );
-    } else {
-      q = firestore.query(usersCol, firestore.limit(pageSize));
+      const lastDocId = lastDoc.id;
+      const lastIndex = allUsers.findIndex(user => user.id === lastDocId);
+      startIndex = lastIndex + 1;
     }
 
-    const querySnapshot = await firestore.getDocs(q);
+    // Get the page of users
+    result = allUsers.slice(startIndex, startIndex + pageSize);
 
-    result = querySnapshot.docs
-      .map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }))
-      .filter((user) => !excludeUserId || user.id !== excludeUserId); // Exclude current user if specified
-
-    // Sort in memory by createdAt descending
-    result.sort((a, b) => {
-      const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt || 0).getTime();
-      const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt || 0).getTime();
-      return dateB - dateA; // desc order
-    });
-
-    // Get last visible document for pagination
-    lastVisible = querySnapshot.docs[querySnapshot.docs.length - 1];
+    // Set lastVisible - we'll use a mock document with just the ID
+    // since we're doing in-memory pagination
+    if (result.length > 0) {
+      const lastUser = result[result.length - 1];
+      lastVisible = { id: lastUser.id } as any;
+    }
   } catch (e) {
     console.error("[getUsers] ERROR:", e);
     error = e;
