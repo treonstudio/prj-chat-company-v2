@@ -9,19 +9,22 @@ export class StorageRepository {
    * Upload avatar image to Firebase Storage
    * @param userId - The user ID
    * @param file - The image file to upload
+   * @param maxSizeInMB - Maximum file size in MB (optional, for extra validation)
    * @returns Resource with the download URL
    */
-  async uploadAvatar(userId: string, file: File): Promise<Resource<string>> {
+  async uploadAvatar(userId: string, file: File, maxSizeInMB?: number): Promise<Resource<string>> {
     try {
       // Validate file type
       if (!file.type.startsWith('image/')) {
         return Resource.error('Please select a valid image file');
       }
 
-      // Validate file size (max 5MB)
-      const maxSize = 5 * 1024 * 1024; // 5MB
-      if (file.size > maxSize) {
-        return Resource.error('Image size must be less than 5MB');
+      // Validate file size if maxSizeInMB is provided
+      if (maxSizeInMB) {
+        const maxSize = maxSizeInMB * 1024 * 1024;
+        if (file.size > maxSize) {
+          return Resource.error(`Image size must be less than ${maxSizeInMB}MB`);
+        }
       }
 
       // Create a unique filename with timestamp

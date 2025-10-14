@@ -12,6 +12,7 @@ import { UserRepository } from "@/lib/repositories/user.repository"
 import { AuthRepository } from "@/lib/repositories/auth.repository"
 import { AvatarCropDialog } from "./avatar-crop-dialog"
 import { toast } from "sonner"
+import { useUsageControls } from "@/lib/contexts/usage-controls.context"
 
 interface ProfileViewProps {
   user: User
@@ -38,6 +39,7 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
   const [showCropDialog, setShowCropDialog] = useState(false)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { usageControls } = useUsageControls()
 
   const handleSaveName = async () => {
     if (!name.trim()) {
@@ -149,10 +151,10 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
       return
     }
 
-    // Validate file size (max 5MB)
-    const maxSize = 5 * 1024 * 1024
-    if (file.size > maxSize) {
-      toast.error('Ukuran gambar harus kurang dari 5MB')
+    // Validate file size using dynamic limit from Firestore
+    const maxSizeInBytes = usageControls.maxFileSizeUploadedInMB * 1024 * 1024
+    if (file.size > maxSizeInBytes) {
+      toast.error(`Ukuran gambar tidak boleh lebih dari ${usageControls.maxFileSizeUploadedInMB}MB`)
       return
     }
 

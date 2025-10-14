@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ImageIcon, VideoIcon, FileIcon, PlusIcon, SendIcon } from 'lucide-react';
 import { useFeatureFlags } from '@/lib/contexts/feature-flags.context';
+import { useUsageControls } from '@/lib/contexts/usage-controls.context';
+import { toast } from 'sonner';
 
 interface MessageComposerProps {
   onSendText: (text: string) => void;
@@ -36,6 +38,7 @@ export function MessageComposer({
   const [showCompressionDialog, setShowCompressionDialog] = useState(false);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
   const { featureFlags } = useFeatureFlags();
+  const { usageControls } = useUsageControls();
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -48,6 +51,16 @@ export function MessageComposer({
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && file.type.startsWith('image/')) {
+      // Validate file size
+      const maxSizeInBytes = usageControls.maxFileSizeUploadedInMB * 1024 * 1024;
+      if (file.size > maxSizeInBytes) {
+        toast.error(`Ukuran file tidak boleh lebih dari ${usageControls.maxFileSizeUploadedInMB}MB`);
+        if (imageInputRef.current) {
+          imageInputRef.current.value = '';
+        }
+        return;
+      }
+
       setPendingImageFile(file);
       setShowCompressionDialog(true);
     }
@@ -68,6 +81,16 @@ export function MessageComposer({
   const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && file.type.startsWith('video/')) {
+      // Validate file size
+      const maxSizeInBytes = usageControls.maxFileSizeUploadedInMB * 1024 * 1024;
+      if (file.size > maxSizeInBytes) {
+        toast.error(`Ukuran file tidak boleh lebih dari ${usageControls.maxFileSizeUploadedInMB}MB`);
+        if (videoInputRef.current) {
+          videoInputRef.current.value = '';
+        }
+        return;
+      }
+
       onSendVideo(file);
     }
     // Reset input
@@ -79,6 +102,16 @@ export function MessageComposer({
   const handleDocumentSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Validate file size
+      const maxSizeInBytes = usageControls.maxFileSizeUploadedInMB * 1024 * 1024;
+      if (file.size > maxSizeInBytes) {
+        toast.error(`Ukuran file tidak boleh lebih dari ${usageControls.maxFileSizeUploadedInMB}MB`);
+        if (documentInputRef.current) {
+          documentInputRef.current.value = '';
+        }
+        return;
+      }
+
       onSendDocument(file);
     }
     // Reset input
