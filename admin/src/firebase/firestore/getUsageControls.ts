@@ -3,8 +3,8 @@ import { getFirestore, doc, getDoc } from "firebase/firestore";
 
 export interface UsageControls {
   allowCall: boolean;
-  allowChat: boolean;
-  allowCreateGroup: boolean;
+  allowSendText: boolean;
+  allowSendMedia: boolean;
 }
 
 // Function to retrieve usage controls from Firebase
@@ -25,15 +25,15 @@ export default async function getUsageControls() {
       // Get values directly from root fields
       result = {
         allowCall: data.allowCall ?? true,
-        allowChat: data.allowChat ?? true,
-        allowCreateGroup: data.allowCreateGroup ?? true,
+        allowSendText: data.allowSendText ?? true,
+        allowSendMedia: data.allowSendMedia ?? true,
       };
     } else {
       // Return default values if document doesn't exist
       result = {
         allowCall: true,
-        allowChat: true,
-        allowCreateGroup: true,
+        allowSendText: true,
+        allowSendMedia: true,
       };
     }
   } catch (e) {

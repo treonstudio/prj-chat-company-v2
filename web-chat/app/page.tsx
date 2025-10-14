@@ -39,6 +39,7 @@ export default function Page() {
           <Sidebar
             currentUserId={currentUser.uid}
             currentUserName={userData.displayName}
+            currentUserData={userData}
             onChatSelect={(chatId, isGroup) => {
               setSelectedChatId(chatId);
               setSelectedChatIsGroup(isGroup);

@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ImageIcon, VideoIcon, FileIcon, PlusIcon, SendIcon } from 'lucide-react';
+import { useFeatureFlags } from '@/lib/contexts/feature-flags.context';
 
 interface MessageComposerProps {
   onSendText: (text: string) => void;
@@ -34,6 +35,7 @@ export function MessageComposer({
   const documentInputRef = useRef<HTMLInputElement>(null);
   const [showCompressionDialog, setShowCompressionDialog] = useState(false);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const { featureFlags } = useFeatureFlags();
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -88,43 +90,45 @@ export function MessageComposer({
   return (
     <>
       <form onSubmit={handleSubmit} className="flex items-center gap-2 px-4 py-3">
-        {/* Attachment menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              disabled={disabled || uploading}
-              aria-label="Attach file"
-            >
-              <PlusIcon className="h-5 w-5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem
-              onSelect={() => imageInputRef.current?.click()}
-              className="flex items-center gap-2"
-            >
-              <ImageIcon className="h-4 w-4" />
-              <span>Image</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => videoInputRef.current?.click()}
-              className="flex items-center gap-2"
-            >
-              <VideoIcon className="h-4 w-4" />
-              <span>Video</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => documentInputRef.current?.click()}
-              className="flex items-center gap-2"
-            >
-              <FileIcon className="h-4 w-4" />
-              <span>Document</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* Attachment menu - only show if allowSendMedia is true */}
+        {featureFlags.allowSendMedia && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                disabled={disabled || uploading}
+                aria-label="Attach file"
+              >
+                <PlusIcon className="h-5 w-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem
+                onSelect={() => imageInputRef.current?.click()}
+                className="flex items-center gap-2"
+              >
+                <ImageIcon className="h-4 w-4" />
+                <span>Image</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => videoInputRef.current?.click()}
+                className="flex items-center gap-2"
+              >
+                <VideoIcon className="h-4 w-4" />
+                <span>Video</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => documentInputRef.current?.click()}
+                className="flex items-center gap-2"
+              >
+                <FileIcon className="h-4 w-4" />
+                <span>Document</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
 
         {/* Hidden file inputs */}
         <input
@@ -149,19 +153,27 @@ export function MessageComposer({
           className="hidden"
         />
 
-        {/* Message input */}
-        <Input
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder={uploading ? 'Uploading...' : 'Type a message...'}
-          disabled={disabled || uploading}
-          className="flex-1"
-        />
+        {/* Message input - only show if allowSendText is true */}
+        {featureFlags.allowSendText ? (
+          <>
+            <Input
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder={uploading ? 'Uploading...' : 'Type a message...'}
+              disabled={disabled || uploading}
+              className="flex-1"
+            />
 
-        {/* Send button */}
-        <Button type="submit" size="icon" disabled={!message.trim() || disabled || uploading}>
-          <SendIcon className="h-5 w-5" />
-        </Button>
+            {/* Send button */}
+            <Button type="submit" size="icon" disabled={!message.trim() || disabled || uploading}>
+              <SendIcon className="h-5 w-5" />
+            </Button>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+            Sending messages is disabled
+          </div>
+        )}
       </form>
 
       {/* Compression dialog */}

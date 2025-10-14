@@ -19,8 +19,8 @@ export default async function updateUsageControls(usageControls: UsageControls) 
       docRef,
       {
         allowCall: usageControls.allowCall,
-        allowChat: usageControls.allowChat,
-        allowCreateGroup: usageControls.allowCreateGroup,
+        allowSendText: usageControls.allowSendText,
+        allowSendMedia: usageControls.allowSendMedia,
       },
       { merge: true }
     );

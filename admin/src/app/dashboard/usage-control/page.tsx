@@ -13,6 +13,8 @@ import updateUsageControls from "@/firebase/firestore/updateUsageControls"
 import getMaxFileSize from "@/firebase/firestore/getMaxFileSize"
 import updateMaxFileSize from "@/firebase/firestore/updateMaxFileSize"
 import { toast } from "sonner"
+import firebase_app from "@/firebase/config"
+import { getFirestore, doc, onSnapshot } from "firebase/firestore"
 
 export default function UsageControlPage() {
   const { user, loading } = useAuthContext()
@@ -31,27 +33,44 @@ export default function UsageControlPage() {
     }
   }, [user, loading, router])
 
-  // Fetch usage controls from Firebase on component mount
+  // Real-time listener for usage controls from Firebase
   useEffect(() => {
-    const fetchData = async () => {
-      if (!user) return
+    if (!user) return
 
-      setIsLoadingData(true)
+    setIsLoadingData(true)
 
-      // Fetch usage controls from features collection
-      const { result: usageResult, error: usageError } = await getUsageControls()
+    const db = getFirestore(firebase_app)
+    const featuresRef = doc(db, "appConfigs", "features")
 
-      // Fetch max file size from usageControls collection
-      const { result: maxFileSizeResult, error: maxFileSizeError } = await getMaxFileSize()
+    // Set up real-time listener
+    const unsubscribe = onSnapshot(
+      featuresRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data()
+          console.log("Real-time update from Firebase:", data)
 
-      if (usageError) {
-        console.error("Error fetching usage controls:", usageError)
+          setCallsAllowed(data.allowCall ?? true)
+          setTextMessageAllowed(data.allowSendText ?? true)
+          setMediaSendAllowed(data.allowSendMedia ?? true)
+        } else {
+          // Set defaults if document doesn't exist
+          setCallsAllowed(true)
+          setTextMessageAllowed(true)
+          setMediaSendAllowed(true)
+        }
+        setIsLoadingData(false)
+      },
+      (error) => {
+        console.error("Error listening to usage controls:", error)
         toast.error("Error loading usage controls data")
-      } else if (usageResult) {
-        setCallsAllowed(usageResult.allowCall ?? true)
-        setTextMessageAllowed(usageResult.allowChat ?? true)
-        setMediaSendAllowed(usageResult.allowCreateGroup ?? true)
+        setIsLoadingData(false)
       }
+    )
+
+    // Fetch max file size separately (one-time fetch)
+    const fetchMaxFileSize = async () => {
+      const { result: maxFileSizeResult, error: maxFileSizeError } = await getMaxFileSize()
 
       if (maxFileSizeError) {
         console.error("Error fetching max file size:", maxFileSizeError)
@@ -59,23 +78,30 @@ export default function UsageControlPage() {
       } else if (maxFileSizeResult !== null) {
         setMaxFileSize(maxFileSizeResult.toString())
       }
-
-      setIsLoadingData(false)
     }
 
-    fetchData()
+    fetchMaxFileSize()
+
+    // Cleanup listener on unmount
+    return () => unsubscribe()
   }, [user])
 
   // Handle update button click
   const handleUpdate = async () => {
+    // Ensure data is loaded before updating
+    if (isLoadingData) {
+      toast.error("Please wait for data to load")
+      return
+    }
+
     setIsSaving(true)
 
     try {
       // Update usage controls in features collection
       const { error: usageError } = await updateUsageControls({
-        allowCall: callsAllowed,
-        allowChat: textMessageAllowed,
-        allowCreateGroup: mediaSendAllowed,
+        allowCall: callsAllowed ?? true,
+        allowSendText: textMessageAllowed ?? true,
+        allowSendMedia: mediaSendAllowed ?? true,
       })
 
       // Update max file size in usageControls collection

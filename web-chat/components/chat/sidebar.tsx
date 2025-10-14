@@ -10,26 +10,33 @@ import { cn } from "@/lib/utils"
 import { useMemo, useState, useEffect } from "react"
 import { useChatList } from "@/lib/hooks/use-chat-list"
 import { useAuth } from "@/lib/contexts/auth.context"
+import { useFeatureFlags } from "@/lib/contexts/feature-flags.context"
 import { formatDistanceToNow } from "date-fns"
 import { NewChatDialog } from "./new-chat-dialog"
 import { GroupChatDialog } from "./group-chat-dialog"
+import { ProfileView } from "./profile-view"
 import { MessageSquarePlus } from "lucide-react"
+import { User } from "@/types/models"
 
 export function Sidebar({
   currentUserId,
   currentUserName,
+  currentUserData,
   onChatSelect,
 }: {
   currentUserId: string
   currentUserName: string
+  currentUserData: User
   onChatSelect: (chatId: string, isGroup: boolean) => void
 }) {
   const [query, setQuery] = useState("")
   const [activeId, setActiveId] = useState<string | null>(null)
   const [showNewChatDialog, setShowNewChatDialog] = useState(false)
   const [showGroupChatDialog, setShowGroupChatDialog] = useState(false)
+  const [showProfile, setShowProfile] = useState(false)
   const { signOut } = useAuth()
   const { chats, loading, error } = useChatList(currentUserId)
+  const { featureFlags } = useFeatureFlags()
 
   const handleChatClick = (chatId: string, isGroup: boolean) => {
     setActiveId(chatId)
@@ -54,30 +61,42 @@ export function Sidebar({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col relative overflow-hidden">
+      {/* Main Sidebar Content */}
+      <div
+        className={`absolute inset-0 transition-transform duration-300 ease-in-out ${
+          showProfile ? '-translate-x-full' : 'translate-x-0'
+        }`}
+      >
+        <div className="flex h-full min-h-0 flex-col">
       {/* Sticky header: user info + search */}
       <div className="sticky top-0 z-10 bg-card">
         <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
+          <button
+            className="flex items-center gap-3 hover:bg-muted rounded-lg px-2 py-1 -ml-2 transition-colors"
+            onClick={() => setShowProfile(true)}
+          >
             <Avatar className="h-8 w-8">
-              <AvatarImage src="/placeholder-user.jpg" alt="" />
+              <AvatarImage src={currentUserData.avatarUrl || "/placeholder-user.jpg"} alt="" />
               <AvatarFallback aria-hidden>{currentUserName?.slice(0, 2).toUpperCase() || 'U'}</AvatarFallback>
             </Avatar>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{currentUserName || 'User'}</p>
               <p className="truncate text-xs text-muted-foreground">Online</p>
             </div>
-          </div>
+          </button>
 
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="New chat"
-              onClick={() => setShowNewChatDialog(true)}
-            >
-              <MessageSquarePlus className="h-5 w-5" />
-            </Button>
+            {featureFlags.allowChat && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="New chat"
+                onClick={() => setShowNewChatDialog(true)}
+              >
+                <MessageSquarePlus className="h-5 w-5" />
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" aria-label="Open user menu">
@@ -87,12 +106,16 @@ export function Sidebar({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-40">
-                <DropdownMenuItem onSelect={() => setShowNewChatDialog(true)}>
-                  New Chat
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setShowGroupChatDialog(true)}>
-                  New Group
-                </DropdownMenuItem>
+                {featureFlags.allowChat && (
+                  <DropdownMenuItem onSelect={() => setShowNewChatDialog(true)}>
+                    New Chat
+                  </DropdownMenuItem>
+                )}
+                {featureFlags.allowCreateGroup && (
+                  <DropdownMenuItem onSelect={() => setShowGroupChatDialog(true)}>
+                    New Group
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onSelect={handleLogout}>Log out</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -187,6 +210,21 @@ export function Sidebar({
         currentUserId={currentUserId}
         onGroupCreated={handleChatCreated}
       />
+        </div>
+      </div>
+
+      {/* Profile View with Slide Animation */}
+      <div
+        className={`absolute inset-0 bg-card transition-transform duration-300 ease-in-out ${
+          showProfile ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        <ProfileView
+          user={currentUserData}
+          onBack={() => setShowProfile(false)}
+          onLogout={handleLogout}
+        />
+      </div>
     </div>
   )
 }

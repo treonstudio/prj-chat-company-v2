@@ -129,3 +129,12 @@ export interface Call {
   endedAt?: Timestamp;
   duration: number;
 }
+
+// Feature Flags
+export interface FeatureFlags {
+  allowCall: boolean;
+  allowChat: boolean;
+  allowCreateGroup: boolean;
+  allowSendText: boolean;
+  allowSendMedia: boolean;
+}
