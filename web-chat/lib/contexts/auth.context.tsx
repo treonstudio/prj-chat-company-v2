@@ -34,6 +34,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const result = await userRepository.getUserById(user.uid);
           if (result.status === 'success') {
+            // Check if user is active
+            if (result.data.isActive === false) {
+              if (typeof window !== 'undefined') {
+                console.log('User account is deactivated, logging out...');
+              }
+              await authRepository.signOut();
+              setUserData(null);
+              setCurrentUser(null);
+              setLoading(false);
+              return;
+            }
+
             // Only set user if data is found
             setCurrentUser(user);
             setUserData(result.data);
@@ -43,6 +55,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             unsubscribeUserData = userRepository.listenToUser(
               user.uid,
               (userData) => {
+                // Check if user is still active
+                if (userData.isActive === false) {
+                  if (typeof window !== 'undefined') {
+                    console.log('User account has been deactivated');
+                  }
+                  // Auto logout if user is deactivated
+                  authRepository.signOut();
+                  setUserData(null);
+                  setCurrentUser(null);
+                  return;
+                }
+
                 // User data updated
                 setUserData(userData);
               },
@@ -107,6 +131,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Verify user data exists in Firestore
         const userResult = await userRepository.getUserById(result.data.uid);
         if (userResult.status === 'success') {
+          // Check if user is active
+          if (userResult.data.isActive === false) {
+            await authRepository.signOut();
+            return { success: false, error: 'Your account has been deactivated. Please contact administrator.' };
+          }
           return { success: true };
         } else {
           // User authenticated but no user data found

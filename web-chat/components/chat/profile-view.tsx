@@ -1,63 +1,202 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, Pencil, Check, X, Copy, LogOut, Eye, EyeOff } from "lucide-react"
+import { ArrowLeft, Pencil, Check, X, LogOut, Eye, EyeOff, Camera, Loader2 } from "lucide-react"
 import { User } from "@/types/models"
+import { StorageRepository } from "@/lib/repositories/storage.repository"
+import { UserRepository } from "@/lib/repositories/user.repository"
+import { AuthRepository } from "@/lib/repositories/auth.repository"
+import { AvatarCropDialog } from "./avatar-crop-dialog"
+import { toast } from "sonner"
 
 interface ProfileViewProps {
   user: User
   onBack: () => void
   onLogout: () => void
-  onUpdateProfile?: (name: string, about: string) => Promise<void>
 }
 
-export function ProfileView({ user, onBack, onLogout, onUpdateProfile }: ProfileViewProps) {
+const storageRepository = new StorageRepository()
+const userRepository = new UserRepository()
+const authRepository = new AuthRepository()
+
+export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
   const [editingName, setEditingName] = useState(false)
-  const [editingAbout, setEditingAbout] = useState(false)
   const [editingPassword, setEditingPassword] = useState(false)
   const [name, setName] = useState(user.displayName)
-  const [about, setAbout] = useState("Avail") // Default about, could be from user data
-  const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [showCropDialog, setShowCropDialog] = useState(false)
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleSaveName = async () => {
-    if (name.trim() && onUpdateProfile) {
-      setSaving(true)
-      await onUpdateProfile(name.trim(), about)
-      setSaving(false)
-      setEditingName(false)
+    if (!name.trim()) {
+      toast.error('Nama tidak boleh kosong')
+      return
     }
-  }
 
-  const handleSaveAbout = async () => {
-    if (about.trim() && onUpdateProfile) {
-      setSaving(true)
-      await onUpdateProfile(name, about.trim())
+    if (name.trim() === user.displayName) {
+      setEditingName(false)
+      return
+    }
+
+    setSaving(true)
+    try {
+      const result = await userRepository.updateDisplayName(user.userId, name.trim())
+
+      if (result.status === 'success') {
+        setEditingName(false)
+        toast.success('Nama berhasil diperbarui')
+        // The real-time listener will update the UI automatically
+      } else if (result.status === 'error') {
+        toast.error(result.message || 'Gagal memperbarui nama')
+        setName(user.displayName) // Reset to original
+      }
+    } catch (error) {
+      toast.error('Terjadi kesalahan yang tidak terduga')
+      setName(user.displayName) // Reset to original
+    } finally {
       setSaving(false)
-      setEditingAbout(false)
     }
   }
 
   const handleSavePassword = async () => {
-    if (password.trim()) {
-      setSaving(true)
-      // TODO: Implement password update logic
-      // await updatePassword(password)
+    // Validate inputs
+    if (!currentPassword.trim()) {
+      toast.error('Silakan masukkan password saat ini')
+      return
+    }
+
+    if (!newPassword.trim()) {
+      toast.error('Silakan masukkan password baru')
+      return
+    }
+
+    if (newPassword.length < 6) {
+      toast.error('Password harus minimal 6 karakter')
+      return
+    }
+
+    if (!confirmPassword.trim()) {
+      toast.error('Silakan konfirmasi password baru')
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error('Password baru dan konfirmasi password tidak cocok')
+      return
+    }
+
+    setSaving(true)
+    try {
+      // First, reauthenticate the user with current password
+      const reauthResult = await authRepository.reauthenticate(currentPassword)
+
+      if (reauthResult.status === 'error') {
+        toast.error(reauthResult.message || 'Password saat ini salah')
+        setSaving(false)
+        return
+      }
+
+      // Then update to new password
+      const updateResult = await authRepository.updatePassword(newPassword)
+
+      if (updateResult.status === 'success') {
+        toast.success('Password berhasil diperbarui. Anda akan logout otomatis...')
+        setEditingPassword(false)
+        setCurrentPassword("")
+        setNewPassword("")
+        setConfirmPassword("")
+        setShowCurrentPassword(false)
+        setShowNewPassword(false)
+        setShowConfirmPassword(false)
+
+        // Auto logout after 2 seconds
+        setTimeout(() => {
+          onLogout()
+        }, 2000)
+      } else if (updateResult.status === 'error') {
+        toast.error(updateResult.message || 'Gagal memperbarui password')
+      }
+    } catch (error) {
+      toast.error('Terjadi kesalahan yang tidak terduga')
+    } finally {
       setSaving(false)
-      setEditingPassword(false)
-      setPassword("")
     }
   }
 
-  const handleCopyPhone = () => {
-    // Assuming phone is in user data, for now using placeholder
-    const phone = "+62 821-5442-4492"
-    navigator.clipboard.writeText(phone)
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Silakan pilih file gambar yang valid')
+      return
+    }
+
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024
+    if (file.size > maxSize) {
+      toast.error('Ukuran gambar harus kurang dari 5MB')
+      return
+    }
+
+    // Create object URL for the selected image
+    const imageUrl = URL.createObjectURL(file)
+    setSelectedImage(imageUrl)
+    setShowCropDialog(true)
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleCropComplete = async (croppedImageFile: File) => {
+    setUploadingAvatar(true)
+
+    try {
+      // Upload to Firebase Storage
+      const uploadResult = await storageRepository.uploadAvatar(user.userId, croppedImageFile)
+
+      if (uploadResult.status === 'success') {
+        // Update user document with new avatar URL
+        const updateResult = await userRepository.updateAvatar(user.userId, uploadResult.data)
+
+        if (updateResult.status === 'success') {
+          toast.success('Foto profil berhasil diperbarui')
+        } else if (updateResult.status === 'error') {
+          toast.error(updateResult.message || 'Gagal memperbarui foto profil')
+        }
+        // Success - the real-time listener in AuthContext will update the UI automatically
+      } else if (uploadResult.status === 'error') {
+        toast.error(uploadResult.message || 'Gagal mengunggah foto profil')
+      }
+    } catch (error) {
+      toast.error('Terjadi kesalahan saat mengunggah foto profil')
+    } finally {
+      setUploadingAvatar(false)
+      // Clean up object URL
+      if (selectedImage) {
+        URL.revokeObjectURL(selectedImage)
+        setSelectedImage(null)
+      }
+    }
   }
 
   return (
@@ -79,12 +218,36 @@ export function ProfileView({ user, onBack, onLogout, onUpdateProfile }: Profile
       <div className="flex-1 overflow-y-auto">
         {/* Avatar Section */}
         <div className="flex flex-col items-center py-8 bg-muted/30">
-          <Avatar className="h-40 w-40">
-            <AvatarImage src={user.avatarUrl || "/placeholder-user.jpg"} alt="" />
-            <AvatarFallback className="text-4xl">
-              {user.displayName?.slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          <div className="relative group">
+            <Avatar className="h-40 w-40">
+              <AvatarImage src={user.avatarUrl || "/placeholder-user.jpg"} alt="" />
+              <AvatarFallback className="text-4xl">
+                {user.displayName?.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+
+            {/* Camera overlay button */}
+            <button
+              onClick={handleAvatarClick}
+              disabled={uploadingAvatar}
+              className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity disabled:cursor-not-allowed"
+            >
+              {uploadingAvatar ? (
+                <Loader2 className="h-8 w-8 text-white animate-spin" />
+              ) : (
+                <Camera className="h-8 w-8 text-white" />
+              )}
+            </button>
+
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+          </div>
         </div>
 
         {/* Name Section */}
@@ -139,144 +302,137 @@ export function ProfileView({ user, onBack, onLogout, onUpdateProfile }: Profile
 
         <Separator />
 
-        {/* About Section */}
-        <div className="px-4 py-4">
-          <label className="text-sm text-muted-foreground">Tentang</label>
-          <div className="flex items-center justify-between gap-2 py-2">
-            {editingAbout ? (
-              <>
-                <Input
-                  value={about}
-                  onChange={(e) => setAbout(e.target.value)}
-                  disabled={saving}
-                  className="flex-1"
-                  autoFocus
-                />
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleSaveAbout}
-                    disabled={saving || !about.trim()}
-                  >
-                    <Check className="h-4 w-4 text-green-600" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      setAbout("Avail")
-                      setEditingAbout(false)
-                    }}
-                    disabled={saving}
-                  >
-                    <X className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="flex-1 text-base">{about}</p>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setEditingAbout(true)}
-                >
-                  <Pencil className="h-4 w-4 text-muted-foreground" />
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-
-        <Separator />
-
         {/* Password Section */}
         <div className="px-4 py-4">
           <label className="text-sm text-muted-foreground">Password</label>
-          <div className="flex items-center justify-between gap-2 py-2">
-            {editingPassword ? (
-              <>
-                <div className="flex-1 relative">
-                  <Input
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={saving}
-                    placeholder="Enter new password"
-                    className="pr-10"
-                    autoFocus
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full"
-                    onClick={() => setShowPassword(!showPassword)}
-                    type="button"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </Button>
-                </div>
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleSavePassword}
-                    disabled={saving || !password.trim()}
-                  >
-                    <Check className="h-4 w-4 text-green-600" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      setPassword("")
-                      setEditingPassword(false)
-                      setShowPassword(false)
-                    }}
-                    disabled={saving}
-                  >
-                    <X className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="flex-1 text-base">••••••••</p>
+          {editingPassword ? (
+            <div className="space-y-3 mt-2">
+              {/* Current Password */}
+              <div className="relative">
+                <Input
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  disabled={saving}
+                  placeholder="Current password"
+                  className="pr-10"
+                  autoFocus
+                />
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setEditingPassword(true)}
+                  className="absolute right-0 top-0 h-full"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  type="button"
                 >
-                  <Pencil className="h-4 w-4 text-muted-foreground" />
+                  {showCurrentPassword ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
                 </Button>
-              </>
-            )}
-          </div>
-        </div>
+              </div>
 
-        <Separator />
+              {/* New Password */}
+              <div className="relative">
+                <Input
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  disabled={saving}
+                  placeholder="New password (min 6 characters)"
+                  className="pr-10"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  type="button"
+                >
+                  {showNewPassword ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
 
-        {/* Phone Section */}
-        <div className="px-4 py-4">
-          <label className="text-sm text-muted-foreground">Telepon</label>
-          <div className="flex items-center justify-between gap-2 py-2">
-            <div className="flex items-center gap-3 flex-1">
-              <span className="text-muted-foreground">📞</span>
-              <p className="text-base">+62 821-5442-4492</p>
+              {/* Confirm Password */}
+              <div className="relative">
+                <Input
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={saving}
+                  placeholder="Confirm new password"
+                  className="pr-10"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-0 top-0 h-full"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  type="button"
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setCurrentPassword("")
+                    setNewPassword("")
+                    setConfirmPassword("")
+                    setEditingPassword(false)
+                    setShowCurrentPassword(false)
+                    setShowNewPassword(false)
+                    setShowConfirmPassword(false)
+                  }}
+                  disabled={saving}
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Batal
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSavePassword}
+                  disabled={saving || !currentPassword.trim() || !newPassword.trim() || !confirmPassword.trim()}
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      Menyimpan...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4 mr-1" />
+                      Simpan
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleCopyPhone}
-            >
-              <Copy className="h-4 w-4 text-muted-foreground" />
-            </Button>
-          </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2 py-2">
+              <p className="flex-1 text-base">••••••••</p>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setEditingPassword(true)}
+              >
+                <Pencil className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            </div>
+          )}
         </div>
 
         <Separator />
@@ -293,6 +449,16 @@ export function ProfileView({ user, onBack, onLogout, onUpdateProfile }: Profile
           </Button>
         </div>
       </div>
+
+      {/* Avatar Crop Dialog */}
+      {selectedImage && (
+        <AvatarCropDialog
+          open={showCropDialog}
+          onOpenChange={setShowCropDialog}
+          imageSrc={selectedImage}
+          onCropComplete={handleCropComplete}
+        />
+      )}
     </div>
   )
 }

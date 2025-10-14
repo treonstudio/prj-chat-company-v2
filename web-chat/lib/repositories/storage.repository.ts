@@ -1,0 +1,67 @@
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { storage } from '@/lib/firebase/config';
+import { Resource } from '@/types/resource';
+
+export class StorageRepository {
+  private readonly PROFILE_IMAGES_PATH = 'profile_images';
+
+  /**
+   * Upload avatar image to Firebase Storage
+   * @param userId - The user ID
+   * @param file - The image file to upload
+   * @returns Resource with the download URL
+   */
+  async uploadAvatar(userId: string, file: File): Promise<Resource<string>> {
+    try {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        return Resource.error('Please select a valid image file');
+      }
+
+      // Validate file size (max 5MB)
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      if (file.size > maxSize) {
+        return Resource.error('Image size must be less than 5MB');
+      }
+
+      // Create a unique filename with timestamp
+      const timestamp = Date.now();
+      const extension = file.name.split('.').pop();
+      const filename = `${timestamp}.${extension}`;
+      const filePath = `${this.PROFILE_IMAGES_PATH}/${userId}/${filename}`;
+
+      // Create storage reference
+      const storageRef = ref(storage, filePath);
+
+      // Upload file
+      await uploadBytes(storageRef, file);
+
+      // Get download URL
+      const downloadURL = await getDownloadURL(storageRef);
+
+      return Resource.success(downloadURL);
+    } catch (error: any) {
+      return Resource.error(error.message || 'Failed to upload avatar');
+    }
+  }
+
+  /**
+   * Delete avatar image from Firebase Storage
+   * @param avatarUrl - The full URL of the avatar to delete
+   * @returns Resource indicating success or failure
+   */
+  async deleteAvatar(avatarUrl: string): Promise<Resource<void>> {
+    try {
+      // Extract the path from the URL
+      const storageRef = ref(storage, avatarUrl);
+      await deleteObject(storageRef);
+      return Resource.success(undefined);
+    } catch (error: any) {
+      // If file doesn't exist, consider it a success
+      if (error.code === 'storage/object-not-found') {
+        return Resource.success(undefined);
+      }
+      return Resource.error(error.message || 'Failed to delete avatar');
+    }
+  }
+}

@@ -99,6 +99,34 @@ export class UserRepository {
   }
 
   /**
+   * Update user avatar URL
+   */
+  async updateAvatar(userId: string, avatarUrl: string): Promise<Resource<void>> {
+    try {
+      await updateDoc(doc(db, this.COLLECTION, userId), {
+        avatarUrl: avatarUrl
+      });
+      return Resource.success(undefined);
+    } catch (error: any) {
+      return Resource.error(error.message || 'Failed to update avatar');
+    }
+  }
+
+  /**
+   * Update user display name
+   */
+  async updateDisplayName(userId: string, displayName: string): Promise<Resource<void>> {
+    try {
+      await updateDoc(doc(db, this.COLLECTION, userId), {
+        displayName: displayName
+      });
+      return Resource.success(undefined);
+    } catch (error: any) {
+      return Resource.error(error.message || 'Failed to update display name');
+    }
+  }
+
+  /**
    * Listen to user document changes in real-time
    * Used to detect if user is deleted or updated
    */

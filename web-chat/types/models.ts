@@ -12,6 +12,7 @@ export interface User {
   email: string;
   avatarUrl?: string;
   status: UserStatus;
+  isActive?: boolean;
   lastSeen?: Timestamp;
   fcmToken?: string;
   createdAt?: Timestamp;
