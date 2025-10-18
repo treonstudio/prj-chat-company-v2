@@ -99,6 +99,25 @@ export class UserRepository {
   }
 
   /**
+   * Get all users
+   */
+  async getUsers(): Promise<Resource<User[]>> {
+    try {
+      const usersSnapshot = await getDocs(collection(db(), this.COLLECTION));
+      const users: User[] = [];
+
+      usersSnapshot.forEach((doc) => {
+        const userData = doc.data() as User;
+        users.push({ ...userData, userId: doc.id });
+      });
+
+      return Resource.success(users);
+    } catch (error: any) {
+      return Resource.error(error.message || 'Failed to fetch users');
+    }
+  }
+
+  /**
    * Update user image URL
    */
   async updateAvatar(userId: string, imageUrl: string): Promise<Resource<void>> {

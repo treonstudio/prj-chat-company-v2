@@ -80,7 +80,7 @@ export async function uploadGroupAvatar(
     // Create storage reference
     const timestamp = Date.now();
     const fileName = `group_${groupId}_${timestamp}.jpg`;
-    const storageRef = ref(storage, `group-avatars/${fileName}`);
+    const storageRef = ref(storage(), `group-avatars/${fileName}`);
 
     // Upload file
     await uploadBytes(storageRef, compressedFile);
@@ -101,7 +101,7 @@ export async function uploadGroupAvatar(
 export async function deleteGroupAvatar(avatarUrl: string): Promise<Resource<void>> {
   try {
     // Extract file path from URL
-    const fileRef = ref(storage, avatarUrl);
+    const fileRef = ref(storage(), avatarUrl);
     await deleteObject(fileRef);
     return Resource.success(undefined);
   } catch (error: any) {

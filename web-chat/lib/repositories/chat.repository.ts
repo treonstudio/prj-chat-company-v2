@@ -325,6 +325,71 @@ export class ChatRepository {
   }
 
   /**
+   * Remove a member from group chat (admin action)
+   */
+  async removeGroupMember(
+    chatId: string,
+    userIdToRemove: string
+  ): Promise<Resource<void>> {
+    try {
+      // Get group chat to verify it exists
+      const groupChatRef = doc(db(), this.GROUP_CHATS_COLLECTION, chatId);
+      const groupChatDoc = await getDoc(groupChatRef);
+
+      if (!groupChatDoc.exists()) {
+        return Resource.error('Group chat not found');
+      }
+
+      const groupChat = groupChatDoc.data() as GroupChat;
+
+      // Check if user is a participant
+      if (!groupChat.participants.includes(userIdToRemove)) {
+        return Resource.error('User is not a member of this group');
+      }
+
+      // Use batch to update group chat and user's chat list
+      const batch = writeBatch(db());
+
+      // Remove user from group participants
+      const updatedParticipants = groupChat.participants.filter(
+        (id) => id !== userIdToRemove
+      );
+
+      // Also remove from admins if they are an admin
+      const updatedAdmins = (groupChat.admins || []).filter(
+        (id) => id !== userIdToRemove
+      );
+
+      batch.update(groupChatRef, {
+        participants: updatedParticipants,
+        admins: updatedAdmins,
+        updatedAt: Timestamp.now(),
+      });
+
+      // Remove chat from user's chat list
+      const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, userIdToRemove);
+      const userChatsDoc = await getDoc(userChatsRef);
+
+      if (userChatsDoc.exists()) {
+        const userData = userChatsDoc.data() as UserChats;
+        const updatedChats = userData.chats.filter(
+          (chat) => chat.chatId !== chatId
+        );
+
+        batch.update(userChatsRef, {
+          chats: updatedChats,
+          updatedAt: Timestamp.now(),
+        });
+      }
+
+      await batch.commit();
+      return Resource.success(undefined);
+    } catch (error: any) {
+      return Resource.error(error.message || 'Failed to remove group member');
+    }
+  }
+
+  /**
    * Add member to group chat
    */
   async addGroupMember(

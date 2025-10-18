@@ -10,7 +10,7 @@ import { UserRepository } from "@/lib/repositories/user.repository"
 import { ChatRepository } from "@/lib/repositories/chat.repository"
 import { format } from "date-fns"
 import { useState } from "react"
-import { ChatType, User } from "@/types/models"
+import { ChatType, User, UserStatus } from "@/types/models"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { LogOut, Loader2, Users } from "lucide-react"
@@ -112,9 +112,9 @@ export function ChatRoom({
                 userId: groupResult.data.participants[index],
                 displayName: 'Deleted User',
                 email: 'deleted@user.com',
-                status: 'OFFLINE' as const,
+                status: UserStatus.OFFLINE,
                 isActive: false
-              }
+              } as User
             }
           })
           setGroupMembers(members)

@@ -70,7 +70,7 @@ export function GroupInfoDialog({
       const updatedMembers = groupMembers.filter(m => m.userId !== userId)
       onMembersUpdate(updatedMembers)
       toast.success(`${userName} has been removed from the group`)
-    } else {
+    } else if (result.status === 'error') {
       toast.error(`Failed to remove member: ${result.message}`)
     }
   }
@@ -169,10 +169,10 @@ export function GroupInfoDialog({
         if (updateResult.status === 'success') {
           onAvatarUpdate(avatarUrl)
           toast.success('Group photo updated successfully')
-        } else {
+        } else if (updateResult.status === 'error') {
           toast.error(`Failed to update group photo: ${updateResult.message}`)
         }
-      } else {
+      } else if (uploadResult.status === 'error') {
         toast.error(`Failed to upload image: ${uploadResult.message}`)
       }
     } catch (error: any) {

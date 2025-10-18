@@ -968,6 +968,8 @@ export class MessageRepository {
         timestamp: Timestamp.now(),
         status: MessageStatus.SENT,
         type: originalMessage.type,
+        readBy: {},
+        deliveredTo: {},
         ...(originalMessage.mediaUrl && { mediaUrl: originalMessage.mediaUrl }),
         ...(originalMessage.mediaMetadata && { mediaMetadata: originalMessage.mediaMetadata }),
       };
