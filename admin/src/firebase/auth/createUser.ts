@@ -2,6 +2,7 @@ import { initializeApp } from "firebase/app";
 import { createUserWithEmailAndPassword, getAuth, Auth } from "firebase/auth";
 import { serverTimestamp } from "firebase/firestore";
 import addData from "../firestore/addData";
+import uploadPhoto from "../storage/uploadPhoto";
 
 // Firebase configuration - same as main app
 const firebaseConfig = {
@@ -49,13 +50,32 @@ export default async function createUser(username: string, password: string, add
 
     // Save additional user data to Firestore
     if (userCredential.user) {
+      // Upload photo if provided
+      let imageURL = null;
+      if (additionalData?.photoFile) {
+        const { result: uploadResult, error: uploadError } = await uploadPhoto(
+          additionalData.photoFile,
+          userCredential.user.uid
+        );
+
+        if (uploadError) {
+          console.error("Error uploading photo:", uploadError);
+        } else {
+          imageURL = uploadResult;
+        }
+      }
+
+      // Remove photoFile from additionalData before saving to Firestore
+      const { photoFile, ...restAdditionalData } = additionalData || {};
+
       const userData = {
         username: username, // Store the actual username
         email: email, // Store the generated email
         createdAt: serverTimestamp(), // Use Firestore server timestamp
         isActive: true,
         role: additionalData?.role || "user", // Default role is "user", can be overridden
-        ...additionalData,
+        ...(imageURL && { imageURL }), // Add imageURL only if it exists
+        ...restAdditionalData,
       };
 
       const { error: firestoreError } = await addData(
