@@ -14,7 +14,7 @@ export class FeatureFlagsRepository {
     onError: (error: string) => void
   ): () => void {
     const featureFlagsRef = doc(
-      db,
+      db(),
       this.APP_CONFIGS_COLLECTION,
       this.FEATURES_DOCUMENT
     );

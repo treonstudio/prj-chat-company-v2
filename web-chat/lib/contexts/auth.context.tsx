@@ -1,9 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
-import { AuthRepository } from '@/lib/repositories/auth.repository';
-import { UserRepository } from '@/lib/repositories/user.repository';
 import { User } from '@/types/models';
 
 interface AuthContextType {
@@ -16,108 +14,152 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const authRepository = new AuthRepository();
-const userRepository = new UserRepository();
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [userData, setUserData] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const authRepositoryRef = useRef<any>(null);
+  const userRepositoryRef = useRef<any>(null);
 
   useEffect(() => {
+    // Only run on client-side
+    if (typeof window === 'undefined') {
+      setLoading(false);
+      return;
+    }
+
+    let unsubscribeAuth: (() => void) | null = null;
     let unsubscribeUserData: (() => void) | null = null;
 
-    // Listen to auth state changes
-    const unsubscribeAuth = authRepository.onAuthStateChange(async (user) => {
-      if (user) {
-        // Fetch user data from Firestore first before setting current user
-        try {
-          const result = await userRepository.getUserById(user.uid);
-          if (result.status === 'success') {
-            // Check if user is active
-            if (result.data.isActive === false) {
-              if (typeof window !== 'undefined') {
-                console.log('User account is deactivated, logging out...');
+    // Dynamic import to avoid server-side execution
+    Promise.all([
+      import('@/lib/repositories/auth.repository'),
+      import('@/lib/repositories/user.repository')
+    ]).then(([{ AuthRepository }, { UserRepository }]) => {
+      authRepositoryRef.current = new AuthRepository();
+      userRepositoryRef.current = new UserRepository();
+
+      // Listen to auth state changes
+      unsubscribeAuth = authRepositoryRef.current.onAuthStateChange(async (user: FirebaseUser | null) => {
+        if (user) {
+          // Fetch user data from Firestore first before setting current user
+          try {
+            const result = await userRepositoryRef.current.getUserById(user.uid);
+            if (result.status === 'success') {
+              // Check if user is active
+              if (result.data.isActive === false) {
+                if (typeof window !== 'undefined') {
+                  console.log('User account is deactivated, logging out...');
+                }
+                await authRepositoryRef.current.signOut();
+                setUserData(null);
+                setCurrentUser(null);
+                setLoading(false);
+                return;
               }
-              await authRepository.signOut();
+
+              // Check if displayName exists
+              if (!result.data.displayName || result.data.displayName.trim() === '') {
+                if (typeof window !== 'undefined') {
+                  console.log('User has no displayName, logging out...');
+                }
+                await authRepositoryRef.current.signOut();
+                setUserData(null);
+                setCurrentUser(null);
+                setLoading(false);
+                return;
+              }
+
+              // Only set user if data is found
+              setCurrentUser(user);
+              setUserData(result.data);
+              setLoading(false);
+
+              // Setup real-time listener to detect if user is deleted from Firestore
+              unsubscribeUserData = userRepositoryRef.current.listenToUser(
+                user.uid,
+                (userData: User) => {
+                  // Check if user is still active
+                  if (userData.isActive === false) {
+                    if (typeof window !== 'undefined') {
+                      console.log('User account has been deactivated');
+                    }
+                    // Auto logout if user is deactivated
+                    authRepositoryRef.current.signOut();
+                    setUserData(null);
+                    setCurrentUser(null);
+                    return;
+                  }
+
+                  // Check if displayName exists
+                  if (!userData.displayName || userData.displayName.trim() === '') {
+                    if (typeof window !== 'undefined') {
+                      console.log('User displayName has been removed, logging out...');
+                    }
+                    // Auto logout if displayName is removed
+                    authRepositoryRef.current.signOut();
+                    setUserData(null);
+                    setCurrentUser(null);
+                    return;
+                  }
+
+                  // User data updated
+                  setUserData(userData);
+                },
+                async (error: string) => {
+                  // User document deleted or error occurred
+                  if (typeof window !== 'undefined') {
+                    console.error('User document deleted or error:', error);
+                  }
+                  // Auto logout
+                  await authRepositoryRef.current.signOut();
+                  setUserData(null);
+                  setCurrentUser(null);
+                }
+              );
+            } else if (result.status === 'error') {
+              // If user data not found or error, logout the user immediately
+              if (typeof window !== 'undefined') {
+                console.error('Failed to fetch user data:', result.message);
+              }
+              // Sign out silently without updating state first
+              await authRepositoryRef.current.signOut();
               setUserData(null);
               setCurrentUser(null);
               setLoading(false);
-              return;
             }
-
-            // Only set user if data is found
-            setCurrentUser(user);
-            setUserData(result.data);
-            setLoading(false);
-
-            // Setup real-time listener to detect if user is deleted from Firestore
-            unsubscribeUserData = userRepository.listenToUser(
-              user.uid,
-              (userData) => {
-                // Check if user is still active
-                if (userData.isActive === false) {
-                  if (typeof window !== 'undefined') {
-                    console.log('User account has been deactivated');
-                  }
-                  // Auto logout if user is deactivated
-                  authRepository.signOut();
-                  setUserData(null);
-                  setCurrentUser(null);
-                  return;
-                }
-
-                // User data updated
-                setUserData(userData);
-              },
-              async (error) => {
-                // User document deleted or error occurred
-                if (typeof window !== 'undefined') {
-                  console.error('User document deleted or error:', error);
-                }
-                // Auto logout
-                await authRepository.signOut();
-                setUserData(null);
-                setCurrentUser(null);
-              }
-            );
-          } else if (result.status === 'error') {
-            // If user data not found or error, logout the user immediately
+          } catch (error) {
+            // Handle any unexpected errors
             if (typeof window !== 'undefined') {
-              console.error('Failed to fetch user data:', result.message);
+              console.error('Unexpected error fetching user data:', error);
             }
-            // Sign out silently without updating state first
-            await authRepository.signOut();
+            await authRepositoryRef.current.signOut();
             setUserData(null);
             setCurrentUser(null);
             setLoading(false);
           }
-        } catch (error) {
-          // Handle any unexpected errors
-          if (typeof window !== 'undefined') {
-            console.error('Unexpected error fetching user data:', error);
-          }
-          await authRepository.signOut();
-          setUserData(null);
+        } else {
+          // User logged out
           setCurrentUser(null);
+          setUserData(null);
           setLoading(false);
-        }
-      } else {
-        // User logged out
-        setCurrentUser(null);
-        setUserData(null);
-        setLoading(false);
 
-        // Cleanup user data listener if exists
-        if (unsubscribeUserData) {
-          unsubscribeUserData();
-          unsubscribeUserData = null;
+          // Cleanup user data listener if exists
+          if (unsubscribeUserData) {
+            unsubscribeUserData();
+            unsubscribeUserData = null;
+          }
         }
-      }
+      });
+    }).catch((error) => {
+      console.error('Failed to load auth repositories:', error);
+      setLoading(false);
     });
 
     return () => {
-      unsubscribeAuth();
+      if (unsubscribeAuth) {
+        unsubscribeAuth();
+      }
       if (unsubscribeUserData) {
         unsubscribeUserData();
       }
@@ -125,21 +167,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
+    if (!authRepositoryRef.current || !userRepositoryRef.current) {
+      return { success: false, error: 'Authentication service not initialized' };
+    }
+
     try {
-      const result = await authRepository.signIn(email, password);
+      const result = await authRepositoryRef.current.signIn(email, password);
       if (result.status === 'success' && result.data) {
         // Verify user data exists in Firestore
-        const userResult = await userRepository.getUserById(result.data.uid);
+        const userResult = await userRepositoryRef.current.getUserById(result.data.uid);
         if (userResult.status === 'success') {
           // Check if user is active
           if (userResult.data.isActive === false) {
-            await authRepository.signOut();
+            await authRepositoryRef.current.signOut();
             return { success: false, error: 'Your account has been deactivated. Please contact administrator.' };
           }
+
+          // Check if displayName exists
+          if (!userResult.data.displayName || userResult.data.displayName.trim() === '') {
+            await authRepositoryRef.current.signOut();
+            return { success: false, error: 'Account has no username. Please contact administrator.' };
+          }
+
           return { success: true };
         } else {
           // User authenticated but no user data found
-          await authRepository.signOut();
+          await authRepositoryRef.current.signOut();
           return { success: false, error: 'User data not found. Please contact administrator.' };
         }
       } else if (result.status === 'error') {
@@ -153,7 +206,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    await authRepository.signOut();
+    if (authRepositoryRef.current) {
+      await authRepositoryRef.current.signOut();
+    }
   };
 
   const value: AuthContextType = {

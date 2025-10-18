@@ -34,7 +34,7 @@ export class StorageRepository {
       const filePath = `${this.PROFILE_IMAGES_PATH}/${userId}/${filename}`;
 
       // Create storage reference
-      const storageRef = ref(storage, filePath);
+      const storageRef = ref(storage(), filePath);
 
       // Upload file
       await uploadBytes(storageRef, file);
@@ -56,7 +56,7 @@ export class StorageRepository {
   async deleteAvatar(imageUrl: string): Promise<Resource<void>> {
     try {
       // Extract the path from the URL
-      const storageRef = ref(storage, imageUrl);
+      const storageRef = ref(storage(), imageUrl);
       await deleteObject(storageRef);
       return Resource.success(undefined);
     } catch (error: any) {

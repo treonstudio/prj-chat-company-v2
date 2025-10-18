@@ -14,7 +14,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase/config';
-import { Message, MessageType, MediaMetadata } from '@/types/models';
+import { Message, MessageType, MediaMetadata, MessageStatus } from '@/types/models';
 import { Resource } from '@/types/resource';
 import imageCompression from 'browser-image-compression';
 
@@ -67,20 +67,61 @@ export class MessageRepository {
   }
 
   /**
+   * Calculate message status based on readBy and deliveredTo
+   */
+  private calculateMessageStatus(
+    message: Message,
+    currentUserId: string,
+    isGroupChat: boolean,
+    allParticipants?: string[]
+  ): MessageStatus {
+    // Only calculate status for messages sent by current user
+    if (message.senderId !== currentUserId) {
+      return MessageStatus.SENT;
+    }
+
+    const readByCount = Object.keys(message.readBy || {}).length;
+    const deliveredToCount = Object.keys(message.deliveredTo || {}).length;
+
+    if (isGroupChat && allParticipants) {
+      // For group chats, check if all other participants have read
+      const otherParticipants = allParticipants.filter(id => id !== currentUserId);
+      const allRead = otherParticipants.every(id => message.readBy?.[id]);
+      const anyDelivered = deliveredToCount > 0;
+
+      if (allRead && otherParticipants.length > 0) {
+        return MessageStatus.READ;
+      } else if (anyDelivered) {
+        return MessageStatus.DELIVERED;
+      }
+    } else {
+      // For direct chats
+      if (readByCount > 0) {
+        return MessageStatus.READ;
+      } else if (deliveredToCount > 0) {
+        return MessageStatus.DELIVERED;
+      }
+    }
+
+    return MessageStatus.SENT;
+  }
+
+  /**
    * Get messages with real-time updates
    */
   getMessages(
     chatId: string,
     isGroupChat: boolean,
     onUpdate: (messages: Message[]) => void,
-    onError: (error: string) => void
+    onError: (error: string) => void,
+    currentUserId?: string
   ): () => void {
     const collection_name = isGroupChat
       ? this.GROUP_CHATS_COLLECTION
       : this.DIRECT_CHATS_COLLECTION;
 
     const messagesRef = collection(
-      db,
+      db(),
       collection_name,
       chatId,
       this.MESSAGES_SUBCOLLECTION
@@ -90,11 +131,34 @@ export class MessageRepository {
 
     const unsubscribe = onSnapshot(
       q,
-      (snapshot) => {
-        const messages = snapshot.docs.map((doc) => ({
-          ...doc.data(),
-          messageId: doc.id,
-        })) as Message[];
+      async (snapshot) => {
+        let allParticipants: string[] | undefined;
+
+        // Get participants for status calculation
+        if (currentUserId) {
+          const chatRef = doc(db(), collection_name, chatId);
+          const chatSnapshot = await getDoc(chatRef);
+          allParticipants = chatSnapshot.get('participants') as string[] | undefined;
+        }
+
+        const messages = snapshot.docs.map((doc) => {
+          const messageData = {
+            ...doc.data(),
+            messageId: doc.id,
+          } as Message;
+
+          // Calculate status if currentUserId is provided
+          if (currentUserId && allParticipants) {
+            messageData.status = this.calculateMessageStatus(
+              messageData,
+              currentUserId,
+              isGroupChat,
+              allParticipants
+            );
+          }
+
+          return messageData;
+        });
 
         onUpdate(messages);
       },
@@ -123,22 +187,30 @@ export class MessageRepository {
 
       // 1. Add message to messages subcollection
       const messagesRef = collection(
-        db,
+        db(),
         collection_name,
         chatId,
         this.MESSAGES_SUBCOLLECTION
       );
 
-      const messageWithTimestamp = {
+      // Remove undefined fields to avoid Firestore errors
+      const messageWithTimestamp: any = {
         ...message,
         timestamp,
         createdAt: timestamp,
       };
 
+      // Remove undefined fields
+      Object.keys(messageWithTimestamp).forEach(key => {
+        if (messageWithTimestamp[key] === undefined) {
+          delete messageWithTimestamp[key];
+        }
+      });
+
       const messageDoc = await addDoc(messagesRef, messageWithTimestamp);
 
       // 2. Update lastMessage in the chat document
-      const chatRef = doc(db, collection_name, chatId);
+      const chatRef = doc(db(), collection_name, chatId);
       await updateDoc(chatRef, {
         'lastMessage.text': message.text,
         'lastMessage.senderId': message.senderId,
@@ -219,7 +291,7 @@ export class MessageRepository {
       const collection_name = isGroupChat ? 'group' : 'direct';
       const randomId = generateUUID();
       const storagePath = `chats/${collection_name}/${chatId}/${randomId}/${fileName}`;
-      const storageRef = ref(storage, storagePath);
+      const storageRef = ref(storage(), storagePath);
 
       await uploadBytes(storageRef, fileToUpload);
       const downloadUrl = await getDownloadURL(storageRef);
@@ -274,7 +346,7 @@ export class MessageRepository {
       const collection_name = isGroupChat ? 'group' : 'direct';
       const randomId = generateUUID();
       const storagePath = `chats/${collection_name}/${chatId}/${randomId}/${fileName}`;
-      const storageRef = ref(storage, storagePath);
+      const storageRef = ref(storage(), storagePath);
 
       await uploadBytes(storageRef, videoFile);
       const downloadUrl = await getDownloadURL(storageRef);
@@ -329,7 +401,7 @@ export class MessageRepository {
       const collection_name = isGroupChat ? 'group' : 'direct';
       const randomId = generateUUID();
       const storagePath = `chats/${collection_name}/${chatId}/documents/${randomId}/${fileName}`;
-      const storageRef = ref(storage, storagePath);
+      const storageRef = ref(storage(), storagePath);
 
       await uploadBytes(storageRef, documentFile);
       const downloadUrl = await getDownloadURL(storageRef);
@@ -363,6 +435,59 @@ export class MessageRepository {
   }
 
   /**
+   * Mark messages as delivered (called when user opens the chat)
+   */
+  async markMessagesAsDelivered(
+    chatId: string,
+    userId: string,
+    isGroupChat: boolean
+  ): Promise<Resource<void>> {
+    try {
+      const collection_name = isGroupChat
+        ? this.GROUP_CHATS_COLLECTION
+        : this.DIRECT_CHATS_COLLECTION;
+
+      const timestamp = Timestamp.now();
+
+      const messagesRef = collection(
+        db(),
+        collection_name,
+        chatId,
+        this.MESSAGES_SUBCOLLECTION
+      );
+      const messagesSnapshot = await getDocs(messagesRef);
+
+      const batch = writeBatch(db());
+      let updateCount = 0;
+
+      messagesSnapshot.docs.forEach((doc) => {
+        const deliveredTo = (doc.get('deliveredTo') as Record<string, Timestamp>) || {};
+        const senderId = doc.get('senderId');
+
+        // Only update if:
+        // 1. This user hasn't received it yet
+        // 2. This user is NOT the sender
+        if (!deliveredTo[userId] && senderId !== userId) {
+          const messageRef = doc.ref;
+          batch.update(messageRef, {
+            [`deliveredTo.${userId}`]: timestamp,
+          });
+          updateCount++;
+        }
+      });
+
+      if (updateCount > 0) {
+        await batch.commit();
+      }
+
+      return Resource.success(undefined);
+    } catch (error: any) {
+      console.error('Error marking messages as delivered:', error);
+      return Resource.error(error.message || 'Failed to mark messages as delivered');
+    }
+  }
+
+  /**
    * Mark messages as read
    */
   async markMessagesAsRead(
@@ -378,7 +503,7 @@ export class MessageRepository {
       const timestamp = Timestamp.now();
 
       // FIRST: Reset unread count in userChats immediately
-      const userChatRef = doc(db, 'userChats', userId);
+      const userChatRef = doc(db(), 'userChats', userId);
       const userChatSnapshot = await getDoc(userChatRef);
 
       if (userChatSnapshot.exists()) {
@@ -399,32 +524,43 @@ export class MessageRepository {
         }
       }
 
-      // SECOND: Get ALL messages in the chat and mark as read
+      // SECOND: Get ALL messages in the chat and mark as read and delivered
       const messagesRef = collection(
-        db,
+        db(),
         collection_name,
         chatId,
         this.MESSAGES_SUBCOLLECTION
       );
       const messagesSnapshot = await getDocs(messagesRef);
 
-      // Batch update to mark all as read
-      const batch = writeBatch(db);
+      // Batch update to mark all as read and delivered
+      const batch = writeBatch(db());
       let updateCount = 0;
 
       messagesSnapshot.docs.forEach((doc) => {
         const readBy = (doc.get('readBy') as Record<string, Timestamp>) || {};
+        const deliveredTo = (doc.get('deliveredTo') as Record<string, Timestamp>) || {};
         const senderId = doc.get('senderId');
 
-        // Only update if:
-        // 1. This user hasn't read it yet
-        // 2. This user is NOT the sender
-        if (!readBy[userId] && senderId !== userId) {
+        // Only update if this user is NOT the sender
+        if (senderId !== userId) {
           const messageRef = doc.ref;
-          batch.update(messageRef, {
-            [`readBy.${userId}`]: timestamp,
-          });
-          updateCount++;
+          const updates: any = {};
+
+          // Mark as delivered if not already
+          if (!deliveredTo[userId]) {
+            updates[`deliveredTo.${userId}`] = timestamp;
+          }
+
+          // Mark as read if not already
+          if (!readBy[userId]) {
+            updates[`readBy.${userId}`] = timestamp;
+          }
+
+          if (Object.keys(updates).length > 0) {
+            batch.update(messageRef, updates);
+            updateCount++;
+          }
         }
       });
 
@@ -451,7 +587,7 @@ export class MessageRepository {
     participants: string[]
   ): Promise<void> {
     try {
-      const userChatRef = doc(db, 'userChats', userId);
+      const userChatRef = doc(db(), 'userChats', userId);
       const userChatSnapshot = await getDoc(userChatRef);
 
       // Get other user ID
@@ -461,7 +597,7 @@ export class MessageRepository {
       }
 
       // Get other user's data
-      const otherUserDoc = await getDoc(doc(db, 'users', otherUserId));
+      const otherUserDoc = await getDoc(doc(db(), 'users', otherUserId));
       if (!otherUserDoc.exists()) {
         return;
       }
@@ -544,11 +680,11 @@ export class MessageRepository {
     senderId: string
   ): Promise<void> {
     try {
-      const userChatRef = doc(db, 'userChats', userId);
+      const userChatRef = doc(db(), 'userChats', userId);
       const userChatSnapshot = await getDoc(userChatRef);
 
       // Get sender name for display
-      const senderDoc = await getDoc(doc(db, 'users', senderId));
+      const senderDoc = await getDoc(doc(db(), 'users', senderId));
       const senderName = senderDoc.exists() ? senderDoc.get('displayName') : 'Unknown';
 
       // Determine unread count

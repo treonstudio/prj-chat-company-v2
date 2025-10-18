@@ -1,7 +1,6 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { FeatureFlagsRepository } from '@/lib/repositories/feature-flags.repository';
 import { FeatureFlags } from '@/types/models';
 
 interface FeatureFlagsContextType {
@@ -13,8 +12,6 @@ interface FeatureFlagsContextType {
 const FeatureFlagsContext = createContext<FeatureFlagsContextType | undefined>(
   undefined
 );
-
-const featureFlagsRepository = new FeatureFlagsRepository();
 
 export function FeatureFlagsProvider({
   children,
@@ -32,19 +29,34 @@ export function FeatureFlagsProvider({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = featureFlagsRepository.getFeatureFlags(
-      (flags) => {
-        setFeatureFlags(flags);
-        setLoading(false);
-        setError(null);
-      },
-      (error) => {
-        setError(error);
-        setLoading(false);
-      }
-    );
+    // Only run on client-side
+    if (typeof window === 'undefined') {
+      setLoading(false);
+      return;
+    }
 
-    return () => unsubscribe();
+    // Dynamic import to avoid server-side execution
+    import('@/lib/repositories/feature-flags.repository').then(({ FeatureFlagsRepository }) => {
+      const repository = new FeatureFlagsRepository();
+
+      const unsubscribe = repository.getFeatureFlags(
+        (flags) => {
+          setFeatureFlags(flags);
+          setLoading(false);
+          setError(null);
+        },
+        (error) => {
+          setError(error);
+          setLoading(false);
+        }
+      );
+
+      return () => unsubscribe();
+    }).catch((error) => {
+      console.error('Failed to load feature flags repository:', error);
+      setError('Failed to load feature flags');
+      setLoading(false);
+    });
   }, []);
 
   return (

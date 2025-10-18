@@ -11,16 +11,9 @@ import { ChatRepository } from "@/lib/repositories/chat.repository"
 import { format } from "date-fns"
 import { useState } from "react"
 import { ChatType, User } from "@/types/models"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { LogOut, Loader2 } from "lucide-react"
+import { LogOut, Loader2, Users } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { GroupInfoDialog } from "./group-info-dialog"
 
 const userRepository = new UserRepository()
 const chatRepository = new ChatRepository()
@@ -62,13 +56,17 @@ export function ChatRoom({
     sendVideo,
     sendDocument,
     markAsRead,
-  } = useMessages(chatId, isGroupChat)
+    retryMessage,
+  } = useMessages(chatId, isGroupChat, currentUserId)
 
   const [roomTitle, setRoomTitle] = useState<string>('Chat')
+  const [roomAvatar, setRoomAvatar] = useState<string>('')
   const [groupMembers, setGroupMembers] = useState<User[]>([])
-  const [showMembersDialog, setShowMembersDialog] = useState(false)
+  const [groupAdmins, setGroupAdmins] = useState<string[]>([])
+  const [showGroupInfoDialog, setShowGroupInfoDialog] = useState(false)
   const [showLeaveDialog, setShowLeaveDialog] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  const [isDeletedUser, setIsDeletedUser] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Load room title and group members
@@ -79,17 +77,40 @@ export function ChatRoom({
         const groupResult = await chatRepository.getGroupChat(chatId)
         if (groupResult.status === 'success') {
           setRoomTitle(groupResult.data.name)
+          setRoomAvatar(groupResult.data.avatar || groupResult.data.avatarUrl || '')
+          setGroupAdmins(groupResult.data.admins || [])
 
           // Fetch all group members
           const memberPromises = groupResult.data.participants.map(userId =>
             userRepository.getUserById(userId)
           )
           const memberResults = await Promise.all(memberPromises)
-          const members = memberResults
-            .filter(r => r.status === 'success')
-            .map(r => r.data)
+          const members = memberResults.map((r, index) => {
+            if (r.status === 'success') {
+              // If displayName is missing, set to "Deleted User"
+              if (!r.data.displayName || r.data.displayName.trim() === '') {
+                return {
+                  ...r.data,
+                  displayName: 'Deleted User',
+                  email: r.data.email || 'deleted@user.com'
+                }
+              }
+              return r.data
+            } else {
+              // If user not found, create placeholder
+              return {
+                userId: groupResult.data.participants[index],
+                displayName: 'Deleted User',
+                email: 'deleted@user.com',
+                status: 'OFFLINE' as const,
+                isActive: false
+              }
+            }
+          })
           setGroupMembers(members)
         }
+        // Reset for group chats
+        setIsDeletedUser(false)
       } else {
         // For direct chats, get the other user's name
         const parts = chatId.replace('direct_', '').split('_')
@@ -98,7 +119,18 @@ export function ChatRoom({
         if (otherUserId) {
           const result = await userRepository.getUserById(otherUserId)
           if (result.status === 'success') {
-            setRoomTitle(result.data.displayName)
+            // Handle deleted user or missing displayName
+            const displayName = result.data.displayName && result.data.displayName.trim() !== ''
+              ? result.data.displayName
+              : 'Deleted User'
+            setRoomTitle(displayName)
+            setRoomAvatar(result.data.imageURL || result.data.imageUrl || '')
+            setIsDeletedUser(displayName === 'Deleted User')
+          } else {
+            // User not found
+            setRoomTitle('Deleted User')
+            setRoomAvatar('')
+            setIsDeletedUser(true)
           }
         }
       }
@@ -145,44 +177,49 @@ export function ChatRoom({
     }
   }
 
+  // Handle members update
+  const handleMembersUpdate = (members: User[]) => {
+    setGroupMembers(members)
+  }
+
+  // Handle avatar update
+  const handleAvatarUpdate = (avatarUrl: string) => {
+    setRoomAvatar(avatarUrl)
+  }
+
   return (
     <div className="flex h-full w-full min-h-0 flex-col">
       <header className="flex items-center justify-between border-b px-4 py-3">
-        <div className="flex-1 min-w-0">
-          <h1 className="text-balance text-base font-semibold">{roomTitle}</h1>
-          {isGroupChat && groupMembers.length > 0 ? (
-            <Dialog open={showMembersDialog} onOpenChange={setShowMembersDialog}>
-              <DialogTrigger asChild>
-                <button className="text-xs text-muted-foreground hover:text-foreground transition-colors text-left truncate block max-w-full">
-                  {getMemberNamesDisplay()}
-                </button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Group Members ({groupMembers.length})</DialogTitle>
-                </DialogHeader>
-                <ScrollArea className="max-h-[400px] pr-4">
-                  <div className="space-y-3">
-                    {groupMembers.map((member) => (
-                      <div key={member.userId} className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage src={member.imageURL || member.imageUrl} alt="" />
-                          <AvatarFallback>{member.displayName.slice(0, 2).toUpperCase()}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{member.displayName}</p>
-                          <p className="text-xs text-muted-foreground truncate">{member.email}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              </DialogContent>
-            </Dialog>
-          ) : !isGroupChat ? (
-            <p className="text-xs text-muted-foreground">Messages are end-to-end encrypted</p>
-          ) : null}
-        </div>
+        <button
+          onClick={() => {
+            if (isGroupChat) {
+              setShowGroupInfoDialog(true)
+            }
+          }}
+          className="flex items-center gap-3 flex-1 min-w-0 hover:bg-muted/50 transition-colors rounded-lg px-2 py-1 -ml-2 disabled:hover:bg-transparent"
+          disabled={!isGroupChat}
+        >
+          <Avatar className="h-10 w-10 shrink-0">
+            <AvatarImage src={roomAvatar || "/placeholder-user.jpg"} alt="" />
+            <AvatarFallback>
+              {isGroupChat ? (
+                <Users className="h-5 w-5 text-muted-foreground" />
+              ) : (
+                roomTitle.slice(0, 2).toUpperCase()
+              )}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0 text-left">
+            <h1 className="text-balance text-base font-semibold truncate">{roomTitle}</h1>
+            {isGroupChat && groupMembers.length > 0 ? (
+              <p className="text-xs text-muted-foreground truncate">
+                {getMemberNamesDisplay()}
+              </p>
+            ) : !isGroupChat ? (
+              <p className="text-xs text-muted-foreground">Messages are end-to-end encrypted</p>
+            ) : null}
+          </div>
+        </button>
         {isGroupChat && (
           <Button
             variant="ghost"
@@ -196,8 +233,17 @@ export function ChatRoom({
       </header>
       <ScrollArea className="flex-1 min-h-0">
         {loading ? (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-sm text-muted-foreground">Loading messages...</p>
+          <div className="mx-auto w-full space-y-3 p-4">
+            {/* Message skeleton loader */}
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className={`flex w-full ${i % 2 === 0 ? 'justify-end' : 'justify-start'}`}>
+                <div className={`flex flex-col gap-2 rounded-xl px-3 py-2 ${i % 2 === 0 ? 'max-w-[80%] ml-auto items-end' : 'max-w-[80%] mr-auto items-start'}`}>
+                  <div className="h-4 w-48 bg-muted rounded animate-pulse" />
+                  <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+                  <div className="h-3 w-12 bg-muted rounded animate-pulse" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : error ? (
           <div className="flex h-full items-center justify-center">
@@ -218,15 +264,10 @@ export function ChatRoom({
                   // Map message type to ChatMessage type format
                   const messageType = m.type === 'DOCUMENT' ? 'doc' : m.type.toLowerCase()
 
-                  // Skip rendering the latest message if it matches the uploading message
-                  // This prevents duplicate bubbles during upload
-                  if (uploadingMessage &&
-                      m.senderId === uploadingMessage.senderId &&
-                      m.type === uploadingMessage.type &&
-                      timestamp && timestamp.getTime() > Date.now() - 5000) {
-                    // If message was created within last 5 seconds and matches uploading message, skip it
-                    return null
-                  }
+                  // Handle deleted user - fallback senderName
+                  const senderName = m.senderName && m.senderName.trim() !== ''
+                    ? m.senderName
+                    : 'Deleted User'
 
                   return (
                     <div key={m.messageId}>
@@ -239,33 +280,18 @@ export function ChatRoom({
                           fileSize: m.mediaMetadata?.fileSize ? `${(m.mediaMetadata.fileSize / 1024 / 1024).toFixed(2)} MB` : undefined,
                           mimeType: m.mediaMetadata?.mimeType,
                           senderId: m.senderId,
-                          senderName: m.senderName,
+                          senderName: senderName,
                           timestamp: timeStr,
+                          status: m.status,
+                          error: m.error,
                         }}
                         isMe={m.senderId === currentUserId}
                         isGroupChat={isGroupChat}
+                        onRetry={retryMessage}
                       />
                     </div>
                   )
                 })}
-
-                {/* Uploading message bubble */}
-                {uploadingMessage && (
-                  <div key="uploading-bubble" className="flex w-full justify-end">
-                    <div className="inline-flex flex-col gap-2 rounded-xl px-3 py-2 text-sm ml-auto bg-primary text-primary-foreground rounded-br-none items-end max-w-[40%]">
-                      {isGroupChat && (
-                        <span className="text-xs font-bold">{uploadingMessage.senderName}</span>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent"></div>
-                        <p className="text-sm opacity-80">Uploading...</p>
-                      </div>
-                      <span className="text-[11px] self-end text-right opacity-70">
-                        {format(new Date(), 'HH:mm')}
-                      </span>
-                    </div>
-                  </div>
-                )}
 
                 <div ref={scrollRef} />
               </>
@@ -275,15 +301,39 @@ export function ChatRoom({
       </ScrollArea>
       <Separator />
       <div className="relative">
-        <MessageComposer
-          onSendText={(text) => sendTextMessage(currentUserId, currentUserName, text)}
-          onSendImage={(file, shouldCompress) => sendImage(currentUserId, currentUserName, file, shouldCompress, currentUserAvatar)}
-          onSendVideo={(file) => sendVideo(currentUserId, currentUserName, file, currentUserAvatar)}
-          onSendDocument={(file) => sendDocument(currentUserId, currentUserName, file, currentUserAvatar)}
-          disabled={sending}
-          uploading={uploading}
-        />
+        {isDeletedUser ? (
+          <div className="flex items-center justify-center px-4 py-3 bg-muted">
+            <p className="text-sm text-muted-foreground">
+              You can't send messages to this user
+            </p>
+          </div>
+        ) : (
+          <MessageComposer
+            onSendText={(text) => sendTextMessage(currentUserId, currentUserName, text, currentUserAvatar)}
+            onSendImage={(file, shouldCompress) => sendImage(currentUserId, currentUserName, file, shouldCompress, currentUserAvatar)}
+            onSendVideo={(file) => sendVideo(currentUserId, currentUserName, file, currentUserAvatar)}
+            onSendDocument={(file) => sendDocument(currentUserId, currentUserName, file, currentUserAvatar)}
+            disabled={sending}
+            uploading={uploading}
+          />
+        )}
       </div>
+
+      {/* Group Info Dialog */}
+      {isGroupChat && (
+        <GroupInfoDialog
+          open={showGroupInfoDialog}
+          onOpenChange={setShowGroupInfoDialog}
+          chatId={chatId}
+          groupName={roomTitle}
+          groupAvatar={roomAvatar}
+          groupMembers={groupMembers}
+          groupAdmins={groupAdmins}
+          currentUserId={currentUserId}
+          onMembersUpdate={handleMembersUpdate}
+          onAvatarUpdate={handleAvatarUpdate}
+        />
+      )}
 
       {/* Leave Group Confirmation Dialog */}
       <AlertDialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>

@@ -11,12 +11,16 @@ import {
 } from "@/components/ui/dialog"
 import { Download, X } from "lucide-react"
 import download from "downloadjs"
+import { MessageStatusIcon } from "./message-status-icon"
+import { MessageStatus } from "@/types/models"
 
 type Base = {
   id: string
   senderId: string
   senderName: string
   timestamp: string
+  status?: MessageStatus
+  error?: string
 }
 
 type TextMsg = Base & { type: "text"; content: string }
@@ -36,15 +40,21 @@ export function ChatMessage({
   data,
   isMe,
   isGroupChat,
+  onRetry,
 }: {
   data: ChatMessageUnion
   isMe: boolean
   isGroupChat: boolean
+  onRetry?: (messageId: string) => void
 }) {
   const [showImagePreview, setShowImagePreview] = useState(false)
   const [showVideoPreview, setShowVideoPreview] = useState(false)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  // Character limit for "Read More" functionality
+  const CHAR_LIMIT = 300
 
   const handleDownload = async (url: string, filename?: string, mimeType?: string) => {
     setDownloading(true)
@@ -120,7 +130,41 @@ export function ChatMessage({
             <span className="text-xs font-bold text-primary">{data.senderName}</span>
           ) : null}
 
-          {data.type === "text" && <p className="text-pretty leading-relaxed">{data.content}</p>}
+          {data.type === "text" && (
+            <div className="text-pretty leading-relaxed">
+              {data.content.length > CHAR_LIMIT && !isExpanded ? (
+                <>
+                  <p className="whitespace-pre-wrap">
+                    {data.content.slice(0, CHAR_LIMIT)}...
+                  </p>
+                  <button
+                    onClick={() => setIsExpanded(true)}
+                    className={cn(
+                      "text-xs mt-1 font-medium underline",
+                      isMe ? "text-primary-foreground/80 hover:text-primary-foreground" : "text-primary hover:text-primary/80"
+                    )}
+                  >
+                    Read more
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="whitespace-pre-wrap">{data.content}</p>
+                  {data.content.length > CHAR_LIMIT && (
+                    <button
+                      onClick={() => setIsExpanded(false)}
+                      className={cn(
+                        "text-xs mt-1 font-medium underline",
+                        isMe ? "text-primary-foreground/80 hover:text-primary-foreground" : "text-primary hover:text-primary/80"
+                      )}
+                    >
+                      Read less
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {data.type === "image" && (
             <div className="relative min-h-[200px] group">
@@ -241,9 +285,22 @@ export function ChatMessage({
               </div>
             </div>
           )}
-          <span className={cn("text-[11px]", isMe ? "self-end text-right" : "self-start text-left text-muted-foreground")}>
-            {data.timestamp}
-          </span>
+          <div className={cn("flex items-center gap-1", isMe ? "self-end flex-row-reverse" : "self-start")}>
+            <span className={cn("text-[11px]", isMe ? "text-right" : "text-left text-muted-foreground")}>
+              {data.timestamp}
+            </span>
+            {isMe && data.status && (
+              <MessageStatusIcon status={data.status} className={isMe ? "text-primary-foreground/70" : ""} />
+            )}
+            {isMe && data.status === MessageStatus.FAILED && onRetry && (
+              <button
+                onClick={() => onRetry(data.id)}
+                className="text-[10px] text-red-400 hover:text-red-300 underline ml-1"
+              >
+                Retry
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

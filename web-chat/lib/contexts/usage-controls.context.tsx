@@ -1,7 +1,10 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { UsageControls, UsageControlsRepository } from '@/lib/repositories/usage-controls.repository';
+
+interface UsageControls {
+  maxFileSizeUploadedInMB: number;
+}
 
 interface UsageControlsContextType {
   usageControls: UsageControls;
@@ -10,8 +13,6 @@ interface UsageControlsContextType {
 
 const UsageControlsContext = createContext<UsageControlsContextType | undefined>(undefined);
 
-const usageControlsRepository = new UsageControlsRepository();
-
 export function UsageControlsProvider({ children }: { children: React.ReactNode }) {
   const [usageControls, setUsageControls] = useState<UsageControls>({
     maxFileSizeUploadedInMB: 5, // Default 5MB
@@ -19,19 +20,33 @@ export function UsageControlsProvider({ children }: { children: React.ReactNode 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = usageControlsRepository.getUsageControls(
-      (controls) => {
-        setUsageControls(controls);
-        setLoading(false);
-      },
-      (error) => {
-        console.error('Failed to fetch usage controls:', error);
-        // Keep default values on error
-        setLoading(false);
-      }
-    );
+    // Only run on client-side
+    if (typeof window === 'undefined') {
+      setLoading(false);
+      return;
+    }
 
-    return () => unsubscribe();
+    // Dynamic import to avoid server-side execution
+    import('@/lib/repositories/usage-controls.repository').then(({ UsageControlsRepository }) => {
+      const repository = new UsageControlsRepository();
+
+      const unsubscribe = repository.getUsageControls(
+        (controls) => {
+          setUsageControls(controls);
+          setLoading(false);
+        },
+        (error) => {
+          console.error('Failed to fetch usage controls:', error);
+          // Keep default values on error
+          setLoading(false);
+        }
+      );
+
+      return () => unsubscribe();
+    }).catch((error) => {
+      console.error('Failed to load usage controls repository:', error);
+      setLoading(false);
+    });
   }, []);
 
   const value: UsageControlsContextType = {

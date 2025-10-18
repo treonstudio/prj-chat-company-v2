@@ -15,7 +15,7 @@ import { formatDistanceToNow } from "date-fns"
 import { NewChatDialog } from "./new-chat-dialog"
 import { GroupChatDialog } from "./group-chat-dialog"
 import { ProfileView } from "./profile-view"
-import { MessageSquarePlus } from "lucide-react"
+import { MessageSquarePlus, Users } from "lucide-react"
 import { User } from "@/types/models"
 
 export function Sidebar({
@@ -129,9 +129,23 @@ export function Sidebar({
       {/* Chats list */}
       <ScrollArea className="flex-1 min-h-0">
         {loading ? (
-          <div className="flex items-center justify-center p-4">
-            <p className="text-sm text-muted-foreground">Loading chats...</p>
-          </div>
+          <ul className="divide-y">
+            {/* Chat list skeleton loader */}
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <li key={i} className="px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <div className="h-10 w-10 shrink-0 rounded-full bg-muted animate-pulse" />
+                  <div className="min-w-0 flex-1 space-y-2 pt-0.5">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+                      <div className="h-3 w-12 bg-muted rounded animate-pulse" />
+                    </div>
+                    <div className="h-3 w-48 bg-muted rounded animate-pulse" />
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
         ) : error ? (
           <div className="flex items-center justify-center p-4">
             <p className="text-sm text-destructive">{error}</p>
@@ -145,10 +159,17 @@ export function Sidebar({
         ) : (
           <ul className="divide-y">
             {filtered.map((c) => {
-              const name = c.chatType === 'GROUP' ? c.groupName : c.otherUserName
+              // Handle deleted user
+              const rawName = c.chatType === 'GROUP' ? c.groupName : c.otherUserName
+              const name = rawName && rawName.trim() !== '' ? rawName : 'Deleted User'
               const avatar = c.chatType === 'GROUP' ? c.groupAvatar : c.otherUserAvatar
               const isGroup = c.chatType === 'GROUP'
               const timeAgo = formatDistanceToNow(c.lastMessageTime.toDate(), { addSuffix: true })
+
+              // Truncate long messages with ellipsis (max 48 chars)
+              const truncatedMessage = c.lastMessage.length > 48
+                ? c.lastMessage.slice(0, 48) + '...'
+                : c.lastMessage
 
               return (
                 <li key={c.chatId}>
@@ -163,7 +184,13 @@ export function Sidebar({
                     <div className="flex items-start gap-3">
                       <Avatar className="h-10 w-10 shrink-0">
                         <AvatarImage src={avatar || "/placeholder-user.jpg"} alt="" />
-                        <AvatarFallback aria-hidden>{name?.slice(0, 2).toUpperCase()}</AvatarFallback>
+                        <AvatarFallback aria-hidden>
+                          {isGroup ? (
+                            <Users className="h-5 w-5 text-muted-foreground" />
+                          ) : (
+                            name?.slice(0, 2).toUpperCase()
+                          )}
+                        </AvatarFallback>
                       </Avatar>
                       <div className="min-w-0 flex-1 pt-0.5">
                         <div className="flex items-baseline justify-between gap-2 mb-0.5">
@@ -171,7 +198,9 @@ export function Sidebar({
                           <span className="shrink-0 text-[11px] text-muted-foreground whitespace-nowrap leading-tight">{timeAgo.replace('about ', '')}</span>
                         </div>
                         <div className="flex items-center justify-between gap-2 mt-1">
-                          <p className="truncate text-xs text-muted-foreground flex-1 line-clamp-1 leading-tight">{c.lastMessage}</p>
+                          <p className="truncate text-xs text-muted-foreground flex-1 leading-tight overflow-hidden text-ellipsis whitespace-nowrap">
+                            {truncatedMessage}
+                          </p>
                           {c.unreadCount > 0 ? (
                             <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground shrink-0">
                               {c.unreadCount}

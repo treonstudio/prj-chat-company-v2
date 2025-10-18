@@ -28,6 +28,14 @@ export enum MessageType {
   DOCUMENT = 'DOCUMENT',
 }
 
+export enum MessageStatus {
+  SENDING = 'SENDING',
+  SENT = 'SENT',
+  DELIVERED = 'DELIVERED',
+  READ = 'READ',
+  FAILED = 'FAILED',
+}
+
 export interface MediaMetadata {
   fileName: string;
   fileSize: number;
@@ -49,6 +57,8 @@ export interface Message {
   timestamp?: Timestamp;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+  status?: MessageStatus;
+  error?: string;
 }
 
 // Chat models
@@ -76,8 +86,10 @@ export interface DirectChat {
 export interface GroupChat {
   chatId: string;
   name: string;
-  avatarUrl?: string;
+  avatar?: string;
+  avatarUrl?: string; // Alias for backward compatibility
   participants: string[];
+  admins?: string[];
   lastMessage?: LastMessage;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;

@@ -11,7 +11,7 @@ export class UserRepository {
    */
   async getUserById(userId: string): Promise<Resource<User>> {
     try {
-      const userDoc = await getDoc(doc(db, this.COLLECTION, userId));
+      const userDoc = await getDoc(doc(db(), this.COLLECTION, userId));
 
       if (!userDoc.exists()) {
         return Resource.error('User not found');
@@ -29,7 +29,7 @@ export class UserRepository {
    */
   async updateFcmToken(userId: string, token: string): Promise<Resource<void>> {
     try {
-      await updateDoc(doc(db, this.COLLECTION, userId), {
+      await updateDoc(doc(db(), this.COLLECTION, userId), {
         fcmToken: token
       });
       return Resource.success(undefined);
@@ -48,7 +48,7 @@ export class UserRepository {
       }
 
       const searchTerm = searchQuery.toLowerCase().trim();
-      const usersRef = collection(db, this.COLLECTION);
+      const usersRef = collection(db(), this.COLLECTION);
 
       // Get all users and filter client-side (Firestore doesn't support case-insensitive search directly)
       const q = query(usersRef, limit(100)); // Get more users to filter
@@ -85,7 +85,7 @@ export class UserRepository {
       const users: User[] = [];
 
       for (const userId of userIds) {
-        const userDoc = await getDoc(doc(db, this.COLLECTION, userId));
+        const userDoc = await getDoc(doc(db(), this.COLLECTION, userId));
         if (userDoc.exists()) {
           const userData = userDoc.data() as User;
           users.push({ ...userData, userId: userDoc.id });
@@ -103,7 +103,7 @@ export class UserRepository {
    */
   async updateAvatar(userId: string, imageUrl: string): Promise<Resource<void>> {
     try {
-      await updateDoc(doc(db, this.COLLECTION, userId), {
+      await updateDoc(doc(db(), this.COLLECTION, userId), {
         imageURL: imageUrl // Use imageURL (capital URL) to match Firebase field naming
       });
       return Resource.success(undefined);
@@ -117,7 +117,7 @@ export class UserRepository {
    */
   async updateDisplayName(userId: string, displayName: string): Promise<Resource<void>> {
     try {
-      await updateDoc(doc(db, this.COLLECTION, userId), {
+      await updateDoc(doc(db(), this.COLLECTION, userId), {
         displayName: displayName
       });
       return Resource.success(undefined);
@@ -135,7 +135,7 @@ export class UserRepository {
     onUpdate: (user: User) => void,
     onError: (error: string) => void
   ): () => void {
-    const userRef = doc(db, this.COLLECTION, userId);
+    const userRef = doc(db(), this.COLLECTION, userId);
 
     const unsubscribe = onSnapshot(
       userRef,

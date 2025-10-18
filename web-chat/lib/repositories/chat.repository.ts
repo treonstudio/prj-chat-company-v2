@@ -32,7 +32,7 @@ export class ChatRepository {
       const participants = [currentUserId, otherUserId].sort();
       const chatId = `${participants[0]}_${participants[1]}`;
 
-      const chatRef = doc(db, this.DIRECT_CHATS_COLLECTION, chatId);
+      const chatRef = doc(db(), this.DIRECT_CHATS_COLLECTION, chatId);
       const chatDoc = await getDoc(chatRef);
 
       if (chatDoc.exists()) {
@@ -60,7 +60,7 @@ export class ChatRepository {
    */
   async getGroupChat(chatId: string): Promise<Resource<GroupChat>> {
     try {
-      const chatRef = doc(db, this.GROUP_CHATS_COLLECTION, chatId);
+      const chatRef = doc(db(), this.GROUP_CHATS_COLLECTION, chatId);
       const chatDoc = await getDoc(chatRef);
 
       if (!chatDoc.exists()) {
@@ -85,7 +85,7 @@ export class ChatRepository {
   ): Promise<Resource<GroupChat>> {
     try {
       // Create unique group chat ID
-      const groupChatRef = doc(collection(db, this.GROUP_CHATS_COLLECTION));
+      const groupChatRef = doc(collection(db(), this.GROUP_CHATS_COLLECTION));
       const chatId = groupChatRef.id;
 
       // Ensure creator is in the participants list
@@ -101,7 +101,7 @@ export class ChatRepository {
       };
 
       // Use batch write to create group chat and update all participants' userChats
-      const batch = writeBatch(db);
+      const batch = writeBatch(db());
 
       // Create group chat document
       batch.set(groupChatRef, newGroupChat);
@@ -119,7 +119,7 @@ export class ChatRepository {
 
       // Update each participant's userChats
       for (const participantId of participants) {
-        const userChatsRef = doc(db, this.USER_CHATS_COLLECTION, participantId);
+        const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, participantId);
         const userChatsDoc = await getDoc(userChatsRef);
 
         if (userChatsDoc.exists()) {
@@ -173,8 +173,8 @@ export class ChatRepository {
       const chat = chatResult.data;
 
       // Check if chat item already exists in userChats for both users
-      const currentUserChatsRef = doc(db, this.USER_CHATS_COLLECTION, currentUserId);
-      const otherUserChatsRef = doc(db, this.USER_CHATS_COLLECTION, otherUserId);
+      const currentUserChatsRef = doc(db(), this.USER_CHATS_COLLECTION, currentUserId);
+      const otherUserChatsRef = doc(db(), this.USER_CHATS_COLLECTION, otherUserId);
 
       const [currentUserChatsDoc, otherUserChatsDoc] = await Promise.all([
         getDoc(currentUserChatsRef),
@@ -200,7 +200,7 @@ export class ChatRepository {
         return Resource.success(chat.chatId);
       }
 
-      const batch = writeBatch(db);
+      const batch = writeBatch(db());
 
       // Add chat to current user's chat list if not exists
       if (!currentUserHasChat) {
@@ -272,7 +272,7 @@ export class ChatRepository {
   ): Promise<Resource<void>> {
     try {
       // Get group chat to verify it exists and user is a participant
-      const groupChatRef = doc(db, this.GROUP_CHATS_COLLECTION, chatId);
+      const groupChatRef = doc(db(), this.GROUP_CHATS_COLLECTION, chatId);
       const groupChatDoc = await getDoc(groupChatRef);
 
       if (!groupChatDoc.exists()) {
@@ -287,7 +287,7 @@ export class ChatRepository {
       }
 
       // Use batch to update group chat and user's chat list
-      const batch = writeBatch(db);
+      const batch = writeBatch(db());
 
       // Remove user from group participants
       const updatedParticipants = groupChat.participants.filter(
@@ -302,7 +302,7 @@ export class ChatRepository {
       });
 
       // Remove chat from user's chat list
-      const userChatsRef = doc(db, this.USER_CHATS_COLLECTION, userId);
+      const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, userId);
       const userChatsDoc = await getDoc(userChatsRef);
 
       if (userChatsDoc.exists()) {
@@ -325,6 +325,125 @@ export class ChatRepository {
   }
 
   /**
+   * Add member to group chat
+   */
+  async addGroupMember(
+    chatId: string,
+    newMemberId: string,
+    groupName: string,
+    groupAvatar?: string
+  ): Promise<Resource<void>> {
+    try {
+      const groupChatRef = doc(db(), this.GROUP_CHATS_COLLECTION, chatId);
+      const groupChatDoc = await getDoc(groupChatRef);
+
+      if (!groupChatDoc.exists()) {
+        return Resource.error('Group chat not found');
+      }
+
+      const groupChat = groupChatDoc.data() as GroupChat;
+
+      // Check if user is already a participant
+      if (groupChat.participants.includes(newMemberId)) {
+        return Resource.error('User is already a member of this group');
+      }
+
+      const batch = writeBatch(db());
+
+      // Add user to group participants
+      batch.update(groupChatRef, {
+        participants: arrayUnion(newMemberId),
+        updatedAt: Timestamp.now(),
+      });
+
+      // Add chat to new member's chat list
+      const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, newMemberId);
+      const userChatsDoc = await getDoc(userChatsRef);
+
+      const chatItem: ChatItem = {
+        chatId,
+        chatType: ChatType.GROUP,
+        groupName,
+        ...(groupAvatar && { groupAvatar }),
+        lastMessage: 'You were added to the group',
+        lastMessageTime: Timestamp.now(),
+        unreadCount: 0,
+      };
+
+      if (userChatsDoc.exists()) {
+        batch.update(userChatsRef, {
+          chats: arrayUnion(chatItem),
+          updatedAt: Timestamp.now(),
+        });
+      } else {
+        batch.set(userChatsRef, {
+          userId: newMemberId,
+          chats: [chatItem],
+          updatedAt: Timestamp.now(),
+        });
+      }
+
+      await batch.commit();
+      return Resource.success(undefined);
+    } catch (error: any) {
+      return Resource.error(error.message || 'Failed to add member to group');
+    }
+  }
+
+  /**
+   * Update group avatar
+   */
+  async updateGroupAvatar(
+    chatId: string,
+    avatarUrl: string
+  ): Promise<Resource<void>> {
+    try {
+      const groupChatRef = doc(db(), this.GROUP_CHATS_COLLECTION, chatId);
+      const groupChatDoc = await getDoc(groupChatRef);
+
+      if (!groupChatDoc.exists()) {
+        return Resource.error('Group chat not found');
+      }
+
+      const groupChat = groupChatDoc.data() as GroupChat;
+
+      const batch = writeBatch(db());
+
+      // Update group chat avatar
+      batch.update(groupChatRef, {
+        avatar: avatarUrl,
+        updatedAt: Timestamp.now(),
+      });
+
+      // Update avatar in all participants' userChats
+      for (const participantId of groupChat.participants) {
+        const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, participantId);
+        const userChatsDoc = await getDoc(userChatsRef);
+
+        if (userChatsDoc.exists()) {
+          const userData = userChatsDoc.data() as UserChats;
+          const updatedChats = userData.chats.map((chat) => {
+            if (chat.chatId === chatId) {
+              return { ...chat, groupAvatar: avatarUrl };
+            }
+            return chat;
+          });
+
+          batch.update(userChatsRef, {
+            chats: updatedChats,
+            updatedAt: Timestamp.now(),
+          });
+        }
+      }
+
+      await batch.commit();
+      return Resource.success(undefined);
+    } catch (error: any) {
+      return Resource.error(error.message || 'Failed to update group avatar');
+    }
+  }
+
+  /**
    * Get user chats with real-time updates
    */
   getUserChats(
@@ -332,7 +451,7 @@ export class ChatRepository {
     onUpdate: (chats: ChatItem[]) => void,
     onError: (error: string) => void
   ): () => void {
-    const userChatsRef = doc(db, this.USER_CHATS_COLLECTION, userId);
+    const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, userId);
 
     const unsubscribe = onSnapshot(
       userChatsRef,

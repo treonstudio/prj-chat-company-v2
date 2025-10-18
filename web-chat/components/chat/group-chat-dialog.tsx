@@ -17,6 +17,7 @@ import { ChatRepository } from "@/lib/repositories/chat.repository"
 import { User } from "@/types/models"
 import { Search, Loader2, X, Check, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 
 const userRepository = new UserRepository()
 const chatRepository = new ChatRepository()
@@ -42,6 +43,9 @@ export function GroupChatDialog({
   const [loading, setLoading] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Max character limits
+  const MAX_GROUP_NAME_LENGTH = 100
 
   useEffect(() => {
     if (!open) {
@@ -86,8 +90,33 @@ export function GroupChatDialog({
     return () => clearTimeout(debounceTimer)
   }, [searchQuery, currentUserId, step])
 
+  const handleGroupNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value
+
+    if (newValue.length > MAX_GROUP_NAME_LENGTH) {
+      toast.error(
+        `Nama grup terlalu panjang! Maksimal ${MAX_GROUP_NAME_LENGTH} karakter. ` +
+        `Saat ini: ${newValue.length} karakter.`,
+        { duration: 3000 }
+      )
+      return
+    }
+
+    setGroupName(newValue)
+  }
+
   const handleNext = () => {
-    if (step === "name" && groupName.trim()) {
+    if (step === "name") {
+      if (!groupName.trim()) {
+        toast.error("Nama grup tidak boleh kosong")
+        return
+      }
+
+      if (groupName.length > MAX_GROUP_NAME_LENGTH) {
+        toast.error(`Nama grup maksimal ${MAX_GROUP_NAME_LENGTH} karakter`)
+        return
+      }
+
       setStep("members")
     }
   }
@@ -154,13 +183,28 @@ export function GroupChatDialog({
             <>
               {/* Group Name Input */}
               <div className="space-y-2">
-                <label className="text-sm font-medium">Group Name</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Group Name</label>
+                  {groupName.length > MAX_GROUP_NAME_LENGTH * 0.8 && (
+                    <span
+                      className={`text-[10px] ${
+                        groupName.length > MAX_GROUP_NAME_LENGTH * 0.95
+                          ? 'text-destructive font-semibold'
+                          : groupName.length > MAX_GROUP_NAME_LENGTH * 0.9
+                          ? 'text-orange-500 font-medium'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      {groupName.length} / {MAX_GROUP_NAME_LENGTH}
+                    </span>
+                  )}
+                </div>
                 <div className="relative">
                   <Users className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Enter group name..."
                     value={groupName}
-                    onChange={(e) => setGroupName(e.target.value)}
+                    onChange={handleGroupNameChange}
                     className="pl-9"
                     autoFocus
                     onKeyDown={(e) => {

@@ -41,9 +41,32 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { usageControls } = useUsageControls()
 
+  // Max character limit for profile name
+  const MAX_PROFILE_NAME_LENGTH = 25
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value
+
+    if (newValue.length > MAX_PROFILE_NAME_LENGTH) {
+      toast.error(
+        `Nama profil terlalu panjang! Maksimal ${MAX_PROFILE_NAME_LENGTH} karakter. ` +
+        `Saat ini: ${newValue.length} karakter.`,
+        { duration: 3000 }
+      )
+      return
+    }
+
+    setName(newValue)
+  }
+
   const handleSaveName = async () => {
     if (!name.trim()) {
       toast.error('Nama tidak boleh kosong')
+      return
+    }
+
+    if (name.length > MAX_PROFILE_NAME_LENGTH) {
+      toast.error(`Nama profil maksimal ${MAX_PROFILE_NAME_LENGTH} karakter`)
       return
     }
 
@@ -254,13 +277,28 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
 
         {/* Name Section */}
         <div className="px-4 py-4">
-          <label className="text-sm text-muted-foreground">Nama</label>
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-muted-foreground">Nama</label>
+            {editingName && name.length > MAX_PROFILE_NAME_LENGTH * 0.8 && (
+              <span
+                className={`text-[10px] ${
+                  name.length > MAX_PROFILE_NAME_LENGTH * 0.95
+                    ? 'text-destructive font-semibold'
+                    : name.length > MAX_PROFILE_NAME_LENGTH * 0.9
+                    ? 'text-orange-500 font-medium'
+                    : 'text-muted-foreground'
+                }`}
+              >
+                {name.length} / {MAX_PROFILE_NAME_LENGTH}
+              </span>
+            )}
+          </div>
           <div className="flex items-center justify-between gap-2 py-2">
             {editingName ? (
               <>
                 <Input
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={handleNameChange}
                   disabled={saving}
                   className="flex-1"
                   autoFocus

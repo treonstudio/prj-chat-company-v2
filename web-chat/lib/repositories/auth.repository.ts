@@ -16,7 +16,7 @@ export class AuthRepository {
    */
   async signIn(email: string, password: string): Promise<Resource<FirebaseUser>> {
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth(), email, password);
       return Resource.success(userCredential.user);
     } catch (error: any) {
       return Resource.error(error.message || 'Failed to sign in');
@@ -28,7 +28,7 @@ export class AuthRepository {
    */
   async signOut(): Promise<Resource<void>> {
     try {
-      await firebaseSignOut(auth);
+      await firebaseSignOut(auth());
       return Resource.success(undefined);
     } catch (error: any) {
       return Resource.error(error.message || 'Failed to sign out');
@@ -39,14 +39,14 @@ export class AuthRepository {
    * Get current user
    */
   getCurrentUser(): FirebaseUser | null {
-    return auth.currentUser;
+    return auth().currentUser;
   }
 
   /**
    * Listen to auth state changes
    */
   onAuthStateChange(callback: (user: FirebaseUser | null) => void): () => void {
-    return onAuthStateChanged(auth, callback);
+    return onAuthStateChanged(auth(), callback);
   }
 
   /**
@@ -55,7 +55,7 @@ export class AuthRepository {
    */
   async updatePassword(newPassword: string): Promise<Resource<void>> {
     try {
-      const user = auth.currentUser;
+      const user = auth().currentUser;
       if (!user) {
         return Resource.error('No user is currently signed in');
       }
@@ -77,7 +77,7 @@ export class AuthRepository {
    */
   async reauthenticate(currentPassword: string): Promise<Resource<void>> {
     try {
-      const user = auth.currentUser;
+      const user = auth().currentUser;
       if (!user || !user.email) {
         return Resource.error('No user is currently signed in');
       }

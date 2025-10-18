@@ -17,7 +17,7 @@ export class UsageControlsRepository {
     onError: (error: string) => void
   ): () => void {
     const usageControlsRef = doc(
-      db,
+      db(),
       this.APP_CONFIGS_COLLECTION,
       this.USAGE_CONTROLS_DOCUMENT
     );

@@ -40,9 +40,51 @@ export function MessageComposer({
   const { featureFlags } = useFeatureFlags();
   const { usageControls } = useUsageControls();
 
+  // WhatsApp character limit for text messages
+  const MAX_TEXT_LENGTH = 65536;
+
+  const handleMessageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+
+    // Check if exceeds limit
+    if (newValue.length > MAX_TEXT_LENGTH) {
+      toast.error(
+        `Pesan terlalu panjang! Maksimal ${MAX_TEXT_LENGTH.toLocaleString()} karakter. ` +
+        `Saat ini: ${newValue.length.toLocaleString()} karakter. ` +
+        `Silakan persingkat atau kirim dalam beberapa bagian.`,
+        { duration: 5000 }
+      );
+      return;
+    }
+
+    // Show warning when approaching limit (at 90%)
+    if (newValue.length > MAX_TEXT_LENGTH * 0.9 && message.length <= MAX_TEXT_LENGTH * 0.9) {
+      toast.warning(
+        `Peringatan: Anda mendekati batas karakter! ` +
+        `${newValue.length.toLocaleString()} / ${MAX_TEXT_LENGTH.toLocaleString()} karakter`,
+        { duration: 3000 }
+      );
+    }
+
+    setMessage(newValue);
+  };
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (message.trim() && !disabled) {
+
+    if (!message.trim()) {
+      return;
+    }
+
+    if (message.length > MAX_TEXT_LENGTH) {
+      toast.error(
+        `Pesan terlalu panjang! Maksimal ${MAX_TEXT_LENGTH.toLocaleString()} karakter. ` +
+        `Silakan persingkat atau kirim dalam beberapa bagian.`
+      );
+      return;
+    }
+
+    if (!disabled) {
       onSendText(message);
       setMessage('');
     }
@@ -188,20 +230,39 @@ export function MessageComposer({
 
         {/* Message input - only show if allowSendText is true */}
         {featureFlags.allowSendText ? (
-          <>
-            <Input
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder={uploading ? 'Uploading...' : 'Type a message...'}
-              disabled={disabled || uploading}
-              className="flex-1"
-            />
+          <div className="flex-1 flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <Input
+                value={message}
+                onChange={handleMessageChange}
+                placeholder="Message"
+                disabled={disabled || uploading}
+                className="flex-1"
+              />
 
-            {/* Send button */}
-            <Button type="submit" size="icon" disabled={!message.trim() || disabled || uploading}>
-              <SendIcon className="h-5 w-5" />
-            </Button>
-          </>
+              {/* Send button */}
+              <Button type="submit" size="icon" disabled={!message.trim() || disabled || uploading}>
+                <SendIcon className="h-5 w-5" />
+              </Button>
+            </div>
+
+            {/* Character counter - only show when typing and near limit */}
+            {message.length > MAX_TEXT_LENGTH * 0.8 && (
+              <div className="flex justify-end px-2">
+                <span
+                  className={`text-[10px] ${
+                    message.length > MAX_TEXT_LENGTH * 0.95
+                      ? 'text-destructive font-semibold'
+                      : message.length > MAX_TEXT_LENGTH * 0.9
+                      ? 'text-orange-500 font-medium'
+                      : 'text-muted-foreground'
+                  }`}
+                >
+                  {message.length.toLocaleString()} / {MAX_TEXT_LENGTH.toLocaleString()}
+                </span>
+              </div>
+            )}
+          </div>
         ) : (
           <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
             Sending messages is disabled
