@@ -40,10 +40,10 @@ export default function LoginPage() {
     const result = await signIn(email, password);
 
     if (result.success) {
-      toast.success('Login successful! Redirecting...');
+      toast.success('Login berhasil! Mengalihkan...');
       router.push('/');
     } else {
-      const errorMessage = result.error || 'Failed to sign in';
+      const errorMessage = result.error || 'Gagal login';
       setError(errorMessage);
       toast.error(errorMessage);
       setLoading(false);

@@ -12,6 +12,27 @@ import { Resource } from '@/types/resource';
 
 export class AuthRepository {
   /**
+   * Map Firebase auth error codes to user-friendly Indonesian messages
+   */
+  private getAuthErrorMessage(errorCode: string): string {
+    const errorMessages: Record<string, string> = {
+      'auth/invalid-credential': 'Email atau password yang Anda masukkan salah',
+      'auth/user-not-found': 'Email tidak terdaftar',
+      'auth/wrong-password': 'Password yang Anda masukkan salah',
+      'auth/invalid-email': 'Format email tidak valid',
+      'auth/user-disabled': 'Akun Anda telah dinonaktifkan',
+      'auth/too-many-requests': 'Terlalu banyak percobaan login. Silakan coba lagi nanti',
+      'auth/network-request-failed': 'Koneksi internet bermasalah. Periksa koneksi Anda',
+      'auth/weak-password': 'Password terlalu lemah. Gunakan minimal 6 karakter',
+      'auth/email-already-in-use': 'Email sudah terdaftar',
+      'auth/operation-not-allowed': 'Operasi tidak diizinkan',
+      'auth/requires-recent-login': 'Silakan login ulang untuk melanjutkan',
+    };
+
+    return errorMessages[errorCode] || 'Terjadi kesalahan saat login. Silakan coba lagi';
+  }
+
+  /**
    * Sign in with email and password
    */
   async signIn(email: string, password: string): Promise<Resource<FirebaseUser>> {
@@ -19,7 +40,8 @@ export class AuthRepository {
       const userCredential = await signInWithEmailAndPassword(auth(), email, password);
       return Resource.success(userCredential.user);
     } catch (error: any) {
-      return Resource.error(error.message || 'Failed to sign in');
+      const errorMessage = error.code ? this.getAuthErrorMessage(error.code) : 'Gagal login. Silakan coba lagi';
+      return Resource.error(errorMessage);
     }
   }
 
@@ -57,17 +79,14 @@ export class AuthRepository {
     try {
       const user = auth().currentUser;
       if (!user) {
-        return Resource.error('No user is currently signed in');
+        return Resource.error('Tidak ada user yang sedang login');
       }
 
       await firebaseUpdatePassword(user, newPassword);
       return Resource.success(undefined);
     } catch (error: any) {
-      // If the error is about requiring recent login, inform the user
-      if (error.code === 'auth/requires-recent-login') {
-        return Resource.error('Please log out and log in again before changing your password');
-      }
-      return Resource.error(error.message || 'Failed to update password');
+      const errorMessage = error.code ? this.getAuthErrorMessage(error.code) : 'Gagal mengubah password';
+      return Resource.error(errorMessage);
     }
   }
 
@@ -79,17 +98,15 @@ export class AuthRepository {
     try {
       const user = auth().currentUser;
       if (!user || !user.email) {
-        return Resource.error('No user is currently signed in');
+        return Resource.error('Tidak ada user yang sedang login');
       }
 
       const credential = EmailAuthProvider.credential(user.email, currentPassword);
       await reauthenticateWithCredential(user, credential);
       return Resource.success(undefined);
     } catch (error: any) {
-      if (error.code === 'auth/wrong-password') {
-        return Resource.error('Current password is incorrect');
-      }
-      return Resource.error(error.message || 'Failed to verify current password');
+      const errorMessage = error.code ? this.getAuthErrorMessage(error.code) : 'Gagal memverifikasi password';
+      return Resource.error(errorMessage);
     }
   }
 }

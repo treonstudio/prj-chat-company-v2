@@ -168,7 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     if (!authRepositoryRef.current || !userRepositoryRef.current) {
-      return { success: false, error: 'Authentication service not initialized' };
+      return { success: false, error: 'Layanan autentikasi belum siap' };
     }
 
     try {
@@ -180,28 +180,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Check if user is active
           if (userResult.data.isActive === false) {
             await authRepositoryRef.current.signOut();
-            return { success: false, error: 'Your account has been deactivated. Please contact administrator.' };
+            return { success: false, error: 'Akun Anda telah dinonaktifkan. Silakan hubungi administrator.' };
           }
 
           // Check if displayName exists
           if (!userResult.data.displayName || userResult.data.displayName.trim() === '') {
             await authRepositoryRef.current.signOut();
-            return { success: false, error: 'Account has no username. Please contact administrator.' };
+            return { success: false, error: 'Akun tidak memiliki username. Silakan hubungi administrator.' };
           }
 
           return { success: true };
         } else {
           // User authenticated but no user data found
           await authRepositoryRef.current.signOut();
-          return { success: false, error: 'User data not found. Please contact administrator.' };
+          return { success: false, error: 'Data user tidak ditemukan. Silakan hubungi administrator.' };
         }
       } else if (result.status === 'error') {
         return { success: false, error: result.message };
       } else {
-        return { success: false, error: 'Unknown error occurred' };
+        return { success: false, error: 'Terjadi kesalahan yang tidak diketahui' };
       }
     } catch (error) {
-      return { success: false, error: 'An unexpected error occurred during sign in' };
+      return { success: false, error: 'Terjadi kesalahan saat login. Silakan coba lagi' };
     }
   };
 
