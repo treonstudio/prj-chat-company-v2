@@ -25,9 +25,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { GroupInfoDialog } from "./group-info-dialog"
+import { ForwardMessageDialog } from "./forward-message-dialog"
+import { MessageRepository } from "@/lib/repositories/message.repository"
+import { toast } from "sonner"
 
 const userRepository = new UserRepository()
 const chatRepository = new ChatRepository()
+const messageRepository = new MessageRepository()
 
 export function ChatRoom({
   chatId,
@@ -36,6 +40,7 @@ export function ChatRoom({
   currentUserAvatar,
   isGroupChat,
   onLeaveGroup,
+  onChatSelect,
 }: {
   chatId: string
   currentUserId: string
@@ -43,6 +48,7 @@ export function ChatRoom({
   currentUserAvatar?: string
   isGroupChat: boolean
   onLeaveGroup?: () => void
+  onChatSelect?: (chatId: string, isGroup: boolean) => void
 }) {
   const {
     messages,
@@ -57,6 +63,8 @@ export function ChatRoom({
     sendDocument,
     markAsRead,
     retryMessage,
+    deleteMessage,
+    editMessage,
   } = useMessages(chatId, isGroupChat, currentUserId)
 
   const [roomTitle, setRoomTitle] = useState<string>('Chat')
@@ -67,6 +75,8 @@ export function ChatRoom({
   const [showLeaveDialog, setShowLeaveDialog] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [isDeletedUser, setIsDeletedUser] = useState(false)
+  const [showForwardDialog, setShowForwardDialog] = useState(false)
+  const [forwardMessageId, setForwardMessageId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Load room title and group members
@@ -187,9 +197,48 @@ export function ChatRoom({
     setRoomAvatar(avatarUrl)
   }
 
+  // Handle forward message
+  const handleForwardClick = (messageId: string) => {
+    setForwardMessageId(messageId)
+    setShowForwardDialog(true)
+  }
+
+  const handleForwardMessage = async (targetChatId: string, isGroup: boolean) => {
+    if (!forwardMessageId) return
+
+    const message = messages.find(m => m.messageId === forwardMessageId)
+    if (!message) {
+      toast.error('Message not found')
+      return
+    }
+
+    // Immediately switch to target chat
+    if (onChatSelect) {
+      onChatSelect(targetChatId, isGroup)
+    }
+
+    // Forward message in background
+    try {
+      const result = await messageRepository.forwardMessage(
+        forwardMessageId,
+        chatId,
+        targetChatId,
+        currentUserId
+      )
+
+      if (result.status === 'error') {
+        toast.error(result.message || 'Failed to forward message')
+      }
+      // Don't show success toast - user will see the message appear in the chat
+    } catch (error) {
+      console.error('Forward error:', error)
+      toast.error('Failed to forward message')
+    }
+  }
+
   return (
     <div className="flex h-full w-full min-h-0 flex-col">
-      <header className="flex items-center justify-between border-b px-4 py-3">
+      <header className="flex items-center justify-between border-b px-4 py-3 shadow-sm z-10" style={{ backgroundColor: '#fafafa' }}>
         <button
           onClick={() => {
             if (isGroupChat) {
@@ -201,9 +250,9 @@ export function ChatRoom({
         >
           <Avatar className="h-10 w-10 shrink-0">
             <AvatarImage src={roomAvatar || "/placeholder-user.jpg"} alt="" />
-            <AvatarFallback>
+            <AvatarFallback className={isGroupChat ? "bg-muted border border-border" : ""}>
               {isGroupChat ? (
-                <Users className="h-5 w-5 text-muted-foreground" />
+                <Users className="h-5 w-5 text-muted-foreground fill-muted-foreground" />
               ) : (
                 roomTitle.slice(0, 2).toUpperCase()
               )}
@@ -231,7 +280,7 @@ export function ChatRoom({
           </Button>
         )}
       </header>
-      <ScrollArea className="flex-1 min-h-0">
+      <ScrollArea className="flex-1 min-h-0" style={{ backgroundImage: 'url(/tile-pattern.png)', backgroundRepeat: 'repeat' }}>
         {loading ? (
           <div className="mx-auto w-full space-y-3 p-4">
             {/* Message skeleton loader */}
@@ -281,6 +330,7 @@ export function ChatRoom({
                           mimeType: m.mediaMetadata?.mimeType,
                           senderId: m.senderId,
                           senderName: senderName,
+                          senderAvatar: m.senderAvatar,
                           timestamp: timeStr,
                           status: m.status,
                           error: m.error,
@@ -288,6 +338,9 @@ export function ChatRoom({
                         isMe={m.senderId === currentUserId}
                         isGroupChat={isGroupChat}
                         onRetry={retryMessage}
+                        onForward={handleForwardClick}
+                        onDelete={deleteMessage}
+                        onEdit={editMessage}
                       />
                     </div>
                   )
@@ -366,6 +419,14 @@ export function ChatRoom({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Forward Message Dialog */}
+      <ForwardMessageDialog
+        open={showForwardDialog}
+        onOpenChange={setShowForwardDialog}
+        onForward={handleForwardMessage}
+        currentUserId={currentUserId}
+      />
     </div>
   )
 }

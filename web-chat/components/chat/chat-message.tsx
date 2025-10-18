@@ -8,16 +8,27 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog"
-import { Download, X } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Download, X, Forward, ChevronDown, Reply, Copy, Trash2, Star, Pencil, Ban } from "lucide-react"
 import download from "downloadjs"
 import { MessageStatusIcon } from "./message-status-icon"
 import { MessageStatus } from "@/types/models"
+import { toast } from "sonner"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 type Base = {
   id: string
   senderId: string
   senderName: string
+  senderAvatar?: string
   timestamp: string
   status?: MessageStatus
   error?: string
@@ -41,20 +52,54 @@ export function ChatMessage({
   isMe,
   isGroupChat,
   onRetry,
+  onForward,
+  onDelete,
+  onEdit,
 }: {
   data: ChatMessageUnion
   isMe: boolean
   isGroupChat: boolean
   onRetry?: (messageId: string) => void
+  onForward?: (messageId: string) => void
+  onDelete?: (messageId: string) => void
+  onEdit?: (messageId: string, newText: string) => void
 }) {
   const [showImagePreview, setShowImagePreview] = useState(false)
   const [showVideoPreview, setShowVideoPreview] = useState(false)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false)
+  const [showEditDialog, setShowEditDialog] = useState(false)
+  const [editText, setEditText] = useState("")
 
   // Character limit for "Read More" functionality
   const CHAR_LIMIT = 300
+
+  const handleCopy = async () => {
+    if (data.type === 'text') {
+      try {
+        await navigator.clipboard.writeText(data.content)
+        toast.success('Teks berhasil disalin')
+      } catch (err) {
+        console.error('Failed to copy text:', err)
+        toast.error('Gagal menyalin teks')
+      }
+    }
+  }
+
+  const handleEdit = () => {
+    if (data.type === 'text') {
+      setEditText(data.content)
+      setShowEditDialog(true)
+    }
+  }
+
+  const handleEditSubmit = () => {
+    if (editText.trim() && onEdit) {
+      onEdit(data.id, editText.trim())
+      setShowEditDialog(false)
+    }
+  }
 
   const handleDownload = async (url: string, filename?: string, mimeType?: string) => {
     setDownloading(true)
@@ -110,60 +155,154 @@ export function ChatMessage({
   }
 
   const bubble = cn(
-    "inline-flex flex-col gap-2 rounded-xl text-sm",
+    "inline-flex flex-col gap-2 text-sm shadow-sm relative",
     // align and shape
     isMe
-      ? "ml-auto bg-primary text-primary-foreground rounded-br-none items-end"
-      : "mr-auto bg-gray-100 text-secondary-foreground rounded-bl-none items-start",
+      ? "ml-auto bg-primary text-primary-foreground rounded-tl-lg rounded-tr-lg rounded-bl-lg items-end"
+      : "mr-auto bg-gray-100 text-secondary-foreground rounded-tl-lg rounded-tr-lg rounded-br-lg items-start",
     // padding varies by type
-    data.type === 'doc' ? 'px-3 py-3' : 'px-3 py-2',
-    // width
-    data.type == 'text' ? 'max-w-[80%]' : 'max-w-[40%]'
+    data.type === 'doc' ? 'px-3 py-3' : 'px-3 py-2'
   )
+
+  const maxWidthStyle = data.type === 'text'
+    ? { maxWidth: 'min(640px, 80%)' }
+    : { maxWidth: 'min(640px, 40%)' }
 
   return (
     <>
-      <div className={cn("flex w-full", isMe ? "justify-end" : "justify-start")}>
-        <div className={bubble}>
+      <div className={cn("flex w-full gap-2 group/message", isMe ? "justify-end" : "justify-start")}>
+        {/* Avatar for group chat messages from others */}
+        {isGroupChat && !isMe ? (
+          <Avatar className="h-8 w-8 shrink-0 mt-0.5">
+            <AvatarImage src={data.senderAvatar || '/placeholder-user.jpg'} alt={data.senderName} />
+            <AvatarFallback className="text-xs">
+              {data.senderName.slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+        ) : null}
+
+        <div className="relative">
+          <div className={bubble} style={maxWidthStyle}>
+          {/* Dropdown menu - appears on hover (hide for deleted messages) */}
+          {data.content !== "Pesan ini dihapus" && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className={cn(
+                    "absolute top-1 p-0.5 opacity-0 group-hover/message:opacity-100 transition-opacity hover:bg-black/10 rounded",
+                    isMe ? "left-1" : "right-1"
+                  )}
+                  aria-label="Message options"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+            <DropdownMenuContent align={isMe ? "start" : "end"}>
+              {/* Salin - hanya untuk text */}
+              {data.type === 'text' && (
+                <DropdownMenuItem className="flex items-center gap-2" onClick={handleCopy}>
+                  <Copy className="h-4 w-4" />
+                  <span>Salin</span>
+                </DropdownMenuItem>
+              )}
+
+              {/* Unduh - untuk media dan dokumen */}
+              {(data.type === 'image' || data.type === 'video' || data.type === 'doc') && (
+                <DropdownMenuItem
+                  className="flex items-center gap-2"
+                  onClick={() => {
+                    const filename = data.type === 'doc' ? (data as DocMsg).fileName : `${data.type}-${data.id}`
+                    const mimeType = data.type === 'doc'
+                      ? (data as DocMsg).mimeType
+                      : data.type === 'video'
+                      ? (data as VideoMsg).mimeType
+                      : undefined
+                    handleDownload(data.content, filename, mimeType)
+                  }}
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Unduh</span>
+                </DropdownMenuItem>
+              )}
+
+              {/* Opsi tambahan hanya untuk pesan sendiri */}
+              {isMe && (
+                <>
+                  {/* Edit - hanya untuk text */}
+                  {data.type === 'text' && (
+                    <DropdownMenuItem className="flex items-center gap-2" onClick={handleEdit}>
+                      <Pencil className="h-4 w-4" />
+                      <span>Edit</span>
+                    </DropdownMenuItem>
+                  )}
+
+                  {/* Hapus */}
+                  <DropdownMenuItem
+                    className="flex items-center gap-2 text-destructive"
+                    onClick={() => onDelete?.(data.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Hapus</span>
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          )}
+
           {/* Sender name inside bubble only for group chat and other users */}
           {isGroupChat && !isMe ? (
             <span className="text-xs font-bold text-primary">{data.senderName}</span>
           ) : null}
 
           {data.type === "text" && (
-            <div className="text-pretty leading-relaxed">
-              {data.content.length > CHAR_LIMIT && !isExpanded ? (
-                <>
-                  <p className="whitespace-pre-wrap">
-                    {data.content.slice(0, CHAR_LIMIT)}...
-                  </p>
-                  <button
-                    onClick={() => setIsExpanded(true)}
-                    className={cn(
-                      "text-xs mt-1 font-medium underline",
-                      isMe ? "text-primary-foreground/80 hover:text-primary-foreground" : "text-primary hover:text-primary/80"
-                    )}
-                  >
-                    Read more
-                  </button>
-                </>
+            <>
+              {data.content === "Pesan ini dihapus" ? (
+                <div className="flex items-center gap-2 opacity-70">
+                  <div className="relative h-5 w-5 shrink-0">
+                    <div className="absolute inset-0 rounded-full border border-current opacity-40" />
+                    <Ban className="h-5 w-5 fill-current" />
+                  </div>
+                  <span className="italic text-sm">
+                    {isMe ? "Anda menghapus pesan ini" : "Pesan ini dihapus"}
+                  </span>
+                </div>
               ) : (
-                <>
-                  <p className="whitespace-pre-wrap">{data.content}</p>
-                  {data.content.length > CHAR_LIMIT && (
-                    <button
-                      onClick={() => setIsExpanded(false)}
-                      className={cn(
-                        "text-xs mt-1 font-medium underline",
-                        isMe ? "text-primary-foreground/80 hover:text-primary-foreground" : "text-primary hover:text-primary/80"
+                <div className="text-pretty leading-relaxed break-words">
+                  {data.content.length > CHAR_LIMIT && !isExpanded ? (
+                    <>
+                      <p className="whitespace-pre-wrap break-words">
+                        {data.content.slice(0, CHAR_LIMIT)}...
+                      </p>
+                      <button
+                        onClick={() => setIsExpanded(true)}
+                        className={cn(
+                          "text-xs mt-1 font-medium underline",
+                          isMe ? "text-primary-foreground/80 hover:text-primary-foreground" : "text-primary hover:text-primary/80"
+                        )}
+                      >
+                        Read more
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="whitespace-pre-wrap break-words">{data.content}</p>
+                      {data.content.length > CHAR_LIMIT && (
+                        <button
+                          onClick={() => setIsExpanded(false)}
+                          className={cn(
+                            "text-xs mt-1 font-medium underline",
+                            isMe ? "text-primary-foreground/80 hover:text-primary-foreground" : "text-primary hover:text-primary/80"
+                          )}
+                        >
+                          Read less
+                        </button>
                       )}
-                    >
-                      Read less
-                    </button>
+                    </>
                   )}
-                </>
+                </div>
               )}
-            </div>
+            </>
           )}
 
           {data.type === "image" && (
@@ -301,6 +440,28 @@ export function ChatMessage({
               </button>
             )}
           </div>
+
+          {/* Forward button - appears on hover (hide for deleted messages) */}
+          {onForward && data.content !== "Pesan ini dihapus" && (
+            <button
+              onClick={() => onForward(data.id)}
+              style={{
+                position: 'absolute',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                [isMe ? 'right' : 'left']: '100%',
+                [isMe ? 'marginRight' : 'marginLeft']: '4px'
+              }}
+              className={cn(
+                "p-1.5 rounded-full bg-background/90 shadow-md hover:bg-background transition-all opacity-0 group-hover/message:opacity-100 z-10"
+              )}
+              aria-label="Forward message"
+            >
+              <Forward className="h-4 w-4 text-muted-foreground" />
+            </button>
+          )}
+          </div>
+
         </div>
       </div>
 
@@ -384,6 +545,37 @@ export function ChatMessage({
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Edit Message Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Pesan</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              placeholder="Ketik pesan..."
+              className="min-h-[100px]"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowEditDialog(false)}
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={handleEditSubmit}
+              disabled={!editText.trim()}
+            >
+              Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

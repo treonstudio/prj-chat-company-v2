@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ImageIcon, VideoIcon, FileIcon, PlusIcon, SendIcon } from 'lucide-react';
+import { ImageIcon, VideoIcon, FileIcon, PlusIcon, SendIcon, Smile, Mic } from 'lucide-react';
 import { useFeatureFlags } from '@/lib/contexts/feature-flags.context';
 import { useUsageControls } from '@/lib/contexts/usage-controls.context';
 import { toast } from 'sonner';
@@ -164,108 +164,119 @@ export function MessageComposer({
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="flex items-center gap-2 px-4 py-3">
-        {/* Attachment menu - only show if allowSendMedia is true */}
-        {featureFlags.allowSendMedia && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                disabled={disabled || uploading}
-                aria-label="Attach file"
-              >
-                <PlusIcon className="h-5 w-5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem
-                onSelect={() => imageInputRef.current?.click()}
-                className="flex items-center gap-2"
-              >
-                <ImageIcon className="h-4 w-4" />
-                <span>Image</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => videoInputRef.current?.click()}
-                className="flex items-center gap-2"
-              >
-                <VideoIcon className="h-4 w-4" />
-                <span>Video</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => documentInputRef.current?.click()}
-                className="flex items-center gap-2"
-              >
-                <FileIcon className="h-4 w-4" />
-                <span>Document</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+      <form onSubmit={handleSubmit} className="flex flex-col gap-2 px-4 py-3">
+        {/* WhatsApp-style floating rounded input container */}
+        <div className="flex items-center gap-2">
+          {/* Attachment menu - only show if allowSendMedia is true */}
+          {featureFlags.allowSendMedia && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={disabled || uploading}
+                  aria-label="Attach file"
+                  className="shrink-0"
+                >
+                  <PlusIcon className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem
+                  onSelect={() => imageInputRef.current?.click()}
+                  className="flex items-center gap-2"
+                >
+                  <ImageIcon className="h-4 w-4" />
+                  <span>Image</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => videoInputRef.current?.click()}
+                  className="flex items-center gap-2"
+                >
+                  <VideoIcon className="h-4 w-4" />
+                  <span>Video</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => documentInputRef.current?.click()}
+                  className="flex items-center gap-2"
+                >
+                  <FileIcon className="h-4 w-4" />
+                  <span>Document</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
-        {/* Hidden file inputs */}
-        <input
-          ref={imageInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleImageSelect}
-          className="hidden"
-        />
-        <input
-          ref={videoInputRef}
-          type="file"
-          accept="video/*"
-          onChange={handleVideoSelect}
-          className="hidden"
-        />
-        <input
-          ref={documentInputRef}
-          type="file"
-          accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx"
-          onChange={handleDocumentSelect}
-          className="hidden"
-        />
+          {/* Hidden file inputs */}
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleImageSelect}
+            className="hidden"
+          />
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/*"
+            onChange={handleVideoSelect}
+            className="hidden"
+          />
+          <input
+            ref={documentInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx"
+            onChange={handleDocumentSelect}
+            className="hidden"
+          />
 
-        {/* Message input - only show if allowSendText is true */}
-        {featureFlags.allowSendText ? (
-          <div className="flex-1 flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <Input
-                value={message}
-                onChange={handleMessageChange}
-                placeholder="Message"
-                disabled={disabled || uploading}
-                className="flex-1"
-              />
+          {/* Message input - only show if allowSendText is true */}
+          {featureFlags.allowSendText ? (
+            <>
+              {/* Rounded floating container */}
+              <div className="flex-1 flex items-center bg-white rounded-full px-4 py-2.5 shadow-md">
+                {/* Input field */}
+                <Input
+                  value={message}
+                  onChange={handleMessageChange}
+                  placeholder="Ketik pesan"
+                  disabled={disabled || uploading}
+                  className="flex-1 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-auto text-[15px]"
+                />
+              </div>
 
               {/* Send button */}
-              <Button type="submit" size="icon" disabled={!message.trim() || disabled || uploading}>
+              <Button
+                type="submit"
+                size="icon"
+                disabled={!message.trim() || disabled || uploading}
+                className="shrink-0 rounded-full h-10 w-10"
+              >
                 <SendIcon className="h-5 w-5" />
               </Button>
+            </>
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+              Sending messages is disabled
             </div>
+          )}
+        </div>
 
-            {/* Character counter - only show when typing and near limit */}
-            {message.length > MAX_TEXT_LENGTH * 0.8 && (
-              <div className="flex justify-end px-2">
-                <span
-                  className={`text-[10px] ${
-                    message.length > MAX_TEXT_LENGTH * 0.95
-                      ? 'text-destructive font-semibold'
-                      : message.length > MAX_TEXT_LENGTH * 0.9
-                      ? 'text-orange-500 font-medium'
-                      : 'text-muted-foreground'
-                  }`}
-                >
-                  {message.length.toLocaleString()} / {MAX_TEXT_LENGTH.toLocaleString()}
-                </span>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
-            Sending messages is disabled
+        {/* Character counter - only show when typing and near limit */}
+        {featureFlags.allowSendText && message.length > MAX_TEXT_LENGTH * 0.8 && (
+          <div className="flex justify-end px-2">
+            <span
+              className={`text-[10px] ${
+                message.length > MAX_TEXT_LENGTH * 0.95
+                  ? 'text-destructive font-semibold'
+                  : message.length > MAX_TEXT_LENGTH * 0.9
+                  ? 'text-orange-500 font-medium'
+                  : 'text-muted-foreground'
+              }`}
+            >
+              {message.length.toLocaleString()} / {MAX_TEXT_LENGTH.toLocaleString()}
+            </span>
           </div>
         )}
       </form>

@@ -1,12 +1,16 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Trash2, Eye, EyeOff, Users, Phone, Key } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+import { Trash2, Eye, EyeOff, Users, Phone, Key, UserPlus, Upload, X as XIcon, ZoomIn, ZoomOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
 import { Header } from "@/components/header"
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+import Cropper from "react-easy-crop"
+import type { Area } from "react-easy-crop"
 import {
   Table,
   TableBody,
@@ -51,10 +55,23 @@ interface User {
 export default function DashboardPage() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
+  const [displayName, setDisplayName] = useState("")
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+
+  // Image cropper states
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [croppedImage, setCroppedImage] = useState<string | null>(null)
+  const [showCropper, setShowCropper] = useState(false)
+  const [crop, setCrop] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
+
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [usernameError, setUsernameError] = useState("")
   const [passwordError, setPasswordError] = useState("")
+  const [displayNameError, setDisplayNameError] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const { user, loading } = useAuthContext()
   const router = useRouter()
@@ -79,6 +96,9 @@ export default function DashboardPage() {
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
   const [newPasswordError, setNewPasswordError] = useState("")
+
+  // Add user sheet state
+  const [addUserSheetOpen, setAddUserSheetOpen] = useState(false)
 
   // Protect the page - redirect if not authenticated or not admin
   useEffect(() => {
@@ -334,11 +354,98 @@ export default function DashboardPage() {
     }
   }
 
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please select an image file')
+        return
+      }
+
+      // Max 5MB
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Image size should be less than 5MB')
+        return
+      }
+
+      const reader = new FileReader()
+      reader.onload = () => {
+        setSelectedImage(reader.result as string)
+        setShowCropper(true)
+        setCrop({ x: 0, y: 0 })
+        setZoom(1)
+      }
+      reader.readAsDataURL(file)
+    }
+
+    // Reset input
+    e.target.value = ''
+  }
+
+  const onCropComplete = useCallback((croppedArea: Area, croppedAreaPixels: Area) => {
+    setCroppedAreaPixels(croppedAreaPixels)
+  }, [])
+
+  const createCroppedImage = async () => {
+    if (!selectedImage || !croppedAreaPixels) return
+
+    try {
+      const image = new Image()
+      image.src = selectedImage
+
+      await new Promise((resolve) => {
+        image.onload = resolve
+      })
+
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+
+      canvas.width = croppedAreaPixels.width
+      canvas.height = croppedAreaPixels.height
+
+      ctx.drawImage(
+        image,
+        croppedAreaPixels.x,
+        croppedAreaPixels.y,
+        croppedAreaPixels.width,
+        croppedAreaPixels.height,
+        0,
+        0,
+        croppedAreaPixels.width,
+        croppedAreaPixels.height
+      )
+
+      canvas.toBlob((blob) => {
+        if (!blob) return
+        const url = URL.createObjectURL(blob)
+        setCroppedImage(url)
+        setPhotoPreview(url)
+
+        // Convert blob to file
+        const file = new File([blob], 'profile.jpg', { type: 'image/jpeg' })
+        setPhotoFile(file)
+
+        setShowCropper(false)
+      }, 'image/jpeg', 0.95)
+    } catch (error) {
+      console.error('Error cropping image:', error)
+      toast.error('Failed to crop image')
+    }
+  }
+
+  const removePhoto = () => {
+    setPhotoFile(null)
+    setPhotoPreview(null)
+    setCroppedImage(null)
+  }
+
   const handleAddUser = async () => {
     // Clear previous messages and errors
     setMessage(null)
     setUsernameError("")
     setPasswordError("")
+    setDisplayNameError("")
 
     let hasError = false
 
@@ -362,6 +469,17 @@ export default function DashboardPage() {
       hasError = true
     }
 
+    if (!displayName.trim()) {
+      setDisplayNameError("Nama tidak boleh kosong")
+      hasError = true
+    } else if (displayName.length < 2) {
+      setDisplayNameError("Nama harus minimal 2 karakter")
+      hasError = true
+    } else if (displayName.length > 25) {
+      setDisplayNameError("Nama maksimal 25 karakter")
+      hasError = true
+    }
+
     if (hasError) {
       return
     }
@@ -370,8 +488,9 @@ export default function DashboardPage() {
 
     try {
       const { result, error } = await createUser(username, password, {
-        displayName: username,
+        displayName: displayName.trim(),
         role: "user", // Always set role to "user" by default
+        photoFile: photoFile || undefined,
       })
 
       if (error) {
@@ -415,9 +534,15 @@ export default function DashboardPage() {
         // Clear form
         setUsername("")
         setPassword("")
+        setDisplayName("")
+        setPhotoFile(null)
+        setPhotoPreview(null)
 
         // Reload users list
         reloadUsers()
+
+        // Close sheet
+        setAddUserSheetOpen(false)
 
         // Auto-clear success message after 3 seconds
         setTimeout(() => {
@@ -466,105 +591,265 @@ export default function DashboardPage() {
       <Header title="Dashboard" breadcrumb="Admin / Dashboard" />
 
       {/* Main Content */}
-      <div className="p-8">
-        <div className="mx-auto max-w-7xl space-y-8">
-          {/* Add User Form */}
-          <Card className="border-0 shadow-sm">
-            <CardContent className="p-8">
-              <h2 className="mb-6 text-xl font-semibold text-gray-900">
-                Tambah User Baru
-              </h2>
-              {message && (
-                <div
-                  className={`mb-4 rounded-lg p-4 ${
-                    message.type === "success"
-                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                      : "bg-red-50 text-red-800 border border-red-200"
-                  }`}
-                >
-                  {message.text}
-                </div>
-              )}
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="username" className="mb-2 block text-sm font-medium text-gray-700">
-                    Username <span className="text-red-500">*</span>
-                  </label>
-                  <Input
-                    id="username"
-                    placeholder="contoh: johndoe"
-                    type="text"
-                    value={username}
-                    onChange={(e) => {
-                      setUsername(e.target.value)
-                      setUsernameError("")
-                    }}
-                    className={`h-12 ${usernameError ? "border-red-500 focus:border-red-500" : "border-gray-200"}`}
-                    disabled={isLoading}
-                  />
-                  {usernameError ? (
-                    <p className="mt-1 text-xs text-red-600">{usernameError}</p>
-                  ) : (
-                    <p className="mt-1 text-xs text-gray-500">
-                      Username harus minimal 3 karakter (huruf, angka, underscore)
-                    </p>
+      <div className="p-4 md:p-8">
+        <div className="mx-auto max-w-7xl space-y-4 md:space-y-8">
+          {/* Add User Button */}
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-semibold text-gray-900">User Management</h2>
+              <p className="text-sm text-gray-500">Manage users and their permissions</p>
+            </div>
+            <Sheet open={addUserSheetOpen} onOpenChange={setAddUserSheetOpen}>
+              <SheetTrigger asChild>
+                <Button className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2">
+                  <UserPlus className="h-5 w-5" />
+                  Add User
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-full sm:max-w-md p-0 flex flex-col h-full" style={{ backgroundColor: '#fafafa' }}>
+                <SheetHeader className="px-6 py-4 border-b bg-emerald-500 text-white flex-shrink-0">
+                  <SheetTitle className="text-white text-lg font-medium">Tambah User Baru</SheetTitle>
+                </SheetHeader>
+                <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4" style={{ backgroundColor: '#fafafa' }}>
+                  {message && (
+                    <div
+                      className={`rounded-lg p-4 ${
+                        message.type === "success"
+                          ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                          : "bg-red-50 text-red-800 border border-red-200"
+                      }`}
+                    >
+                      {message.text}
+                    </div>
                   )}
-                </div>
-                <div>
-                  <label htmlFor="password" className="mb-2 block text-sm font-medium text-gray-700">
-                    Password <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
+
+                  {/* Photo Upload */}
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-600">
+                      Photo Profile
+                    </label>
+                    <div className="flex items-center gap-4">
+                      {photoPreview ? (
+                        <div className="relative">
+                          <img
+                            src={photoPreview}
+                            alt="Preview"
+                            className="h-20 w-20 rounded-full object-cover border-2 border-gray-200"
+                          />
+                          <button
+                            type="button"
+                            onClick={removePhoto}
+                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+                            disabled={isLoading}
+                          >
+                            <XIcon className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="h-20 w-20 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center">
+                          <Upload className="h-8 w-8 text-gray-400" />
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        <input
+                          type="file"
+                          id="photo-upload"
+                          accept="image/*"
+                          onChange={handlePhotoChange}
+                          className="hidden"
+                          disabled={isLoading}
+                        />
+                        <label
+                          htmlFor="photo-upload"
+                          className="inline-block px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors"
+                        >
+                          {photoPreview ? 'Change Photo' : 'Upload Photo'}
+                        </label>
+                        <p className="mt-1.5 text-xs text-gray-400">
+                          Max 5MB (JPG, PNG)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Display Name */}
+                  <div>
+                    <label htmlFor="displayName" className="mb-2 block text-sm font-medium text-gray-600">
+                      Nama Lengkap <span className="text-red-500">*</span>
+                    </label>
                     <Input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Minimal 6 karakter"
-                      value={password}
+                      id="displayName"
+                      placeholder="contoh: John Doe"
+                      type="text"
+                      value={displayName}
+                      maxLength={25}
                       onChange={(e) => {
-                        setPassword(e.target.value)
-                        setPasswordError("")
+                        setDisplayName(e.target.value)
+                        setDisplayNameError("")
                       }}
-                      className={`h-12 pr-10 ${passwordError ? "border-red-500 focus:border-red-500" : "border-gray-200"}`}
+                      className={`h-12 rounded-lg ${displayNameError ? "border-red-300 focus:border-red-400" : "border-gray-200 focus:border-emerald-400"} focus:ring-0 shadow-none`}
                       disabled={isLoading}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none"
-                      disabled={isLoading}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-5 w-5" />
-                      ) : (
-                        <Eye className="h-5 w-5" />
-                      )}
-                    </button>
+                    {displayNameError ? (
+                      <p className="mt-1.5 text-xs text-red-500">{displayNameError}</p>
+                    ) : (
+                      <p className="mt-1.5 text-xs text-gray-400">
+                        {displayName.length}/25 karakter
+                      </p>
+                    )}
                   </div>
-                  {passwordError ? (
-                    <p className="mt-1 text-xs text-red-600">{passwordError}</p>
-                  ) : (
-                    <p className="mt-1 text-xs text-gray-500">
-                      Password harus minimal 6 karakter
-                    </p>
-                  )}
+
+                  <div>
+                    <label htmlFor="username" className="mb-2 block text-sm font-medium text-gray-600">
+                      Username <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      id="username"
+                      placeholder="contoh: johndoe"
+                      type="text"
+                      value={username}
+                      onChange={(e) => {
+                        setUsername(e.target.value)
+                        setUsernameError("")
+                      }}
+                      className={`h-12 rounded-lg ${usernameError ? "border-red-300 focus:border-red-400" : "border-gray-200 focus:border-emerald-400"} focus:ring-0 shadow-none`}
+                      disabled={isLoading}
+                    />
+                    {usernameError ? (
+                      <p className="mt-1.5 text-xs text-red-500">{usernameError}</p>
+                    ) : (
+                      <p className="mt-1.5 text-xs text-gray-400">
+                        Username harus minimal 3 karakter (huruf, angka, underscore)
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label htmlFor="password" className="mb-2 block text-sm font-medium text-gray-600">
+                      Password <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Minimal 6 karakter"
+                        value={password}
+                        onChange={(e) => {
+                          setPassword(e.target.value)
+                          setPasswordError("")
+                        }}
+                        className={`h-12 pr-10 rounded-lg ${passwordError ? "border-red-300 focus:border-red-400" : "border-gray-200 focus:border-emerald-400"} focus:ring-0 shadow-none`}
+                        disabled={isLoading}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
+                        disabled={isLoading}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-5 w-5" />
+                        ) : (
+                          <Eye className="h-5 w-5" />
+                        )}
+                      </button>
+                    </div>
+                    {passwordError ? (
+                      <p className="mt-1.5 text-xs text-red-500">{passwordError}</p>
+                    ) : (
+                      <p className="mt-1.5 text-xs text-gray-400">
+                        Password harus minimal 6 karakter
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <div className="flex justify-center pt-2">
+                <div className="flex-shrink-0 px-6 py-4 border-t" style={{ backgroundColor: '#fafafa' }}>
                   <Button
                     onClick={handleAddUser}
                     disabled={isLoading}
-                    className="bg-emerald-400 px-8 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full h-12 bg-emerald-500 hover:bg-emerald-600 text-white disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                   >
                     {isLoading ? "Menambahkan..." : "Tambah User"}
                   </Button>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </SheetContent>
+            </Sheet>
+
+            {/* Image Cropper Dialog */}
+            <Dialog open={showCropper} onOpenChange={setShowCropper}>
+              <DialogContent className="max-w-2xl p-0">
+                <div className="flex flex-col h-[600px]">
+                  {/* Header */}
+                  <div className="px-4 py-3 border-b flex items-center justify-between bg-emerald-500">
+                    <h3 className="text-lg font-semibold text-white">Crop Image</h3>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setShowCropper(false)}
+                      className="text-white hover:bg-white/20"
+                    >
+                      <XIcon className="h-5 w-5" />
+                    </Button>
+                  </div>
+
+                  {/* Cropper */}
+                  <div className="relative flex-1 bg-black">
+                    {selectedImage && (
+                      <Cropper
+                        image={selectedImage}
+                        crop={crop}
+                        zoom={zoom}
+                        aspect={1}
+                        cropShape="round"
+                        showGrid={false}
+                        onCropChange={setCrop}
+                        onZoomChange={setZoom}
+                        onCropComplete={onCropComplete}
+                      />
+                    )}
+                  </div>
+
+                  {/* Controls */}
+                  <div className="px-6 py-4 border-t space-y-4" style={{ backgroundColor: '#fafafa' }}>
+                    {/* Zoom Slider */}
+                    <div className="flex items-center gap-3">
+                      <ZoomOut className="h-5 w-5 text-gray-500" />
+                      <input
+                        type="range"
+                        min={1}
+                        max={3}
+                        step={0.1}
+                        value={zoom}
+                        onChange={(e) => setZoom(parseFloat(e.target.value))}
+                        className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500"
+                      />
+                      <ZoomIn className="h-5 w-5 text-gray-500" />
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowCropper(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={createCroppedImage}
+                        className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                      >
+                        Apply
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
 
           {/* Stats Cards */}
-          <div className="grid gap-6 grid-cols-1 md:grid-cols-2">
+          <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-2">
             <Card className="border-0 shadow-sm">
-              <CardContent className="p-6">
+              <CardContent className="p-4 md:p-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Total User</p>
@@ -578,7 +863,7 @@ export default function DashboardPage() {
             </Card>
 
             <Card className="border-0 shadow-sm">
-              <CardContent className="p-6">
+              <CardContent className="p-4 md:p-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Total Calls</p>
@@ -598,9 +883,9 @@ export default function DashboardPage() {
 
           {/* Recent Join Table */}
           <Card className="border-0 shadow-sm">
-            <CardContent className="p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Recent Join</h3>
+            <CardContent className="p-4 md:p-6">
+              <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <h3 className="text-base md:text-lg font-semibold text-gray-900">Recent Join</h3>
                 <div className="text-sm text-gray-500">
                   Total: {totalUsers} users
                 </div>
@@ -620,57 +905,157 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="font-semibold text-gray-900">NAME</TableHead>
-                        <TableHead className="font-semibold text-gray-900">
-                          JOINING DATE
-                        </TableHead>
-                        <TableHead className="font-semibold text-gray-900">
-                          ACTIVE/DEACTIVE
-                        </TableHead>
-                        <TableHead className="font-semibold text-gray-900">ACTION</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {users.map((user) => {
-                        // Handle createdAt - could be Timestamp or string
-                        let dateStr = 'N/A';
-                        try {
-                          if (user.createdAt) {
-                            // If it's a Firestore Timestamp, it will have toDate() method
-                            const createdAt = user.createdAt as any;
-                            const date = createdAt.toDate ? createdAt.toDate() : new Date(user.createdAt);
-                            dateStr = date.toLocaleDateString('id-ID');
+                  {/* Desktop Table View - Hidden on Mobile */}
+                  <div className="hidden md:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="font-semibold text-gray-900">NAME</TableHead>
+                          <TableHead className="font-semibold text-gray-900">
+                            JOINING DATE
+                          </TableHead>
+                          <TableHead className="font-semibold text-gray-900">
+                            ACTIVE/DEACTIVE
+                          </TableHead>
+                          <TableHead className="font-semibold text-gray-900">ACTION</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {users.map((user) => {
+                          // Handle createdAt - could be Timestamp or string
+                          let dateStr = 'N/A';
+                          try {
+                            if (user.createdAt) {
+                              // If it's a Firestore Timestamp, it will have toDate() method
+                              const createdAt = user.createdAt as any;
+                              const date = createdAt.toDate ? createdAt.toDate() : new Date(user.createdAt);
+                              dateStr = date.toLocaleDateString('id-ID');
+                            }
+                          } catch (e) {
+                            console.error('Error parsing date:', e);
                           }
-                        } catch (e) {
-                          console.error('Error parsing date:', e);
-                        }
 
-                        return (
-                          <TableRow key={user.id}>
-                            <TableCell className="font-medium">
-                              {user.username || user.displayName || user.email}
-                            </TableCell>
-                            <TableCell>
-                              {dateStr}
-                            </TableCell>
-                            <TableCell>
-                              <Switch
-                                checked={user.isActive}
-                                onCheckedChange={() => handleStatusToggle(user.id, user.isActive)}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-2">
+                          return (
+                            <TableRow key={user.id}>
+                              <TableCell className="font-medium">
+                                {user.username || user.displayName || user.email}
+                              </TableCell>
+                              <TableCell>
+                                {dateStr}
+                              </TableCell>
+                              <TableCell>
+                                <Switch
+                                  checked={user.isActive}
+                                  onCheckedChange={() => handleStatusToggle(user.id, user.isActive)}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleOpenPasswordDialog(user.id)}
+                                    className="border-blue-300 text-blue-400 hover:bg-blue-50"
+                                  >
+                                    <Key className="h-4 w-4" />
+                                  </Button>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-red-300 text-red-400 hover:bg-red-50"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Hapus User</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Apakah Anda yakin ingin menghapus user &quot;{user.displayName || user.email}&quot;?
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel className="bg-gray-100 text-gray-700 hover:bg-gray-200">
+                                          Batal
+                                        </AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => handleDeleteUser(user.id)}
+                                          className="bg-red-400 text-white hover:bg-red-500"
+                                        >
+                                          Hapus
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Mobile Card View - Hidden on Desktop */}
+                  <div className="md:hidden space-y-4">
+                    {users.map((user) => {
+                      // Handle createdAt - could be Timestamp or string
+                      let dateStr = 'N/A';
+                      try {
+                        if (user.createdAt) {
+                          // If it's a Firestore Timestamp, it will have toDate() method
+                          const createdAt = user.createdAt as any;
+                          const date = createdAt.toDate ? createdAt.toDate() : new Date(user.createdAt);
+                          dateStr = date.toLocaleDateString('id-ID');
+                        }
+                      } catch (e) {
+                        console.error('Error parsing date:', e);
+                      }
+
+                      return (
+                        <Card key={user.id} className="border border-gray-200">
+                          <CardContent className="p-4">
+                            <div className="space-y-3">
+                              {/* Name */}
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-xs text-gray-500 mb-1">NAME</p>
+                                  <p className="font-medium text-gray-900">
+                                    {user.username || user.displayName || user.email}
+                                  </p>
+                                </div>
+                                <Switch
+                                  checked={user.isActive}
+                                  onCheckedChange={() => handleStatusToggle(user.id, user.isActive)}
+                                />
+                              </div>
+
+                              {/* Date */}
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">JOINING DATE</p>
+                                <p className="text-sm text-gray-700">{dateStr}</p>
+                              </div>
+
+                              {/* Status */}
+                              <div>
+                                <p className="text-xs text-gray-500 mb-1">STATUS</p>
+                                <p className={`text-sm font-medium ${user.isActive ? 'text-emerald-500' : 'text-gray-400'}`}>
+                                  {user.isActive ? 'Active' : 'Inactive'}
+                                </p>
+                              </div>
+
+                              {/* Actions */}
+                              <div className="pt-2 flex gap-2">
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   onClick={() => handleOpenPasswordDialog(user.id)}
-                                  className="border-blue-300 text-blue-400 hover:bg-blue-50"
+                                  className="flex-1 border-blue-300 text-blue-400 hover:bg-blue-50"
                                 >
-                                  <Key className="h-4 w-4" />
+                                  <Key className="h-4 w-4 mr-2" />
+                                  Change Password
                                 </Button>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
@@ -703,25 +1088,25 @@ export default function DashboardPage() {
                                   </AlertDialogContent>
                                 </AlertDialog>
                               </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
 
                   {/* Pagination Controls */}
-                  <div className="mt-4 flex items-center justify-between">
+                  <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
                     <div className="text-sm text-gray-600">
                       Page {currentPage} of {totalPages || 1}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 w-full sm:w-auto">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={loadPreviousPage}
                         disabled={currentPage === 1 || usersLoading}
-                        className="disabled:opacity-50"
+                        className="disabled:opacity-50 flex-1 sm:flex-none"
                       >
                         Previous
                       </Button>
@@ -730,7 +1115,7 @@ export default function DashboardPage() {
                         size="sm"
                         onClick={loadNextPage}
                         disabled={!lastDoc || currentPage >= totalPages || usersLoading}
-                        className="disabled:opacity-50"
+                        className="disabled:opacity-50 flex-1 sm:flex-none"
                       >
                         Next
                       </Button>

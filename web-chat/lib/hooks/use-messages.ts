@@ -352,6 +352,32 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     [optimisticMessages, sendTextMessage, chatId, isGroupChat]
   );
 
+  const deleteMessage = useCallback(
+    async (messageId: string) => {
+      if (!chatId) return;
+
+      const result = await messageRepository.deleteMessage(chatId, messageId, isGroupChat);
+
+      if (result.status === 'error') {
+        setError(result.message);
+      }
+    },
+    [chatId, isGroupChat]
+  );
+
+  const editMessage = useCallback(
+    async (messageId: string, newText: string) => {
+      if (!chatId) return;
+
+      const result = await messageRepository.editMessage(chatId, messageId, newText, isGroupChat);
+
+      if (result.status === 'error') {
+        setError(result.message);
+      }
+    },
+    [chatId, isGroupChat]
+  );
+
   // Combine real messages and optimistic messages, sorted by timestamp
   // First, deduplicate to avoid showing same message twice
   const messageMap = new Map<string, Message>();
@@ -412,5 +438,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     sendDocument,
     markAsRead,
     retryMessage,
+    deleteMessage,
+    editMessage,
   };
 }

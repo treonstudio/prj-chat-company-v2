@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
+import Image from "next/image";
 
 function Page() {
   const [username, setUsername] = useState('');
@@ -120,25 +121,31 @@ function Page() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md border-0 shadow-lg">
+    <div className="flex min-h-screen items-center justify-center relative overflow-hidden" style={{ backgroundColor: '#f6f1eb' }}>
+      {/* Multiple Soft Gradient Blur Layers */}
+      <div className="absolute top-0 -left-20 w-[500px] h-[500px] bg-emerald-200/20 rounded-full blur-[150px] animate-pulse"></div>
+      <div className="absolute bottom-0 -right-20 w-[500px] h-[500px] bg-teal-200/20 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }}></div>
+      <div className="absolute top-1/3 right-1/4 w-[400px] h-[400px] bg-green-200/15 rounded-full blur-[140px] animate-pulse" style={{ animationDelay: '1s' }}></div>
+      <div className="absolute inset-0 bg-gradient-to-tr from-teal-300/10 via-emerald-200/5 to-green-300/10 blur-[120px]"></div>
+      <div className="absolute inset-0 bg-gradient-to-bl from-green-200/10 via-teal-100/5 to-emerald-300/10 blur-[120px]"></div>
+      <div className="absolute inset-0 bg-gradient-to-r from-emerald-100/5 via-transparent to-teal-200/5 blur-3xl"></div>
+
+      {/* Content */}
+      <Card className="w-full max-w-md border-0 shadow-2xl relative z-10 backdrop-blur-sm bg-white/95">
         <CardContent className="p-8">
           <div className="mb-8 text-center">
             <div className="mb-4 flex justify-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-emerald-500">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="h-10 w-10 text-white"
-                >
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-              </div>
+              <Image
+                src="/logo.png"
+                alt="Chatku Logo"
+                width={80}
+                height={80}
+                className="h-20 w-auto"
+                priority
+              />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900">Chatku Admin</h1>
-            <p className="mt-2 text-sm text-gray-600">Sign in to your account</p>
+            <h1 className="text-3xl font-bold text-gray-700">Chatku Admin</h1>
+            <p className="mt-2 text-sm text-gray-500">Sign in to your account</p>
           </div>
 
           <form onSubmit={handleForm} className="space-y-6">
@@ -149,7 +156,7 @@ function Page() {
             )}
 
             <div>
-              <label htmlFor="username" className="mb-2 block text-sm font-medium text-gray-700">
+              <label htmlFor="username" className="mb-2 block text-sm font-medium text-gray-500">
                 Email / Username
               </label>
               <Input
@@ -161,7 +168,8 @@ function Page() {
                 name="username"
                 id="username"
                 placeholder="admin@example.com or admin"
-                className={`h-12 ${usernameError ? "border-red-500 focus:border-red-500" : ""}`}
+                className={`h-12 text-gray-700 placeholder:text-gray-400 focus:ring-0 shadow-none ${usernameError ? "focus:border-red-300" : "focus:border-emerald-300"}`}
+                style={{ borderColor: usernameError ? '#fca5a5' : '#e6e7ea', borderWidth: '1.6px' }}
                 value={username}
                 disabled={loading}
               />
@@ -171,7 +179,7 @@ function Page() {
             </div>
 
             <div>
-              <label htmlFor="password" className="mb-2 block text-sm font-medium text-gray-700">
+              <label htmlFor="password" className="mb-2 block text-sm font-medium text-gray-500">
                 Password
               </label>
               <div className="relative">
@@ -184,14 +192,15 @@ function Page() {
                   name="password"
                   id="password"
                   placeholder="Enter your password"
-                  className={`h-12 pr-10 ${passwordError ? "border-red-500 focus:border-red-500" : ""}`}
+                  className={`h-12 pr-10 text-gray-700 placeholder:text-gray-400 focus:ring-0 shadow-none ${passwordError ? "focus:border-red-300" : "focus:border-emerald-300"}`}
+                  style={{ borderColor: passwordError ? '#fca5a5' : '#e6e7ea', borderWidth: '1.6px' }}
                   value={password}
                   disabled={loading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   disabled={loading}
                 >
                   {showPassword ? (

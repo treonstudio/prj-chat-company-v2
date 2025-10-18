@@ -8,6 +8,7 @@ export enum UserStatus {
 
 export interface User {
   userId: string;
+  username?: string;
   displayName: string;
   email: string;
   imageURL?: string; // Firebase uses imageURL (capital URL)

@@ -61,16 +61,17 @@ export function Sidebar({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col relative overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col relative overflow-hidden" style={{ backgroundColor: '#fafafa' }}>
       {/* Main Sidebar Content */}
       <div
         className={`absolute inset-0 transition-transform duration-300 ease-in-out ${
           showProfile ? '-translate-x-full' : 'translate-x-0'
         }`}
+        style={{ backgroundColor: '#fafafa' }}
       >
         <div className="flex h-full min-h-0 flex-col">
       {/* Sticky header: user info + search */}
-      <div className="sticky top-0 z-10 bg-card">
+      <div className="sticky top-0 z-10 shadow-sm" style={{ backgroundColor: '#fafafa' }}>
         <div className="flex items-center justify-between px-4 py-3">
           <button
             className="flex items-center gap-3 hover:bg-muted rounded-lg px-2 py-1 -ml-2 transition-colors"
@@ -80,9 +81,9 @@ export function Sidebar({
               <AvatarImage src={currentUserData.imageURL || currentUserData.imageUrl || "/placeholder-user.jpg"} alt="" />
               <AvatarFallback aria-hidden>{currentUserName?.slice(0, 2).toUpperCase() || 'U'}</AvatarFallback>
             </Avatar>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{currentUserName || 'User'}</p>
-              <p className="truncate text-xs text-muted-foreground">Online</p>
+            <div className="min-w-0 text-left">
+              <p className="truncate text-sm font-medium text-left">{currentUserName || 'User'}</p>
+              <p className="truncate text-xs text-muted-foreground text-left">{currentUserData.username || currentUserData.userId || ''}</p>
             </div>
           </button>
 
@@ -166,9 +167,9 @@ export function Sidebar({
               const isGroup = c.chatType === 'GROUP'
               const timeAgo = formatDistanceToNow(c.lastMessageTime.toDate(), { addSuffix: true })
 
-              // Truncate long messages with ellipsis (max 48 chars)
-              const truncatedMessage = c.lastMessage.length > 48
-                ? c.lastMessage.slice(0, 48) + '...'
+              // Truncate long messages with ellipsis (max 40 chars)
+              const truncatedMessage = c.lastMessage.length > 40
+                ? c.lastMessage.slice(0, 40) + '...'
                 : c.lastMessage
 
               return (
@@ -184,9 +185,9 @@ export function Sidebar({
                     <div className="flex items-start gap-3">
                       <Avatar className="h-10 w-10 shrink-0">
                         <AvatarImage src={avatar || "/placeholder-user.jpg"} alt="" />
-                        <AvatarFallback aria-hidden>
+                        <AvatarFallback aria-hidden className={isGroup ? "bg-muted border border-border" : ""}>
                           {isGroup ? (
-                            <Users className="h-5 w-5 text-muted-foreground" />
+                            <Users className="h-5 w-5 text-muted-foreground fill-muted-foreground" />
                           ) : (
                             name?.slice(0, 2).toUpperCase()
                           )}
@@ -198,7 +199,7 @@ export function Sidebar({
                           <span className="shrink-0 text-[11px] text-muted-foreground whitespace-nowrap leading-tight">{timeAgo.replace('about ', '')}</span>
                         </div>
                         <div className="flex items-center justify-between gap-2 mt-1">
-                          <p className="truncate text-xs text-muted-foreground flex-1 leading-tight overflow-hidden text-ellipsis whitespace-nowrap">
+                          <p className="text-xs text-muted-foreground flex-1 leading-tight overflow-hidden text-ellipsis whitespace-nowrap break-all line-clamp-1">
                             {truncatedMessage}
                           </p>
                           {c.unreadCount > 0 ? (

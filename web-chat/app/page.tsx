@@ -59,6 +59,10 @@ export default function Page() {
                 setSelectedChatId(null);
                 setSelectedChatIsGroup(false);
               }}
+              onChatSelect={(chatId, isGroup) => {
+                setSelectedChatId(chatId);
+                setSelectedChatIsGroup(isGroup);
+              }}
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-muted-foreground">

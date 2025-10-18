@@ -751,4 +751,232 @@ export class MessageRepository {
       console.error('Error updating user chat for group:', error);
     }
   }
+
+  /**
+   * Delete a message (soft delete - changes text to "Pesan ini dihapus")
+   */
+  async deleteMessage(
+    chatId: string,
+    messageId: string,
+    isGroupChat: boolean
+  ): Promise<Resource<void>> {
+    try {
+      const collection_name = isGroupChat
+        ? this.GROUP_CHATS_COLLECTION
+        : this.DIRECT_CHATS_COLLECTION;
+
+      const messageRef = doc(
+        db(),
+        collection_name,
+        chatId,
+        this.MESSAGES_SUBCOLLECTION,
+        messageId
+      );
+
+      const timestamp = Timestamp.now();
+
+      // Update message to show as deleted
+      await updateDoc(messageRef, {
+        text: 'Pesan ini dihapus',
+        type: MessageType.TEXT,
+        mediaUrl: null,
+        mediaMetadata: null,
+        deletedAt: timestamp,
+        updatedAt: timestamp,
+      });
+
+      // Check if this was the last message and update chat
+      const chatRef = doc(db(), collection_name, chatId);
+      const chatSnapshot = await getDoc(chatRef);
+      const lastMessage = chatSnapshot.get('lastMessage');
+
+      if (lastMessage && lastMessage.timestamp) {
+        const messageSnapshot = await getDoc(messageRef);
+        const messageTimestamp = messageSnapshot.get('timestamp');
+
+        // If this message's timestamp matches the last message timestamp, update it
+        if (messageTimestamp && messageTimestamp.seconds === lastMessage.timestamp.seconds) {
+          await updateDoc(chatRef, {
+            'lastMessage.text': 'Pesan ini dihapus',
+            'lastMessage.type': MessageType.TEXT,
+            updatedAt: timestamp,
+          });
+
+          // Update userChats for all participants
+          const participants = chatSnapshot.get('participants') as string[];
+          if (participants && participants.length > 0) {
+            for (const participantId of participants) {
+              if (isGroupChat) {
+                await this.updateUserChatForGroupChat(
+                  participantId,
+                  chatId,
+                  chatSnapshot.get('name') || 'Group Chat',
+                  chatSnapshot.get('avatarUrl'),
+                  'Pesan ini dihapus',
+                  timestamp,
+                  lastMessage.senderId
+                );
+              } else {
+                await this.updateUserChat(
+                  participantId,
+                  chatId,
+                  'Pesan ini dihapus',
+                  timestamp,
+                  lastMessage.senderId,
+                  participants
+                );
+              }
+            }
+          }
+        }
+      }
+
+      return Resource.success(undefined);
+    } catch (error: any) {
+      console.error('Error deleting message:', error);
+      return Resource.error(error.message || 'Failed to delete message');
+    }
+  }
+
+  /**
+   * Edit a text message
+   */
+  async editMessage(
+    chatId: string,
+    messageId: string,
+    newText: string,
+    isGroupChat: boolean
+  ): Promise<Resource<void>> {
+    try {
+      if (!newText.trim()) {
+        return Resource.error('Message text cannot be empty');
+      }
+
+      const collection_name = isGroupChat
+        ? this.GROUP_CHATS_COLLECTION
+        : this.DIRECT_CHATS_COLLECTION;
+
+      const messageRef = doc(
+        db(),
+        collection_name,
+        chatId,
+        this.MESSAGES_SUBCOLLECTION,
+        messageId
+      );
+
+      const timestamp = Timestamp.now();
+
+      // Update message text
+      await updateDoc(messageRef, {
+        text: newText.trim(),
+        editedAt: timestamp,
+        updatedAt: timestamp,
+      });
+
+      // Check if this was the last message and update chat
+      const chatRef = doc(db(), collection_name, chatId);
+      const chatSnapshot = await getDoc(chatRef);
+      const lastMessage = chatSnapshot.get('lastMessage');
+
+      if (lastMessage && lastMessage.timestamp) {
+        const messageSnapshot = await getDoc(messageRef);
+        const messageTimestamp = messageSnapshot.get('timestamp');
+
+        // If this message's timestamp matches the last message timestamp, update it
+        if (messageTimestamp && messageTimestamp.seconds === lastMessage.timestamp.seconds) {
+          await updateDoc(chatRef, {
+            'lastMessage.text': newText.trim(),
+            updatedAt: timestamp,
+          });
+
+          // Update userChats for all participants
+          const participants = chatSnapshot.get('participants') as string[];
+          if (participants && participants.length > 0) {
+            for (const participantId of participants) {
+              if (isGroupChat) {
+                await this.updateUserChatForGroupChat(
+                  participantId,
+                  chatId,
+                  chatSnapshot.get('name') || 'Group Chat',
+                  chatSnapshot.get('avatarUrl'),
+                  newText.trim(),
+                  timestamp,
+                  lastMessage.senderId
+                );
+              } else {
+                await this.updateUserChat(
+                  participantId,
+                  chatId,
+                  newText.trim(),
+                  timestamp,
+                  lastMessage.senderId,
+                  participants
+                );
+              }
+            }
+          }
+        }
+      }
+
+      return Resource.success(undefined);
+    } catch (error: any) {
+      console.error('Error editing message:', error);
+      return Resource.error(error.message || 'Failed to edit message');
+    }
+  }
+
+  /**
+   * Forward a message to another chat
+   */
+  async forwardMessage(
+    messageId: string,
+    sourceChatId: string,
+    targetChatId: string,
+    currentUserId: string
+  ): Promise<Resource<void>> {
+    try {
+      // Get the original message
+      const sourceCollection = collection(db(), this.DIRECT_CHATS_COLLECTION, sourceChatId, this.MESSAGES_SUBCOLLECTION);
+      const sourceGroupCollection = collection(db(), this.GROUP_CHATS_COLLECTION, sourceChatId, this.MESSAGES_SUBCOLLECTION);
+
+      // Try direct chat first
+      let messageDoc = await getDoc(doc(sourceCollection, messageId));
+      let isSourceGroupChat = false;
+
+      // If not found in direct chat, try group chat
+      if (!messageDoc.exists()) {
+        messageDoc = await getDoc(doc(sourceGroupCollection, messageId));
+        isSourceGroupChat = true;
+      }
+
+      if (!messageDoc.exists()) {
+        return Resource.error('Message not found');
+      }
+
+      const originalMessage = messageDoc.data() as Message;
+
+      // Check if target is a group chat
+      const targetGroupChatDoc = await getDoc(doc(db(), this.GROUP_CHATS_COLLECTION, targetChatId));
+      const isTargetGroupChat = targetGroupChatDoc.exists();
+
+      // Create a new message with forwarded content
+      const newMessage: Message = {
+        messageId: `${Date.now()}_${Math.random().toString(36).substring(7)}`,
+        text: originalMessage.text,
+        senderId: currentUserId,
+        senderName: '', // Will be filled by sendMessage
+        timestamp: Timestamp.now(),
+        status: MessageStatus.SENT,
+        type: originalMessage.type,
+        ...(originalMessage.mediaUrl && { mediaUrl: originalMessage.mediaUrl }),
+        ...(originalMessage.mediaMetadata && { mediaMetadata: originalMessage.mediaMetadata }),
+      };
+
+      // Send the forwarded message
+      return await this.sendMessage(targetChatId, newMessage, isTargetGroupChat);
+    } catch (error: any) {
+      console.error('Error forwarding message:', error);
+      return Resource.error(error.message || 'Failed to forward message');
+    }
+  }
 }

@@ -9,6 +9,7 @@ interface UserData {
   displayName?: string;
   createdAt?: any;
   isActive?: boolean;
+  isDeleted?: boolean;
   role?: string;
   [key: string]: any;
 }
@@ -33,13 +34,19 @@ async function getAllUsersSorted(excludeUserId?: string): Promise<UserData[]> {
   // Fetch all users
   const querySnapshot = await firestore.getDocs(usersCol);
 
-  // Map and filter out excluded user
+  // Map and filter out excluded user and deleted users
   const allUsers: UserData[] = querySnapshot.docs
     .map((doc) => ({
       id: doc.id,
       ...doc.data(),
     } as UserData))
-    .filter((user) => !excludeUserId || user.id !== excludeUserId);
+    .filter((user) => {
+      // Filter out excluded user
+      if (excludeUserId && user.id === excludeUserId) return false;
+      // Filter out deleted users (isDeleted === true)
+      if (user.isDeleted === true) return false;
+      return true;
+    });
 
   // Sort in memory by createdAt descending
   allUsers.sort((a, b) => {
@@ -108,12 +115,13 @@ export async function getUsersCount(excludeUserId?: string) {
 
     const querySnapshot = await firestore.getDocs(usersRef);
 
-    if (excludeUserId) {
-      // Count all users except the excluded one
-      count = querySnapshot.docs.filter(doc => doc.id !== excludeUserId).length;
-    } else {
-      count = querySnapshot.size;
-    }
+    // Count all users except the excluded one and deleted users
+    count = querySnapshot.docs.filter(doc => {
+      if (excludeUserId && doc.id === excludeUserId) return false;
+      const data = doc.data();
+      if (data.isDeleted === true) return false;
+      return true;
+    }).length;
   } catch (e) {
     console.error("[getUsersCount] ERROR:", e);
     error = e;

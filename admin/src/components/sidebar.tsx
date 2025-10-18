@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { useSidebar } from "@/context/SidebarContext"
 import { getAuth, signOut } from "firebase/auth"
 import firebase_app from "@/firebase/config"
+import Image from "next/image"
 
 const auth = getAuth(firebase_app)
 
@@ -55,16 +56,15 @@ export function Sidebar() {
           "flex items-center gap-2 px-6 py-6",
           isCollapsed && "justify-center px-3"
         )}>
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-500">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              className="h-6 w-6"
-            >
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center">
+            <Image
+              src="/logo.png"
+              alt="Chatku Logo"
+              width={40}
+              height={40}
+              className="h-10 w-10"
+              priority
+            />
           </div>
           {!isCollapsed && (
             <span className="text-xl font-semibold whitespace-nowrap">Chatku</span>
