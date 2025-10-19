@@ -269,14 +269,23 @@ export class ChatRepository {
    */
   async leaveGroupChat(
     userId: string,
-    chatId: string
+    chatId: string,
+    userName: string
   ): Promise<Resource<void>> {
     try {
+      // Remove any prefix from chatId if exists
+      const cleanChatId = chatId.replace('direct_', '').replace('group_', '');
+
       // Get group chat to verify it exists and user is a participant
-      const groupChatRef = doc(db(), this.GROUP_CHATS_COLLECTION, chatId);
+      const groupChatRef = doc(db(), this.GROUP_CHATS_COLLECTION, cleanChatId);
       const groupChatDoc = await getDoc(groupChatRef);
 
       if (!groupChatDoc.exists()) {
+        console.error('Group chat not found:', {
+          originalChatId: chatId,
+          cleanChatId,
+          collection: this.GROUP_CHATS_COLLECTION
+        });
         return Resource.error('Group chat not found');
       }
 
@@ -287,7 +296,6 @@ export class ChatRepository {
         return Resource.error('You are not a member of this group');
       }
 
-      // Use batch to update group chat and user's chat list
       const batch = writeBatch(db());
 
       // Remove user from group participants
@@ -295,27 +303,79 @@ export class ChatRepository {
         (id) => id !== userId
       );
 
-      // If this is the last participant, optionally delete the group
-      // Or keep it for history - we'll keep it here
+      // Check if user is admin
+      const isAdmin = (groupChat.admins || []).includes(userId);
+      let updatedAdmins = [...(groupChat.admins || [])];
+
+      if (isAdmin) {
+        // Remove from admins
+        updatedAdmins = updatedAdmins.filter((id) => id !== userId);
+
+        // Rule 1: If admin leaves and there are other participants, randomly pick new admin
+        if (updatedParticipants.length > 0 && updatedAdmins.length === 0) {
+          const randomIndex = Math.floor(Math.random() * updatedParticipants.length);
+          const newAdmin = updatedParticipants[randomIndex];
+          updatedAdmins = [newAdmin];
+        }
+      }
+
+      // Track when user left (for filtering messages)
+      const leftAt = Timestamp.now();
+      const leftMembers = groupChat.leftMembers || {};
+      leftMembers[userId] = leftAt;
+
+      // Update group chat
       batch.update(groupChatRef, {
         participants: updatedParticipants,
-        updatedAt: Timestamp.now(),
+        admins: updatedAdmins,
+        leftMembers: leftMembers,
+        updatedAt: leftAt,
       });
 
-      // Remove chat from user's chat list
-      const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, userId);
-      const userChatsDoc = await getDoc(userChatsRef);
+      // Rule 7: Create system message for leave notification
+      const messagesRef = collection(
+        db(),
+        this.GROUP_CHATS_COLLECTION,
+        cleanChatId,
+        'messages'
+      );
+      const systemMessageRef = doc(messagesRef);
 
-      if (userChatsDoc.exists()) {
-        const userData = userChatsDoc.data() as UserChats;
-        const updatedChats = userData.chats.filter(
-          (chat) => chat.chatId !== chatId
-        );
+      batch.set(systemMessageRef, {
+        messageId: systemMessageRef.id,
+        senderId: 'system',
+        senderName: 'System',
+        text: `${userName} telah keluar dari grup`,
+        type: 'TEXT',
+        timestamp: Timestamp.now(),
+        status: 'SENT',
+        readBy: [],
+      });
 
-        batch.update(userChatsRef, {
-          chats: updatedChats,
-          updatedAt: Timestamp.now(),
-        });
+      // Update last message in all participants' userChats
+      for (const participantId of updatedParticipants) {
+        const participantChatsRef = doc(db(), this.USER_CHATS_COLLECTION, participantId);
+        const participantChatsDoc = await getDoc(participantChatsRef);
+
+        if (participantChatsDoc.exists()) {
+          const participantData = participantChatsDoc.data() as UserChats;
+          const updatedChats = participantData.chats.map((chat) => {
+            // Compare with cleanChatId
+            if (chat.chatId === cleanChatId) {
+              return {
+                ...chat,
+                lastMessage: `${userName} telah keluar dari grup`,
+                lastMessageTime: Timestamp.now(),
+              };
+            }
+            return chat;
+          });
+
+          batch.update(participantChatsRef, {
+            chats: updatedChats,
+            updatedAt: Timestamp.now(),
+          });
+        }
       }
 
       await batch.commit();
@@ -416,9 +476,16 @@ export class ChatRepository {
 
       const batch = writeBatch(db());
 
+      // Remove user from leftMembers if they were previously left
+      const leftMembers = groupChat.leftMembers || {};
+      if (leftMembers[newMemberId]) {
+        delete leftMembers[newMemberId];
+      }
+
       // Add user to group participants
       batch.update(groupChatRef, {
         participants: arrayUnion(newMemberId),
+        leftMembers: leftMembers,
         updatedAt: Timestamp.now(),
       });
 

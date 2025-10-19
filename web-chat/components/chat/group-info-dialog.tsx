@@ -139,8 +139,12 @@ export function GroupInfoDialog({
   }
 
   const confirmLeaveGroup = async () => {
+    // Get current user name
+    const currentUser = groupMembers.find(m => m.userId === currentUserId)
+    const userName = currentUser?.displayName || 'User'
+
     setLeaving(true)
-    const result = await chatRepository.leaveGroupChat(currentUserId, chatId)
+    const result = await chatRepository.leaveGroupChat(currentUserId, chatId, userName)
     setLeaving(false)
 
     if (result.status === 'success') {

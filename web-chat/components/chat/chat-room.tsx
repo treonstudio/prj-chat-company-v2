@@ -77,6 +77,8 @@ export function ChatRoom({
   const [isDeletedUser, setIsDeletedUser] = useState(false)
   const [showForwardDialog, setShowForwardDialog] = useState(false)
   const [forwardMessageId, setForwardMessageId] = useState<string | null>(null)
+  const [isParticipant, setIsParticipant] = useState(true)
+  const [leftAt, setLeftAt] = useState<Date | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Load room title and group members
@@ -89,6 +91,17 @@ export function ChatRoom({
           setRoomTitle(groupResult.data.name)
           setRoomAvatar(groupResult.data.avatar || groupResult.data.avatarUrl || '')
           setGroupAdmins(groupResult.data.admins || [])
+
+          // Check if current user is still a participant
+          const isStillParticipant = groupResult.data.participants.includes(currentUserId)
+          setIsParticipant(isStillParticipant)
+
+          // Get leftAt timestamp if user has left
+          if (!isStillParticipant && groupResult.data.leftMembers?.[currentUserId]) {
+            setLeftAt(groupResult.data.leftMembers[currentUserId].toDate())
+          } else {
+            setLeftAt(null)
+          }
 
           // Fetch all group members
           const memberPromises = groupResult.data.participants.map(userId =>
@@ -176,7 +189,7 @@ export function ChatRoom({
   // Handle leave group
   const handleLeaveGroup = async () => {
     setLeaving(true)
-    const result = await chatRepository.leaveGroupChat(currentUserId, chatId)
+    const result = await chatRepository.leaveGroupChat(currentUserId, chatId, currentUserName)
     setLeaving(false)
 
     if (result.status === 'success') {
@@ -302,6 +315,26 @@ export function ChatRoom({
             ) : (
               <>
                 {[...messages].reverse().map((m) => {
+                  // Filter messages: if user left, only show messages before leftAt
+                  if (leftAt && m.timestamp) {
+                    const messageTime = m.timestamp.toDate()
+                    if (messageTime > leftAt) {
+                      // Skip messages after user left
+                      return null
+                    }
+                  }
+
+                  // Check if this is a system message
+                  if (m.senderId === 'system') {
+                    return (
+                      <div key={m.messageId} className="flex justify-center my-2">
+                        <div className="bg-muted/50 px-3 py-1.5 rounded-lg">
+                          <p className="text-xs text-muted-foreground">{m.text}</p>
+                        </div>
+                      </div>
+                    )
+                  }
+
                   const timestamp = m.timestamp?.toDate()
                   const timeStr = timestamp ? format(timestamp, 'HH:mm') : ''
 
@@ -359,6 +392,12 @@ export function ChatRoom({
           <div className="flex items-center justify-center px-4 py-3 bg-muted">
             <p className="text-sm text-muted-foreground">
               You can't send messages to this user
+            </p>
+          </div>
+        ) : isGroupChat && !isParticipant ? (
+          <div className="flex items-center justify-center px-4 py-3 bg-muted">
+            <p className="text-sm text-muted-foreground">
+              You are no longer a participant in this group
             </p>
           </div>
         ) : (

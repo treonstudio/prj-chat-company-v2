@@ -92,6 +92,7 @@ export interface GroupChat {
   avatarUrl?: string; // Alias for backward compatibility
   participants: string[];
   admins?: string[];
+  leftMembers?: Record<string, Timestamp>; // Track when users left
   lastMessage?: LastMessage;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
