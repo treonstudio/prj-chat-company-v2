@@ -96,6 +96,7 @@ export class ChatRepository {
         name: groupName,
         ...(imageUrl && { avatarUrl: imageUrl }),
         participants,
+        admins: [creatorId], // Creator is automatically admin
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       };
@@ -452,6 +453,59 @@ export class ChatRepository {
       return Resource.success(undefined);
     } catch (error: any) {
       return Resource.error(error.message || 'Failed to add member to group');
+    }
+  }
+
+  /**
+   * Update group name
+   */
+  async updateGroupName(
+    chatId: string,
+    newName: string
+  ): Promise<Resource<void>> {
+    try {
+      const groupChatRef = doc(db(), this.GROUP_CHATS_COLLECTION, chatId);
+      const groupChatDoc = await getDoc(groupChatRef);
+
+      if (!groupChatDoc.exists()) {
+        return Resource.error('Group chat not found');
+      }
+
+      const groupChat = groupChatDoc.data() as GroupChat;
+
+      const batch = writeBatch(db());
+
+      // Update group chat name
+      batch.update(groupChatRef, {
+        name: newName,
+        updatedAt: Timestamp.now(),
+      });
+
+      // Update name in all participants' userChats
+      for (const participantId of groupChat.participants) {
+        const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, participantId);
+        const userChatsDoc = await getDoc(userChatsRef);
+
+        if (userChatsDoc.exists()) {
+          const userData = userChatsDoc.data() as UserChats;
+          const updatedChats = userData.chats.map((chat) => {
+            if (chat.chatId === chatId) {
+              return { ...chat, groupName: newName };
+            }
+            return chat;
+          });
+
+          batch.update(userChatsRef, {
+            chats: updatedChats,
+            updatedAt: Timestamp.now(),
+          });
+        }
+      }
+
+      await batch.commit();
+      return Resource.success(undefined);
+    } catch (error: any) {
+      return Resource.error(error.message || 'Failed to update group name');
     }
   }
 

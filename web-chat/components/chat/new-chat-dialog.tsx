@@ -157,7 +157,7 @@ export function NewChatDialog({
                     <div className="flex-1 text-left min-w-0">
                       <p className="text-sm font-medium truncate">{user.displayName}</p>
                       <p className="text-xs text-muted-foreground truncate">
-                        @{user.email.split('@')[0]}
+                        {user.username || user.email?.split('@')[0] || 'Unknown'}
                       </p>
                     </div>
                     {creatingUserId === user.userId && (

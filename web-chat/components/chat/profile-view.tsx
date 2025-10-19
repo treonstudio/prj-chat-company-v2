@@ -357,6 +357,7 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
                   placeholder="Current password"
                   className="pr-10"
                   autoFocus
+                  autoComplete="off"
                 />
                 <Button
                   variant="ghost"
@@ -382,6 +383,7 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
                   disabled={saving}
                   placeholder="New password (min 6 characters)"
                   className="pr-10"
+                  autoComplete="new-password"
                 />
                 <Button
                   variant="ghost"
@@ -407,6 +409,7 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
                   disabled={saving}
                   placeholder="Confirm new password"
                   className="pr-10"
+                  autoComplete="new-password"
                 />
                 <Button
                   variant="ghost"

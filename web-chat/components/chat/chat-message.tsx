@@ -24,6 +24,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 
 type Base = {
   id: string
@@ -471,6 +472,9 @@ export function ChatMessage({
       {data.type === "image" && (
         <Dialog open={showImagePreview} onOpenChange={setShowImagePreview}>
           <DialogContent className="max-w-4xl p-0 overflow-hidden">
+            <DialogTitle asChild>
+              <VisuallyHidden>Image Preview</VisuallyHidden>
+            </DialogTitle>
             <DialogHeader className="absolute top-0 right-0 z-10 p-4 bg-gradient-to-b from-black/50 to-transparent">
               <div className="flex items-center justify-end gap-2">
                 <button
@@ -510,6 +514,9 @@ export function ChatMessage({
       {data.type === "video" && (
         <Dialog open={showVideoPreview} onOpenChange={setShowVideoPreview}>
           <DialogContent className="max-w-4xl p-0 overflow-hidden">
+            <DialogTitle asChild>
+              <VisuallyHidden>Video Preview</VisuallyHidden>
+            </DialogTitle>
             <DialogHeader className="absolute top-0 right-0 z-10 p-4 bg-gradient-to-b from-black/50 to-transparent">
               <div className="flex items-center justify-end gap-2">
                 <button

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, FormEvent } from 'react';
+import { useState, useRef, FormEvent, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -13,8 +13,10 @@ import { ImageIcon, VideoIcon, FileIcon, PlusIcon, SendIcon, Smile, Mic } from '
 import { useFeatureFlags } from '@/lib/contexts/feature-flags.context';
 import { useUsageControls } from '@/lib/contexts/usage-controls.context';
 import { toast } from 'sonner';
+import { useDraftMessage } from '@/lib/hooks/use-draft-message';
 
 interface MessageComposerProps {
+  chatId: string;
   onSendText: (text: string) => void;
   onSendImage: (file: File, shouldCompress: boolean) => void;
   onSendVideo: (file: File) => void;
@@ -24,6 +26,7 @@ interface MessageComposerProps {
 }
 
 export function MessageComposer({
+  chatId,
   onSendText,
   onSendImage,
   onSendVideo,
@@ -31,7 +34,9 @@ export function MessageComposer({
   disabled = false,
   uploading = false,
 }: MessageComposerProps) {
+  const { draft, saveDraft, clearDraft } = useDraftMessage(chatId);
   const [message, setMessage] = useState('');
+  const messageRef = useRef('');
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
@@ -42,6 +47,31 @@ export function MessageComposer({
 
   // WhatsApp character limit for text messages
   const MAX_TEXT_LENGTH = 65536;
+
+  // Load draft when component mounts or chatId changes
+  useEffect(() => {
+    setMessage(draft);
+    messageRef.current = draft;
+  }, [draft]);
+
+  // Update ref whenever message changes
+  useEffect(() => {
+    messageRef.current = message;
+  }, [message]);
+
+  // Save draft when chatId changes (user switches room)
+  useEffect(() => {
+    return () => {
+      // Save current message as draft when switching rooms
+      const currentMessage = messageRef.current;
+      if (currentMessage.trim()) {
+        saveDraft(currentMessage);
+      } else {
+        clearDraft();
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatId]); // Only run when chatId changes
 
   const handleMessageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
@@ -87,6 +117,8 @@ export function MessageComposer({
     if (!disabled) {
       onSendText(message);
       setMessage('');
+      // Clear draft after sending
+      clearDraft();
     }
   };
 

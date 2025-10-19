@@ -197,6 +197,11 @@ export function ChatRoom({
     setRoomAvatar(avatarUrl)
   }
 
+  // Handle name update
+  const handleNameUpdate = (newName: string) => {
+    setRoomTitle(newName)
+  }
+
   // Handle forward message
   const handleForwardClick = (messageId: string) => {
     setForwardMessageId(messageId)
@@ -269,16 +274,6 @@ export function ChatRoom({
             ) : null}
           </div>
         </button>
-        {isGroupChat && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowLeaveDialog(true)}
-            className="ml-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
-        )}
       </header>
       <ScrollArea className="flex-1 min-h-0" style={{ backgroundImage: 'url(/tile-pattern.png)', backgroundRepeat: 'repeat' }}>
         {loading ? (
@@ -368,6 +363,7 @@ export function ChatRoom({
           </div>
         ) : (
           <MessageComposer
+            chatId={chatId}
             onSendText={(text) => sendTextMessage(currentUserId, currentUserName, text, currentUserAvatar)}
             onSendImage={(file, shouldCompress) => sendImage(currentUserId, currentUserName, file, shouldCompress, currentUserAvatar)}
             onSendVideo={(file) => sendVideo(currentUserId, currentUserName, file, currentUserAvatar)}
@@ -391,6 +387,11 @@ export function ChatRoom({
           currentUserId={currentUserId}
           onMembersUpdate={handleMembersUpdate}
           onAvatarUpdate={handleAvatarUpdate}
+          onNameUpdate={handleNameUpdate}
+          onLeaveGroup={() => {
+            setShowGroupInfoDialog(false)
+            onLeaveGroup?.()
+          }}
         />
       )}
 

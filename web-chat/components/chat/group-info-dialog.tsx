@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogFooter } from '@/components/ui/dialog'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,12 +10,25 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
 import { User } from '@/types/models'
-import { UserMinus, UserPlus, Camera, Users as UsersIcon, Loader2, Pencil, Search, X } from 'lucide-react'
+import { UserMinus, UserPlus, Camera, Users as UsersIcon, Loader2, Pencil, Search, X, LogOut } from 'lucide-react'
 import { ChatRepository } from '@/lib/repositories/chat.repository'
 import { toast } from 'sonner'
 import { UserRepository } from '@/lib/repositories/user.repository'
 import { uploadGroupAvatar } from '@/lib/utils/storage.utils'
 import { cn } from '@/lib/utils'
+import { DialogTitle } from '@/components/ui/dialog'
+import { SheetTitle } from '@/components/ui/sheet'
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 const chatRepository = new ChatRepository()
 const userRepository = new UserRepository()
@@ -31,6 +44,8 @@ interface GroupInfoDialogProps {
   currentUserId: string
   onMembersUpdate: (members: User[]) => void
   onAvatarUpdate: (avatarUrl: string) => void
+  onNameUpdate?: (newName: string) => void
+  onLeaveGroup?: () => void
 }
 
 export function GroupInfoDialog({
@@ -44,6 +59,8 @@ export function GroupInfoDialog({
   currentUserId,
   onMembersUpdate,
   onAvatarUpdate,
+  onNameUpdate,
+  onLeaveGroup,
 }: GroupInfoDialogProps) {
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false)
   const [availableUsers, setAvailableUsers] = useState<User[]>([])
@@ -52,6 +69,14 @@ export function GroupInfoDialog({
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
   const [addingMembers, setAddingMembers] = useState(false)
+  const [showRemoveDialog, setShowRemoveDialog] = useState(false)
+  const [memberToRemove, setMemberToRemove] = useState<{ userId: string; userName: string } | null>(null)
+  const [removingMember, setRemovingMember] = useState(false)
+  const [showEditNameDialog, setShowEditNameDialog] = useState(false)
+  const [editingName, setEditingName] = useState('')
+  const [updatingName, setUpdatingName] = useState(false)
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false)
+  const [leaving, setLeaving] = useState(false)
 
   const isCurrentUserAdmin = groupAdmins.includes(currentUserId)
 
@@ -61,17 +86,72 @@ export function GroupInfoDialog({
       return
     }
 
-    if (!confirm(`Remove ${userName} from this group?`)) {
+    setMemberToRemove({ userId, userName })
+    setShowRemoveDialog(true)
+  }
+
+  const confirmRemoveMember = async () => {
+    if (!memberToRemove) return
+
+    setRemovingMember(true)
+    const result = await chatRepository.removeGroupMember(chatId, memberToRemove.userId)
+    setRemovingMember(false)
+
+    if (result.status === 'success') {
+      const updatedMembers = groupMembers.filter(m => m.userId !== memberToRemove.userId)
+      onMembersUpdate(updatedMembers)
+      toast.success(`${memberToRemove.userName} has been removed from the group`)
+      setShowRemoveDialog(false)
+      setMemberToRemove(null)
+    } else if (result.status === 'error') {
+      toast.error(`Failed to remove member: ${result.message}`)
+    }
+  }
+
+  const handleEditName = () => {
+    setEditingName(groupName)
+    setShowEditNameDialog(true)
+  }
+
+  const handleUpdateGroupName = async () => {
+    if (!editingName.trim() || editingName.trim() === groupName) {
+      setShowEditNameDialog(false)
       return
     }
 
-    const result = await chatRepository.removeGroupMember(chatId, userId)
+    setUpdatingName(true)
+    const result = await chatRepository.updateGroupName(chatId, editingName.trim())
+    setUpdatingName(false)
+
     if (result.status === 'success') {
-      const updatedMembers = groupMembers.filter(m => m.userId !== userId)
-      onMembersUpdate(updatedMembers)
-      toast.success(`${userName} has been removed from the group`)
+      toast.success('Group name updated successfully')
+      setShowEditNameDialog(false)
+      if (onNameUpdate) {
+        onNameUpdate(editingName.trim())
+      }
     } else if (result.status === 'error') {
-      toast.error(`Failed to remove member: ${result.message}`)
+      toast.error(`Failed to update group name: ${result.message}`)
+    }
+  }
+
+  const handleLeaveGroup = () => {
+    setShowLeaveDialog(true)
+  }
+
+  const confirmLeaveGroup = async () => {
+    setLeaving(true)
+    const result = await chatRepository.leaveGroupChat(currentUserId, chatId)
+    setLeaving(false)
+
+    if (result.status === 'success') {
+      toast.success('You have left the group')
+      setShowLeaveDialog(false)
+      onOpenChange(false)
+      if (onLeaveGroup) {
+        onLeaveGroup()
+      }
+    } else if (result.status === 'error') {
+      toast.error(`Failed to leave group: ${result.message}`)
     }
   }
 
@@ -191,6 +271,9 @@ export function GroupInfoDialog({
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent className="w-full sm:max-w-md p-0 gap-0" side="right">
+          <SheetTitle asChild>
+            <VisuallyHidden>Group Info</VisuallyHidden>
+          </SheetTitle>
           <ScrollArea className="h-full w-full">
             <div className="flex flex-col min-h-full">
               {/* Group Photo Header */}
@@ -239,6 +322,7 @@ export function GroupInfoDialog({
                   <h2 className="text-xl font-medium flex-1">{groupName}</h2>
                   {isCurrentUserAdmin && (
                     <button
+                      onClick={handleEditName}
                       className="p-2 hover:bg-muted rounded-full transition-colors"
                       aria-label="Edit group name"
                     >
@@ -249,24 +333,6 @@ export function GroupInfoDialog({
                 <p className="text-sm text-muted-foreground">
                   Group · {groupMembers.length} {groupMembers.length === 1 ? 'member' : 'members'}
                 </p>
-              </div>
-
-              <Separator />
-
-              {/* Description Section */}
-              <div className="px-6 py-4 space-y-2">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Description</h3>
-                <p className="text-sm">
-                  A group chat with {groupMembers.length} members.
-                </p>
-              </div>
-
-              <Separator />
-
-              {/* Created Section */}
-              <div className="px-6 py-4 space-y-2">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Created</h3>
-                <p className="text-sm">Group chat</p>
               </div>
 
               <Separator />
@@ -312,7 +378,9 @@ export function GroupInfoDialog({
                           <div className="flex items-center gap-1.5 mb-0.5">
                             <div className="flex items-baseline gap-1 flex-1 min-w-0">
                               <span className="text-sm font-medium truncate">
-                                {member.displayName}
+                                {member.displayName.length > 35
+                                  ? member.displayName.slice(0, 35) + '...'
+                                  : member.displayName}
                               </span>
                               {isCurrentUser && (
                                 <span className="text-sm text-muted-foreground font-normal shrink-0">(You)</span>
@@ -324,7 +392,7 @@ export function GroupInfoDialog({
                               </Badge>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground truncate">{member.email}</p>
+                          <p className="text-xs text-muted-foreground truncate">{member.username || member.email?.split('@')[0]}</p>
                         </div>
                         {canKick && (
                           <Button
@@ -342,6 +410,20 @@ export function GroupInfoDialog({
                   })}
                 </div>
               </div>
+
+              <Separator />
+
+              {/* Leave Group Button */}
+              <div className="px-6 py-4">
+                <Button
+                  variant="ghost"
+                  onClick={handleLeaveGroup}
+                  className="w-full justify-start gap-3 text-destructive hover:text-destructive hover:bg-destructive/10 h-auto py-3"
+                >
+                  <LogOut className="h-5 w-5" />
+                  <span className="text-sm font-medium">Leave Group</span>
+                </Button>
+              </div>
             </div>
           </ScrollArea>
         </SheetContent>
@@ -350,6 +432,9 @@ export function GroupInfoDialog({
       {/* Add Member Dialog */}
       <Dialog open={showAddMemberDialog} onOpenChange={setShowAddMemberDialog}>
         <DialogContent className="sm:max-w-md p-0">
+          <DialogTitle asChild>
+            <VisuallyHidden>Add Members to "{groupName}"</VisuallyHidden>
+          </DialogTitle>
           <div className="flex flex-col h-[600px]">
             {/* Header */}
             <div className="px-6 py-4 border-b">
@@ -364,13 +449,16 @@ export function GroupInfoDialog({
                   {Array.from(selectedUserIds).map((userId) => {
                     const user = availableUsers.find(u => u.userId === userId)
                     if (!user) return null
+                    const displayName = user.displayName && user.displayName.length > 25
+                      ? user.displayName.slice(0, 25) + '...'
+                      : user.displayName || 'Unknown User'
                     return (
                       <Badge
                         key={userId}
                         variant="secondary"
                         className="gap-1 pl-2 pr-1 py-1"
                       >
-                        <span className="text-xs">{user.displayName}</span>
+                        <span className="text-xs">{displayName}</span>
                         <button
                           onClick={() => removeSelectedUser(userId)}
                           className="ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5"
@@ -432,12 +520,16 @@ export function GroupInfoDialog({
                           <Avatar className="h-10 w-10 shrink-0">
                             <AvatarImage src={user.imageURL || user.imageUrl} alt="" />
                             <AvatarFallback className="text-xs">
-                              {user.displayName.slice(0, 2).toUpperCase()}
+                              {user.displayName?.slice(0, 2).toUpperCase() || 'U'}
                             </AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0 text-left">
-                            <p className="text-sm font-medium truncate">{user.displayName}</p>
-                            <p className="text-xs text-muted-foreground truncate">@{user.email.split('@')[0]}</p>
+                            <p className="text-sm font-medium truncate">
+                              {user.displayName && user.displayName.length > 25
+                                ? user.displayName.slice(0, 25) + '...'
+                                : user.displayName || 'Unknown User'}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">@{user.email?.split('@')[0] || 'unknown'}</p>
                           </div>
                           {isSelected && (
                             <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center shrink-0">
@@ -481,6 +573,120 @@ export function GroupInfoDialog({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Remove Member Confirmation Dialog */}
+      <AlertDialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {memberToRemove?.userName} from this group?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action will remove {memberToRemove?.userName} from the group. They can be added back later by a group admin.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removingMember}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                confirmRemoveMember()
+              }}
+              disabled={removingMember}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {removingMember ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Removing...
+                </>
+              ) : (
+                "Remove"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Edit Group Name Dialog */}
+      <Dialog open={showEditNameDialog} onOpenChange={setShowEditNameDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit group name</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              value={editingName}
+              onChange={(e) => setEditingName(e.target.value)}
+              placeholder="Enter group name"
+              maxLength={50}
+              disabled={updatingName}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleUpdateGroupName()
+                }
+              }}
+              autoFocus
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              {editingName.length}/50 characters
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowEditNameDialog(false)}
+              disabled={updatingName}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateGroupName}
+              disabled={updatingName || !editingName.trim() || editingName.trim() === groupName}
+            >
+              {updatingName ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                "Save"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Leave Group Confirmation Dialog */}
+      <AlertDialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave "{groupName}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to leave this group? You will no longer receive messages from this group and will need to be re-added by a member to rejoin.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={leaving}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                confirmLeaveGroup()
+              }}
+              disabled={leaving}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {leaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Leaving...
+                </>
+              ) : (
+                "Leave Group"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

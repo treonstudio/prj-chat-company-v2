@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 const EMAIL_DOMAIN = '@chatapp.com';
 
 export default function LoginPage() {
-  const [emailOrUsername, setEmailOrUsername] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -31,11 +31,8 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
-    // Check if input is email or username
-    // If it contains '@', treat it as email, otherwise convert to email
-    const email = emailOrUsername.includes('@')
-      ? emailOrUsername
-      : emailOrUsername + EMAIL_DOMAIN;
+    // Convert username to email format
+    const email = username + EMAIL_DOMAIN;
 
     const result = await signIn(email, password);
 
@@ -60,15 +57,15 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="emailOrUsername" className="block text-sm font-medium mb-2">
-              Email or Username
+            <label htmlFor="username" className="block text-sm font-medium mb-2">
+              Username
             </label>
             <Input
-              id="emailOrUsername"
+              id="username"
               type="text"
-              value={emailOrUsername}
-              onChange={(e) => setEmailOrUsername(e.target.value)}
-              placeholder="Enter email or username (e.g., kiki or kiki@chatapp.com)"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter your username (e.g., kiki)"
               required
               disabled={loading}
               autoComplete="username"

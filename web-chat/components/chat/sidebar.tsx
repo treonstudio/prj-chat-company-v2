@@ -18,6 +18,7 @@ import { ProfileView } from "./profile-view"
 import { MessageSquarePlus, Users, TriangleAlert, RefreshCw } from "lucide-react"
 import { User } from "@/types/models"
 import { useOnlineStatus } from "@/lib/hooks/use-online-status"
+import { getDraftMessage } from "@/lib/hooks/use-draft-message"
 
 export function Sidebar({
   currentUserId,
@@ -39,6 +40,27 @@ export function Sidebar({
   const { chats, loading, error } = useChatList(currentUserId)
   const { featureFlags } = useFeatureFlags()
   const { isOnline, isSlow } = useOnlineStatus()
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+
+  // Load drafts for all chats
+  useEffect(() => {
+    const loadDrafts = () => {
+      const draftMap: Record<string, string> = {}
+      chats.forEach((chat) => {
+        const draft = getDraftMessage(chat.chatId)
+        if (draft) {
+          draftMap[chat.chatId] = draft
+        }
+      })
+      setDrafts(draftMap)
+    }
+
+    loadDrafts()
+
+    // Set up interval to refresh drafts (in case they're updated in another tab or component)
+    const interval = setInterval(loadDrafts, 1000)
+    return () => clearInterval(interval)
+  }, [chats])
 
   const handleChatClick = (chatId: string, isGroup: boolean) => {
     setActiveId(chatId)
@@ -124,6 +146,7 @@ export function Sidebar({
             onChange={(e) => setQuery(e.target.value)}
             className="bg-white text-foreground placeholder:text-muted-foreground"
             aria-label="Search chats"
+            autoComplete="off"
           />
         </div>
         <Separator />
@@ -199,10 +222,22 @@ export function Sidebar({
               const isGroup = c.chatType === 'GROUP'
               const timeAgo = formatDistanceToNow(c.lastMessageTime.toDate(), { addSuffix: true })
 
+              // Truncate chat name with ellipsis (max 25 chars)
+              const truncatedName = name.length > 25
+                ? name.slice(0, 25) + '...'
+                : name
+
+              // Check if there's a draft for this chat
+              const draftText = drafts[c.chatId]
+              const hasDraft = !!draftText
+
+              // Use draft message if available, otherwise use last message
+              const displayMessage = hasDraft ? draftText : c.lastMessage
+
               // Truncate long messages with ellipsis (max 40 chars)
-              const truncatedMessage = c.lastMessage.length > 40
-                ? c.lastMessage.slice(0, 40) + '...'
-                : c.lastMessage
+              const truncatedMessage = displayMessage.length > 40
+                ? displayMessage.slice(0, 40) + '...'
+                : displayMessage
 
               return (
                 <li key={c.chatId}>
@@ -227,11 +262,14 @@ export function Sidebar({
                       </Avatar>
                       <div className="min-w-0 flex-1 pt-0.5">
                         <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                          <p className="truncate text-sm font-semibold flex-1 leading-tight">{name}</p>
+                          <p className="truncate text-sm font-semibold flex-1 leading-tight">{truncatedName}</p>
                           <span className="shrink-0 text-[11px] text-muted-foreground whitespace-nowrap leading-tight">{timeAgo.replace('about ', '')}</span>
                         </div>
                         <div className="flex items-center justify-between gap-2 mt-1">
                           <p className="text-xs text-muted-foreground flex-1 leading-tight overflow-hidden text-ellipsis whitespace-nowrap break-all line-clamp-1">
+                            {hasDraft && (
+                              <span className="text-green-600 font-medium">Draft: </span>
+                            )}
                             {truncatedMessage}
                           </p>
                           {c.unreadCount > 0 ? (

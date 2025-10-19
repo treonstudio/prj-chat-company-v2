@@ -1153,6 +1153,7 @@ export default function DashboardPage() {
                 }}
                 className={`h-12 pr-10 ${newPasswordError ? "border-red-500 focus:border-red-500" : "border-gray-200"}`}
                 disabled={isLoading}
+                autoComplete="off"
               />
               <button
                 type="button"

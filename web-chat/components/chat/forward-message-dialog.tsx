@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Search, Users, Loader2 } from 'lucide-react'
 import { useChatList } from '@/lib/hooks/use-chat-list'
 import { cn } from '@/lib/utils'
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 
 interface ForwardMessageDialogProps {
   open: boolean
@@ -52,6 +53,9 @@ export function ForwardMessageDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md p-0">
+        <DialogTitle asChild>
+          <VisuallyHidden>Forward Message</VisuallyHidden>
+        </DialogTitle>
         <div className="flex flex-col h-[600px]">
           {/* Header */}
           <div className="px-6 py-4 border-b">
@@ -121,9 +125,11 @@ export function ForwardMessageDialog({
                       </Avatar>
                       <div className="flex-1 min-w-0 text-left">
                         <p className="text-sm font-medium truncate">{displayName}</p>
-                        {isGroup && chat.lastMessage && (
+                        {chat.lastMessage && (
                           <p className="text-xs text-muted-foreground truncate">
-                            {chat.lastMessage}
+                            {chat.lastMessage.length > 35
+                              ? chat.lastMessage.slice(0, 35) + '...'
+                              : chat.lastMessage}
                           </p>
                         )}
                       </div>

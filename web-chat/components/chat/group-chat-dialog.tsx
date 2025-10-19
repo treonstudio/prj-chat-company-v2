@@ -16,6 +16,9 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import Cropper from "react-easy-crop"
 import type { Area } from "react-easy-crop"
+import { DialogTitle } from "@/components/ui/dialog"
+import { SheetTitle } from "@/components/ui/sheet"
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 
 const userRepository = new UserRepository()
 const chatRepository = new ChatRepository()
@@ -255,6 +258,9 @@ export function GroupChatDialog({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="left" className="w-full sm:max-w-md p-0 gap-0">
+        <SheetTitle asChild>
+          <VisuallyHidden>Add Group Participants</VisuallyHidden>
+        </SheetTitle>
         {step === "participants" ? (
           /* Step 1: Select Participants */
           <div className="flex flex-col h-full">
@@ -359,10 +365,12 @@ export function GroupChatDialog({
                         </Avatar>
                         <div className="flex-1 text-left min-w-0">
                           <p className="text-sm font-medium truncate">
-                            {user.displayName}
+                            {user.displayName && user.displayName.length > 24
+                              ? user.displayName.slice(0, 24) + '...'
+                              : user.displayName}
                           </p>
                           <p className="text-xs text-muted-foreground truncate">
-                            {user.email}
+                            {user.username || user.email?.split('@')[0]}
                           </p>
                         </div>
                         <div
@@ -500,6 +508,9 @@ export function GroupChatDialog({
       {/* Image Cropper Dialog */}
       <Dialog open={showCropper} onOpenChange={setShowCropper}>
         <DialogContent className="max-w-2xl p-0">
+          <DialogTitle asChild>
+            <VisuallyHidden>Crop Image</VisuallyHidden>
+          </DialogTitle>
           <div className="flex flex-col h-[600px]">
             {/* Header */}
             <div className="px-4 py-3 border-b flex items-center justify-between">
