@@ -1,6 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
+import { sanitizeMessageText } from "@/lib/utils/text-sanitizer"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import {
@@ -30,6 +31,7 @@ type Base = {
   senderName: string
   senderAvatar?: string
   timestamp: string
+  editedAt?: string
   status?: MessageStatus
   error?: string
 }
@@ -165,8 +167,8 @@ export function ChatMessage({
   )
 
   const maxWidthStyle = data.type === 'text'
-    ? { maxWidth: 'min(640px, 80%)' }
-    : { maxWidth: 'min(640px, 40%)' }
+    ? { maxWidth: '640px' }
+    : { maxWidth: '640px' }
 
   return (
     <>
@@ -252,7 +254,7 @@ export function ChatMessage({
 
           {/* Sender name inside bubble only for group chat and other users */}
           {isGroupChat && !isMe ? (
-            <span className="text-xs font-bold text-primary">{data.senderName}</span>
+            <span className="text-xs font-bold text-primary">{sanitizeMessageText(data.senderName)}</span>
           ) : null}
 
           {data.type === "text" && (
@@ -268,11 +270,11 @@ export function ChatMessage({
                   </span>
                 </div>
               ) : (
-                <div className="text-pretty leading-relaxed break-words">
+                <div className="text-pretty leading-relaxed break-words max-w-[610px] overflow-hidden chat-text-safe">
                   {data.content.length > CHAR_LIMIT && !isExpanded ? (
                     <>
-                      <p className="whitespace-pre-wrap break-words">
-                        {data.content.slice(0, CHAR_LIMIT)}...
+                      <p className="whitespace-pre-wrap break-words overflow-wrap-anywhere chat-text-safe">
+                        {sanitizeMessageText(data.content.slice(0, CHAR_LIMIT))}...
                       </p>
                       <button
                         onClick={() => setIsExpanded(true)}
@@ -286,7 +288,7 @@ export function ChatMessage({
                     </>
                   ) : (
                     <>
-                      <p className="whitespace-pre-wrap break-words">{data.content}</p>
+                      <p className="whitespace-pre-wrap break-words overflow-wrap-anywhere chat-text-safe">{sanitizeMessageText(data.content)}</p>
                       {data.content.length > CHAR_LIMIT && (
                         <button
                           onClick={() => setIsExpanded(false)}
@@ -385,11 +387,11 @@ export function ChatMessage({
           )}
 
           {data.type === "doc" && (
-            <div className="flex items-start gap-2.5 min-w-[240px] max-w-[120px]">
+            <div className="flex items-start gap-3 min-w-[200px] max-w-[280px]">
               {/* simple inline doc icon */}
               <svg
                 aria-hidden
-                className="mt-0.5 h-5 w-5 flex-shrink-0"
+                className="mt-1 h-10 w-10 flex-shrink-0 p-2 rounded-lg bg-white/10"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -400,15 +402,15 @@ export function ChatMessage({
                 <path d="M14 2H8a2 2 0 0 0-2 2v16.5a1.5 1.5 0 0 0 1.5 1.5H16a2 2 0 0 0 2-2V8z" />
                 <path d="M14 2v6h6" />
               </svg>
-              <div className="min-w-0 flex-1 space-y-2">
+              <div className="min-w-0 flex-1 space-y-1.5">
                 <div>
-                  <p className="text-sm font-medium leading-snug break-words">{data.fileName || "Document"}</p>
-                  {data.fileSize ? <p className="text-xs opacity-70 mt-0.5">{data.fileSize}</p> : null}
+                  <p className="text-sm font-medium leading-tight break-words line-clamp-2">{sanitizeMessageText(data.fileName || "Document")}</p>
+                  {data.fileSize && <p className="text-xs opacity-70 mt-1">{data.fileSize}</p>}
                 </div>
                 <Button
                   size="sm"
                   variant={isMe ? "secondary" : "default"}
-                  className="w-full"
+                  className="w-full mt-2 rounded-md"
                   onClick={() => handleDownload(data.content, data.fileName, data.mimeType)}
                   disabled={downloading}
                 >
@@ -426,7 +428,7 @@ export function ChatMessage({
           )}
           <div className={cn("flex items-center gap-1", isMe ? "self-end flex-row-reverse" : "self-start")}>
             <span className={cn("text-[11px]", isMe ? "text-right" : "text-left text-muted-foreground")}>
-              {data.timestamp}
+              {data.editedAt && "Diedit "}{data.timestamp}
             </span>
             {isMe && data.status && (
               <MessageStatusIcon status={data.status} className={isMe ? "text-primary-foreground/70" : ""} />

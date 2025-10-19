@@ -15,8 +15,9 @@ import { formatDistanceToNow } from "date-fns"
 import { NewChatDialog } from "./new-chat-dialog"
 import { GroupChatDialog } from "./group-chat-dialog"
 import { ProfileView } from "./profile-view"
-import { MessageSquarePlus, Users } from "lucide-react"
+import { MessageSquarePlus, Users, TriangleAlert, RefreshCw } from "lucide-react"
 import { User } from "@/types/models"
+import { useOnlineStatus } from "@/lib/hooks/use-online-status"
 
 export function Sidebar({
   currentUserId,
@@ -37,6 +38,7 @@ export function Sidebar({
   const { signOut } = useAuth()
   const { chats, loading, error } = useChatList(currentUserId)
   const { featureFlags } = useFeatureFlags()
+  const { isOnline, isSlow } = useOnlineStatus()
 
   const handleChatClick = (chatId: string, isGroup: boolean) => {
     setActiveId(chatId)
@@ -96,7 +98,7 @@ export function Sidebar({
                     size="icon"
                     aria-label="New chat menu"
                   >
-                    <MessageSquarePlus className="h-5 w-5" />
+                    <MessageSquarePlus className="h-10 w-10" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="min-w-40">
@@ -125,6 +127,36 @@ export function Sidebar({
           />
         </div>
         <Separator />
+
+        {/* Offline/Slow Connection Banner */}
+        {(!isOnline || isSlow) && (
+          <div className="px-4 py-3 bg-[#FFF4CE] border-b border-[#E8D8A3]">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 mt-0.5">
+                <TriangleAlert className="h-5 w-5 text-[#8B7000]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-semibold text-[#3B3B3B] mb-0.5">
+                  {!isOnline ? 'Komputer tidak terhubung' : 'Koneksi lambat'}
+                </h3>
+                <p className="text-xs text-[#54656F] leading-relaxed">
+                  {!isOnline
+                    ? 'Pastikan komputer Anda memiliki koneksi Internet aktif.'
+                    : 'Koneksi Internet Anda tampaknya lambat. Pesan mungkin terlambat terkirim.'}
+                </p>
+                {!isOnline && (
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[#00A884] hover:text-[#008F72] transition-colors"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    <span>Hubungkan ulang</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Chats list */}

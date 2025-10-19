@@ -237,7 +237,7 @@ export function ChatRoom({
   }
 
   return (
-    <div className="flex h-full w-full min-h-0 flex-col">
+    <div className="flex h-full w-full min-h-0 flex-col relative">
       <header className="flex items-center justify-between border-b px-4 py-3 shadow-sm z-10" style={{ backgroundColor: '#fafafa' }}>
         <button
           onClick={() => {
@@ -310,6 +310,10 @@ export function ChatRoom({
                   const timestamp = m.timestamp?.toDate()
                   const timeStr = timestamp ? format(timestamp, 'HH:mm') : ''
 
+                  // Format edited timestamp if exists
+                  const editedAt = m.editedAt?.toDate()
+                  const editedTimeStr = editedAt ? format(editedAt, 'HH:mm') : undefined
+
                   // Map message type to ChatMessage type format
                   const messageType = m.type === 'DOCUMENT' ? 'doc' : m.type.toLowerCase()
 
@@ -332,6 +336,7 @@ export function ChatRoom({
                           senderName: senderName,
                           senderAvatar: m.senderAvatar,
                           timestamp: timeStr,
+                          editedAt: editedTimeStr,
                           status: m.status,
                           error: m.error,
                         }}
@@ -351,9 +356,10 @@ export function ChatRoom({
             )}
           </div>
         )}
+        <div className="h-16" />
       </ScrollArea>
       <Separator />
-      <div className="relative">
+      <div className="absolute bottom-[0.5rem] left-0 right-0 w-full">
         {isDeletedUser ? (
           <div className="flex items-center justify-center px-4 py-3 bg-muted">
             <p className="text-sm text-muted-foreground">

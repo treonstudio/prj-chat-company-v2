@@ -153,3 +153,17 @@
     font-family: var(--font-poppins);
   }
 }
+
+@layer utilities {
+  .overflow-wrap-anywhere {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  /* Prevent vertical text rendering for chat messages */
+  .chat-text-safe {
+    unicode-bidi: normal;
+    direction: ltr;
+    writing-mode: horizontal-tb;
+  }
+}

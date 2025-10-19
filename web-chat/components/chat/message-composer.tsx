@@ -166,7 +166,7 @@ export function MessageComposer({
     <>
       <form onSubmit={handleSubmit} className="flex flex-col gap-2 px-4 py-3">
         {/* WhatsApp-style floating rounded input container */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 bg-white rounded-full px-2 py-1.5 shadow-md">
           {/* Attachment menu - only show if allowSendMedia is true */}
           {featureFlags.allowSendMedia && (
             <DropdownMenu>
@@ -234,17 +234,14 @@ export function MessageComposer({
           {/* Message input - only show if allowSendText is true */}
           {featureFlags.allowSendText ? (
             <>
-              {/* Rounded floating container */}
-              <div className="flex-1 flex items-center bg-white rounded-full px-4 py-2.5 shadow-md">
-                {/* Input field */}
-                <Input
-                  value={message}
-                  onChange={handleMessageChange}
-                  placeholder="Ketik pesan"
-                  disabled={disabled || uploading}
-                  className="flex-1 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-auto text-[15px]"
-                />
-              </div>
+              {/* Input field */}
+              <Input
+                value={message}
+                onChange={handleMessageChange}
+                placeholder="Ketik pesan"
+                disabled={disabled || uploading}
+                className="flex-1 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-auto text-[15px] shadow-none"
+              />
 
               {/* Send button */}
               <Button

@@ -58,6 +58,7 @@ export interface Message {
   timestamp?: Timestamp;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+  editedAt?: Timestamp;
   status?: MessageStatus;
   error?: string;
 }
