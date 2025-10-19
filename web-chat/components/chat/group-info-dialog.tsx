@@ -274,12 +274,12 @@ export function GroupInfoDialog({
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full sm:max-w-md p-0 gap-0" side="right">
+        <SheetContent className="w-full sm:max-w-md p-0 gap-0 flex flex-col" side="right">
           <SheetTitle asChild>
             <VisuallyHidden>Group Info</VisuallyHidden>
           </SheetTitle>
-          <ScrollArea className="h-full w-full">
-            <div className="flex flex-col min-h-full">
+          <ScrollArea className="flex-1">
+            <div className="flex flex-col pb-4">
               {/* Group Photo Header */}
               <div className="relative w-full aspect-square max-h-[400px] bg-muted/50 flex items-center justify-center group">
                 {groupAvatar ? (
@@ -506,8 +506,8 @@ export function GroupInfoDialog({
                       if (!searchQuery) return true
                       const q = searchQuery.toLowerCase()
                       return (
-                        user.displayName.toLowerCase().includes(q) ||
-                        user.email.toLowerCase().includes(q)
+                        user.displayName?.toLowerCase().includes(q) ||
+                        user.email?.toLowerCase().includes(q)
                       )
                     })
                     .map((user) => {

@@ -58,6 +58,7 @@ export function ChatMessage({
   onForward,
   onDelete,
   onEdit,
+  onAvatarClick,
 }: {
   data: ChatMessageUnion
   isMe: boolean
@@ -66,6 +67,7 @@ export function ChatMessage({
   onForward?: (messageId: string) => void
   onDelete?: (messageId: string) => void
   onEdit?: (messageId: string, newText: string) => void
+  onAvatarClick?: (userId: string) => void
 }) {
   const [showImagePreview, setShowImagePreview] = useState(false)
   const [showVideoPreview, setShowVideoPreview] = useState(false)
@@ -176,12 +178,18 @@ export function ChatMessage({
       <div className={cn("flex w-full gap-2 group/message", isMe ? "justify-end" : "justify-start")}>
         {/* Avatar for group chat messages from others */}
         {isGroupChat && !isMe ? (
-          <Avatar className="h-8 w-8 shrink-0 mt-0.5">
-            <AvatarImage src={data.senderAvatar || '/placeholder-user.jpg'} alt={data.senderName} />
-            <AvatarFallback className="text-xs">
-              {data.senderName.slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          <button
+            onClick={() => onAvatarClick?.(data.senderId)}
+            className="shrink-0 mt-0.5 cursor-pointer"
+            aria-label={`View ${data.senderName} profile`}
+          >
+            <Avatar className="h-8 w-8">
+              <AvatarImage src={data.senderAvatar || '/placeholder-user.jpg'} alt={data.senderName} />
+              <AvatarFallback className="text-xs">
+                {data.senderName.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          </button>
         ) : null}
 
         <div className="relative">

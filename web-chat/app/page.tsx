@@ -94,6 +94,7 @@ export default function Page() {
             currentUserId={currentUser.uid}
             currentUserName={userData.displayName}
             currentUserData={userData}
+            selectedChatId={selectedChatId}
             onChatSelect={(chatId, isGroup) => {
               setSelectedChatId(chatId);
               setSelectedChatIsGroup(isGroup);

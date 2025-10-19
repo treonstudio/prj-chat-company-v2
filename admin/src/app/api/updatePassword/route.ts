@@ -4,6 +4,8 @@ export async function POST(request: NextRequest) {
   try {
     const { userId, newPassword } = await request.json();
 
+    console.log('updatePassword API called with userId:', userId);
+
     if (!userId || !newPassword) {
       return NextResponse.json(
         { error: 'userId and newPassword are required' },
@@ -20,12 +22,17 @@ export async function POST(request: NextRequest) {
 
     // Try to import and use Firebase Admin SDK
     try {
+      console.log('Attempting to import Firebase Admin SDK...');
       const { adminAuth } = await import('@/lib/firebaseAdmin');
+      console.log('Firebase Admin SDK imported successfully');
 
       // Update user password using Admin SDK
+      console.log('Updating user password for userId:', userId);
       await adminAuth.updateUser(userId, {
         password: newPassword,
       });
+
+      console.log('Password updated successfully for userId:', userId);
 
       return NextResponse.json({
         success: true,
@@ -33,11 +40,13 @@ export async function POST(request: NextRequest) {
       });
     } catch (adminError: any) {
       console.error('Firebase Admin SDK error:', adminError);
+      console.error('Error code:', adminError.code);
+      console.error('Error message:', adminError.message);
 
       return NextResponse.json(
         {
-          error: 'Failed to update password',
-          details: adminError.message
+          error: adminError.message || 'Failed to update password',
+          code: adminError.code
         },
         { status: 500 }
       );
@@ -47,8 +56,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        error: 'Failed to process request',
-        details: error.message
+        error: error.message || 'Failed to process request'
       },
       { status: 500 }
     );

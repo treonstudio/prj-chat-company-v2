@@ -1,7 +1,9 @@
-# Leave Group - Firestore Flow Documentation
+# Group Management - Firestore Flow Documentation
 
 ## Overview
-Dokumentasi ini menjelaskan secara detail apa yang terjadi di Firestore Collections dan Documents ketika user melakukan leave group.
+Dokumentasi ini menjelaskan secara detail apa yang terjadi di Firestore Collections dan Documents ketika:
+1. User melakukan leave group
+2. Admin menambahkan member baru ke group
 
 ---
 
@@ -602,3 +604,260 @@ messages.filter(m => {
 **File:** `/components/chat/chat-room.tsx`
 **System Message Rendering:** Lines 310-319
 **Participant Check:** Lines 369-374
+
+---
+
+## Add Member to Group Flow
+
+### Scenario: Admin "Bob" menambahkan user "Charlie" ke group "Team Chat"
+
+**Initial State:**
+- Group: "Team Chat" (chatId: `group123`)
+- Current participants: `["alice", "bob", "diana"]`
+- Admins: `["bob"]`
+- Charlie belum di group
+
+---
+
+### Step 1: Fetch New Member Data
+
+**Operation:** Get user data dari `users` collection
+
+```typescript
+const newMemberRef = doc(db(), 'users', 'charlie');
+const newMemberDoc = await getDoc(newMemberRef);
+const newMemberName = newMemberDoc.exists()
+  ? (newMemberDoc.data().displayName || 'User')
+  : 'User';
+```
+
+**Result:** `newMemberName = "Charlie"`
+
+---
+
+### Step 2: Update `groupChats` Collection
+
+**Collection:** `groupChats/{chatId}`
+
+**Operation:** Update participants array
+
+```typescript
+batch.update(groupChatRef, {
+  participants: arrayUnion('charlie'),
+  leftMembers: leftMembers, // Remove charlie from leftMembers if exists
+  updatedAt: Timestamp.now(),
+});
+```
+
+**Before:**
+```json
+{
+  "chatId": "group123",
+  "name": "Team Chat",
+  "participants": ["alice", "bob", "diana"],
+  "admins": ["bob"],
+  "leftMembers": {},
+  "updatedAt": { "_seconds": 1234567890 }
+}
+```
+
+**After:**
+```json
+{
+  "chatId": "group123",
+  "name": "Team Chat",
+  "participants": ["alice", "bob", "diana", "charlie"],
+  "admins": ["bob"],
+  "leftMembers": {},
+  "updatedAt": { "_seconds": 1234567900 }
+}
+```
+
+---
+
+### Step 3: Create System Message
+
+**Collection:** `groupChats/{chatId}/messages`
+
+**Operation:** Create new system message
+
+```typescript
+const messagesRef = collection(db(), 'groupChats', chatId, 'messages');
+const systemMessageRef = doc(messagesRef);
+batch.set(systemMessageRef, {
+  messageId: systemMessageRef.id,
+  senderId: 'system',
+  senderName: 'System',
+  text: 'Charlie telah ditambahkan ke grup',
+  type: 'TEXT',
+  timestamp: Timestamp.now(),
+  createdAt: Timestamp.now(),
+  status: 'SENT',
+  readBy: {},
+});
+```
+
+**New Document Created:**
+```json
+{
+  "messageId": "msg789",
+  "senderId": "system",
+  "senderName": "System",
+  "text": "Charlie telah ditambahkan ke grup",
+  "type": "TEXT",
+  "timestamp": { "_seconds": 1234567900 },
+  "createdAt": { "_seconds": 1234567900 },
+  "status": "SENT",
+  "readBy": {}
+}
+```
+
+---
+
+### Step 4: Update `userChats` for All Existing Participants
+
+**Collection:** `userChats/{userId}`
+
+**Operation:** Update lastMessage for alice, bob, dan diana
+
+**Alice's userChats (userChats/alice):**
+
+**Before:**
+```json
+{
+  "userId": "alice",
+  "chats": [
+    {
+      "chatId": "group123",
+      "chatType": "GROUP",
+      "groupName": "Team Chat",
+      "lastMessage": "bob: Meeting at 3pm",
+      "lastMessageTime": { "_seconds": 1234567890 },
+      "unreadCount": 0
+    }
+  ]
+}
+```
+
+**After:**
+```json
+{
+  "userId": "alice",
+  "chats": [
+    {
+      "chatId": "group123",
+      "chatType": "GROUP",
+      "groupName": "Team Chat",
+      "lastMessage": "Charlie telah ditambahkan ke grup",
+      "lastMessageTime": { "_seconds": 1234567900 },
+      "unreadCount": 1
+    }
+  ]
+}
+```
+
+**Note:** unreadCount di-increment untuk semua existing participants kecuali member baru.
+
+---
+
+### Step 5: Add Chat to New Member's `userChats`
+
+**Collection:** `userChats/charlie`
+
+**Operation:** Add new ChatItem atau create new userChats document
+
+```typescript
+const chatItem: ChatItem = {
+  chatId: 'group123',
+  chatType: 'GROUP',
+  groupName: 'Team Chat',
+  groupAvatar: 'https://...',
+  lastMessage: 'Charlie telah ditambahkan ke grup',
+  lastMessageTime: Timestamp.now(),
+  unreadCount: 0,
+};
+```
+
+**If charlie's userChats exists:**
+```typescript
+batch.update(userChatsRef, {
+  chats: arrayUnion(chatItem),
+  updatedAt: Timestamp.now(),
+});
+```
+
+**If charlie's userChats doesn't exist:**
+```typescript
+batch.set(userChatsRef, {
+  userId: 'charlie',
+  chats: [chatItem],
+  updatedAt: Timestamp.now(),
+});
+```
+
+**Charlie's userChats Created:**
+```json
+{
+  "userId": "charlie",
+  "chats": [
+    {
+      "chatId": "group123",
+      "chatType": "GROUP",
+      "groupName": "Team Chat",
+      "groupAvatar": "https://...",
+      "lastMessage": "Charlie telah ditambahkan ke grup",
+      "lastMessageTime": { "_seconds": 1234567900 },
+      "unreadCount": 0
+    }
+  ],
+  "updatedAt": { "_seconds": 1234567900 }
+}
+```
+
+**Note:** unreadCount untuk member baru adalah 0 karena ini adalah system message tentang mereka sendiri.
+
+---
+
+### Step 6: Commit Batch
+
+**Operation:** Execute all updates atomically
+
+```typescript
+await batch.commit();
+```
+
+---
+
+## Summary: Add Member Flow
+
+### Collections Modified:
+1. ✅ `groupChats/{chatId}` - Added user to participants
+2. ✅ `groupChats/{chatId}/messages` - Created system message
+3. ✅ `userChats/{userId}` - Updated lastMessage for all existing participants
+4. ✅ `userChats/{newMemberId}` - Added or updated with new chat item
+
+### System Message:
+- Format: `"{newMemberName} telah ditambahkan ke grup"`
+- Example: `"Charlie telah ditambahkan ke grup"`
+- Displayed centered with muted styling in chat room
+
+### Notifications:
+- All existing members see unread count increment
+- New member sees unread count = 0
+- All members see updated lastMessage in sidebar
+
+---
+
+## Code References - Add Member
+
+**File:** `/lib/repositories/chat.repository.ts`
+**Method:** `addGroupMember(chatId: string, newMemberId: string, groupName: string, groupAvatar?: string)`
+**Lines:** 456-574
+
+**File:** `/components/chat/group-info-dialog.tsx`
+**Method:** `handleAddMembers()`
+**Lines:** 192-230
+
+**File:** `/components/chat/chat-room.tsx`
+**System Message Rendering:** Lines 310-319 (same as leave group)
+

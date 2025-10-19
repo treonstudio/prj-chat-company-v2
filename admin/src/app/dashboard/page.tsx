@@ -339,7 +339,10 @@ export default function DashboardPage() {
 
       if (error) {
         console.error("Error updating password:", error)
-        toast.error("Gagal mengubah password")
+        const errorMessage = (error as any)?.message || "Gagal mengubah password"
+        toast.error("Gagal mengubah password", {
+          description: errorMessage
+        })
       } else {
         toast.success("Password berhasil diubah")
         setPasswordDialogOpen(false)
@@ -348,7 +351,10 @@ export default function DashboardPage() {
       }
     } catch (err) {
       console.error("Error updating password:", err)
-      toast.error("Terjadi kesalahan saat mengubah password")
+      const errorMessage = (err as any)?.message || "Terjadi kesalahan saat mengubah password"
+      toast.error("Terjadi kesalahan", {
+        description: errorMessage
+      })
     } finally {
       setIsLoading(false)
     }

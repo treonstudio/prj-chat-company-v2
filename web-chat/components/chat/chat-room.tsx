@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { GroupInfoDialog } from "./group-info-dialog"
 import { ForwardMessageDialog } from "./forward-message-dialog"
+import { UserProfileDialog } from "./user-profile-dialog"
 import { MessageRepository } from "@/lib/repositories/message.repository"
 import { toast } from "sonner"
 
@@ -79,6 +80,8 @@ export function ChatRoom({
   const [forwardMessageId, setForwardMessageId] = useState<string | null>(null)
   const [isParticipant, setIsParticipant] = useState(true)
   const [leftAt, setLeftAt] = useState<Date | null>(null)
+  const [showUserProfileDialog, setShowUserProfileDialog] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Load room title and group members
@@ -254,6 +257,49 @@ export function ChatRoom({
     }
   }
 
+  // Handle avatar click to show user profile
+  const handleAvatarClick = async (userId: string) => {
+    // Don't show profile for system messages or current user
+    if (userId === 'system' || userId === currentUserId) return
+
+    try {
+      const result = await userRepository.getUserById(userId)
+      if (result.status === 'success') {
+        // Don't show profile for deleted users (users without displayName)
+        const isDeletedUser = !result.data.displayName || result.data.displayName.trim() === ''
+        if (isDeletedUser) {
+          return // Don't show dialog for deleted users
+        }
+
+        setSelectedUser(result.data)
+        setShowUserProfileDialog(true)
+      } else {
+        // User not found in database (deleted user)
+        // Don't show any error or dialog
+        return
+      }
+    } catch (error) {
+      console.error('Load user profile error:', error)
+      // Don't show error toast for deleted users
+    }
+  }
+
+  // Handle send message from user profile dialog
+  const handleSendMessageToUser = async () => {
+    if (!selectedUser || !onChatSelect) return
+
+    setShowUserProfileDialog(false)
+
+    // Create or get direct chat with selected user
+    const result = await chatRepository.getOrCreateDirectChat(currentUserId, selectedUser.userId)
+    if (result.status === 'success') {
+      // Switch to the direct chat
+      onChatSelect(result.data.chatId, false)
+    } else {
+      toast.error('Failed to create chat')
+    }
+  }
+
   return (
     <div className="flex h-full w-full min-h-0 flex-col relative">
       <header className="flex items-center justify-between border-b px-4 py-3 shadow-sm z-10" style={{ backgroundColor: '#fafafa' }}>
@@ -374,6 +420,7 @@ export function ChatRoom({
                         onForward={handleForwardClick}
                         onDelete={deleteMessage}
                         onEdit={editMessage}
+                        onAvatarClick={handleAvatarClick}
                       />
                     </div>
                   )
@@ -472,6 +519,14 @@ export function ChatRoom({
         onOpenChange={setShowForwardDialog}
         onForward={handleForwardMessage}
         currentUserId={currentUserId}
+      />
+
+      {/* User Profile Dialog */}
+      <UserProfileDialog
+        open={showUserProfileDialog}
+        onOpenChange={setShowUserProfileDialog}
+        user={selectedUser}
+        onSendMessage={handleSendMessageToUser}
       />
     </div>
   )

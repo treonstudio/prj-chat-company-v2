@@ -24,11 +24,13 @@ export function Sidebar({
   currentUserId,
   currentUserName,
   currentUserData,
+  selectedChatId,
   onChatSelect,
 }: {
   currentUserId: string
   currentUserName: string
   currentUserData: User
+  selectedChatId?: string | null
   onChatSelect: (chatId: string, isGroup: boolean) => void
 }) {
   const [query, setQuery] = useState("")
@@ -41,6 +43,13 @@ export function Sidebar({
   const { featureFlags } = useFeatureFlags()
   const { isOnline, isSlow } = useOnlineStatus()
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+
+  // Sync activeId with selectedChatId from parent
+  useEffect(() => {
+    if (selectedChatId) {
+      setActiveId(selectedChatId)
+    }
+  }, [selectedChatId])
 
   // Load drafts for all chats
   useEffect(() => {

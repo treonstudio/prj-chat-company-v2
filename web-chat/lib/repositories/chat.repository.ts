@@ -474,7 +474,15 @@ export class ChatRepository {
         return Resource.error('User is already a member of this group');
       }
 
+      // Get new member's name
+      const newMemberRef = doc(db(), 'users', newMemberId);
+      const newMemberDoc = await getDoc(newMemberRef);
+      const newMemberName = newMemberDoc.exists()
+        ? (newMemberDoc.data().displayName || 'User')
+        : 'User';
+
       const batch = writeBatch(db());
+      const now = Timestamp.now();
 
       // Remove user from leftMembers if they were previously left
       const leftMembers = groupChat.leftMembers || {};
@@ -486,8 +494,50 @@ export class ChatRepository {
       batch.update(groupChatRef, {
         participants: arrayUnion(newMemberId),
         leftMembers: leftMembers,
-        updatedAt: Timestamp.now(),
+        updatedAt: now,
       });
+
+      // Create system message for adding member
+      const messagesRef = collection(db(), this.GROUP_CHATS_COLLECTION, chatId, 'messages');
+      const systemMessageRef = doc(messagesRef);
+      batch.set(systemMessageRef, {
+        messageId: systemMessageRef.id,
+        senderId: 'system',
+        senderName: 'System',
+        text: `${newMemberName} telah ditambahkan ke grup`,
+        type: 'TEXT',
+        timestamp: now,
+        createdAt: now,
+        status: 'SENT',
+        readBy: {},
+      });
+
+      // Update lastMessage for all participants
+      const systemMessageText = `${newMemberName} telah ditambahkan ke grup`;
+      for (const participantId of groupChat.participants) {
+        const participantChatsRef = doc(db(), this.USER_CHATS_COLLECTION, participantId);
+        const participantChatsDoc = await getDoc(participantChatsRef);
+
+        if (participantChatsDoc.exists()) {
+          const participantChats = participantChatsDoc.data() as UserChats;
+          const updatedChats = participantChats.chats.map((chat) => {
+            if (chat.chatId === chatId) {
+              return {
+                ...chat,
+                lastMessage: systemMessageText,
+                lastMessageTime: now,
+                unreadCount: participantId === newMemberId ? 0 : chat.unreadCount + 1,
+              };
+            }
+            return chat;
+          });
+
+          batch.update(participantChatsRef, {
+            chats: updatedChats,
+            updatedAt: now,
+          });
+        }
+      }
 
       // Add chat to new member's chat list
       const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, newMemberId);
@@ -498,21 +548,21 @@ export class ChatRepository {
         chatType: ChatType.GROUP,
         groupName,
         ...(groupAvatar && { groupAvatar }),
-        lastMessage: 'You were added to the group',
-        lastMessageTime: Timestamp.now(),
+        lastMessage: systemMessageText,
+        lastMessageTime: now,
         unreadCount: 0,
       };
 
       if (userChatsDoc.exists()) {
         batch.update(userChatsRef, {
           chats: arrayUnion(chatItem),
-          updatedAt: Timestamp.now(),
+          updatedAt: now,
         });
       } else {
         batch.set(userChatsRef, {
           userId: newMemberId,
           chats: [chatItem],
-          updatedAt: Timestamp.now(),
+          updatedAt: now,
         });
       }
 
