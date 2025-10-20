@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Download, X, Forward, ChevronDown, Reply, Copy, Trash2, Star, Pencil, Ban } from "lucide-react"
+import { Download, X, Forward, ChevronDown, Reply, Copy, Trash2, Star, Pencil, Ban, Check, Image as ImageIcon, Video, FileText } from "lucide-react"
 import download from "downloadjs"
 import { MessageStatusIcon } from "./message-status-icon"
 import { MessageStatus } from "@/types/models"
@@ -35,6 +35,15 @@ type Base = {
   editedAt?: string
   status?: MessageStatus
   error?: string
+  isDeleted?: boolean
+  replyTo?: {
+    messageId: string
+    senderId: string
+    senderName: string
+    text: string
+    type: string
+    mediaUrl?: string | null
+  } | null
 }
 
 type TextMsg = Base & { type: "text"; content: string }
@@ -59,6 +68,12 @@ export function ChatMessage({
   onDelete,
   onEdit,
   onAvatarClick,
+  selectionMode = false,
+  isSelected = false,
+  onToggleSelect,
+  onLongPress,
+  onReply,
+  onReplyClick,
 }: {
   data: ChatMessageUnion
   isMe: boolean
@@ -68,6 +83,12 @@ export function ChatMessage({
   onDelete?: (messageId: string) => void
   onEdit?: (messageId: string, newText: string) => void
   onAvatarClick?: (userId: string) => void
+  selectionMode?: boolean
+  isSelected?: boolean
+  onToggleSelect?: (messageId: string) => void
+  onLongPress?: (messageId: string) => void
+  onReply?: (messageId: string) => void
+  onReplyClick?: (messageId: string) => void
 }) {
   const [showImagePreview, setShowImagePreview] = useState(false)
   const [showVideoPreview, setShowVideoPreview] = useState(false)
@@ -182,8 +203,26 @@ export function ChatMessage({
   return (
     <>
       <div className={cn("flex w-full gap-2 group/message", isMe ? "justify-end" : "justify-start")}>
+        {/* Checkbox for selection mode */}
+        {selectionMode && (
+          <button
+            onClick={() => onToggleSelect?.(data.id)}
+            className="shrink-0 mt-0.5"
+            aria-label="Select message"
+          >
+            <div className={cn(
+              "h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors",
+              isSelected
+                ? "bg-green-500 border-green-500"
+                : "bg-white border-gray-300"
+            )}>
+              {isSelected && <Check className="h-3 w-3 text-white" />}
+            </div>
+          </button>
+        )}
+
         {/* Avatar for group chat messages from others */}
-        {isGroupChat && !isMe ? (
+        {isGroupChat && !isMe && !selectionMode ? (
           <button
             onClick={() => onAvatarClick?.(data.senderId)}
             className="shrink-0 mt-0.5 cursor-pointer"
@@ -199,9 +238,10 @@ export function ChatMessage({
         ) : null}
 
         <div className="relative">
+          <div onClick={() => selectionMode && onToggleSelect?.(data.id)}>
           <div className={bubble} style={maxWidthStyle}>
-          {/* Dropdown menu - appears on hover (hide for deleted messages) */}
-          {data.content !== "Pesan ini dihapus" && (
+          {/* Dropdown menu - appears on hover (hide for deleted messages and selection mode) */}
+          {!selectionMode && !data.isDeleted && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
@@ -215,6 +255,14 @@ export function ChatMessage({
                 </button>
               </DropdownMenuTrigger>
             <DropdownMenuContent align={isMe ? "start" : "end"}>
+              {/* Balas */}
+              {onReply && (
+                <DropdownMenuItem className="flex items-center gap-2" onClick={() => onReply(data.id)}>
+                  <Reply className="h-4 w-4" />
+                  <span>Balas</span>
+                </DropdownMenuItem>
+              )}
+
               {/* Salin - hanya untuk text */}
               {data.type === 'text' && (
                 <DropdownMenuItem className="flex items-center gap-2" onClick={handleCopy}>
@@ -242,27 +290,22 @@ export function ChatMessage({
                 </DropdownMenuItem>
               )}
 
-              {/* Opsi tambahan hanya untuk pesan sendiri */}
-              {isMe && (
-                <>
-                  {/* Edit - hanya untuk text */}
-                  {data.type === 'text' && (
-                    <DropdownMenuItem className="flex items-center gap-2" onClick={handleEdit}>
-                      <Pencil className="h-4 w-4" />
-                      <span>Edit</span>
-                    </DropdownMenuItem>
-                  )}
-
-                  {/* Hapus */}
-                  <DropdownMenuItem
-                    className="flex items-center gap-2 text-destructive"
-                    onClick={() => onDelete?.(data.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    <span>Hapus</span>
-                  </DropdownMenuItem>
-                </>
+              {/* Edit - hanya untuk text dan pesan sendiri */}
+              {isMe && data.type === 'text' && (
+                <DropdownMenuItem className="flex items-center gap-2" onClick={handleEdit}>
+                  <Pencil className="h-4 w-4" />
+                  <span>Edit</span>
+                </DropdownMenuItem>
               )}
+
+              {/* Hapus - untuk semua user (akan trigger delete dialog) */}
+              <DropdownMenuItem
+                className="flex items-center gap-2 text-destructive"
+                onClick={() => onLongPress?.(data.id)}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Hapus</span>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           )}
@@ -272,9 +315,41 @@ export function ChatMessage({
             <span className="text-xs font-bold text-primary">{sanitizeMessageText(data.senderName)}</span>
           ) : null}
 
+          {/* Quoted section - shows the message being replied to */}
+          {data.replyTo && (
+            <div
+              onClick={() => onReplyClick?.(data.replyTo!.messageId)}
+              className={cn(
+                "flex items-start gap-2 p-2 rounded-lg mb-2 cursor-pointer",
+                "bg-black/15 hover:bg-black/20 transition-colors border-l-[3px] border-primary"
+              )}
+            >
+              {/* Vertical indicator bar */}
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-primary mb-0.5">
+                  {data.replyTo.senderName}
+                </div>
+                <div className="text-xs opacity-70 italic truncate flex items-center gap-1">
+                  {data.replyTo.type === 'IMAGE' && <ImageIcon className="h-3 w-3" />}
+                  {data.replyTo.type === 'VIDEO' && <Video className="h-3 w-3" />}
+                  {data.replyTo.type === 'DOCUMENT' && <FileText className="h-3 w-3" />}
+                  <span className="truncate line-clamp-2">{data.replyTo.text}</span>
+                </div>
+              </div>
+              {/* Media thumbnail */}
+              {data.replyTo.mediaUrl && data.replyTo.type !== 'DOCUMENT' && (
+                <img
+                  src={data.replyTo.mediaUrl}
+                  alt="Reply preview"
+                  className="w-12 h-12 rounded object-cover shrink-0"
+                />
+              )}
+            </div>
+          )}
+
           {data.type === "text" && (
             <>
-              {data.content === "Pesan ini dihapus" ? (
+              {data.isDeleted ? (
                 <div className="flex items-center gap-2 opacity-70">
                   <div className="relative h-5 w-5 shrink-0">
                     <div className="absolute inset-0 rounded-full border border-current opacity-40" />
@@ -468,8 +543,10 @@ export function ChatMessage({
           </div>
           </div>
 
-          {/* Forward button - appears on hover (hide for deleted messages) */}
-          {onForward && data.content !== "Pesan ini dihapus" && (
+          </div>
+
+          {/* Forward button - appears on hover (hide for deleted messages and selection mode) */}
+          {onForward && !selectionMode && !data.isDeleted && (
             <button
               onClick={() => onForward(data.id)}
               style={{
@@ -487,7 +564,6 @@ export function ChatMessage({
               <Forward className="h-4 w-4 text-muted-foreground" />
             </button>
           )}
-
         </div>
       </div>
 

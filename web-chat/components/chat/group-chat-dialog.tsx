@@ -362,7 +362,7 @@ export function GroupChatDialog({
                   <p className="text-sm text-muted-foreground">
                     {searchQuery.trim()
                       ? "No users found"
-                      : "Search for users to add to the group"}
+                      : "Ketikkan nama username untuk menambahkan ke group"}
                   </p>
                 </div>
               ) : (

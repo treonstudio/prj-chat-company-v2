@@ -141,24 +141,38 @@ export class MessageRepository {
           allParticipants = chatSnapshot.get('participants') as string[] | undefined;
         }
 
-        const messages = snapshot.docs.map((doc) => {
-          const messageData = {
-            ...doc.data(),
-            messageId: doc.id,
-          } as Message;
+        const messages = snapshot.docs
+          .map((doc) => {
+            const messageData = {
+              ...doc.data(),
+              messageId: doc.id,
+            } as Message;
 
-          // Calculate status if currentUserId is provided
-          if (currentUserId && allParticipants) {
-            messageData.status = this.calculateMessageStatus(
-              messageData,
-              currentUserId,
-              isGroupChat,
-              allParticipants
-            );
-          }
+            // Calculate status if currentUserId is provided
+            if (currentUserId && allParticipants) {
+              messageData.status = this.calculateMessageStatus(
+                messageData,
+                currentUserId,
+                isGroupChat,
+                allParticipants
+              );
+            }
 
-          return messageData;
-        });
+            return messageData;
+          })
+          .filter((message) => {
+            // Filter out messages deleted for everyone
+            if (message.isDeleted) {
+              return false;
+            }
+
+            // Filter out messages hidden from current user (Delete for Me)
+            if (currentUserId && message.hideFrom && message.hideFrom[currentUserId]) {
+              return false;
+            }
+
+            return true;
+          });
 
         onUpdate(messages);
       },
@@ -979,6 +993,233 @@ export class MessageRepository {
     } catch (error: any) {
       console.error('Error forwarding message:', error);
       return Resource.error(error.message || 'Failed to forward message');
+    }
+  }
+
+  /**
+   * Delete message for current user only (soft delete)
+   * Adds user to hideFrom map - message remains visible to others
+   * Restriction: Only messages < 48 hours old can be deleted
+   */
+  async deleteMessageForMe(
+    chatId: string,
+    messageIds: string[],
+    userId: string,
+    isGroupChat: boolean
+  ): Promise<Resource<{ successCount: number; failedMessages: string[] }>> {
+    try {
+      const collection_name = isGroupChat
+        ? this.GROUP_CHATS_COLLECTION
+        : this.DIRECT_CHATS_COLLECTION;
+
+      const timestamp = Timestamp.now();
+      const batch = writeBatch(db());
+      const failedMessages: string[] = [];
+      let successCount = 0;
+
+      // Process each message
+      for (const messageId of messageIds) {
+        const messageRef = doc(
+          db(),
+          collection_name,
+          chatId,
+          this.MESSAGES_SUBCOLLECTION,
+          messageId
+        );
+
+        const messageDoc = await getDoc(messageRef);
+        if (!messageDoc.exists()) {
+          failedMessages.push(messageId);
+          continue;
+        }
+
+        const message = messageDoc.data() as Message;
+
+        // Check if message is within 48 hours
+        if (message.timestamp) {
+          const messageTime = message.timestamp.toMillis();
+          const currentTime = Date.now();
+          const hoursDiff = (currentTime - messageTime) / (1000 * 60 * 60);
+
+          if (hoursDiff >= 48) {
+            failedMessages.push(messageId);
+            continue;
+          }
+        }
+
+        // Check if user already deleted this message
+        if (message.hideFrom && message.hideFrom[userId]) {
+          // Already deleted, skip
+          successCount++;
+          continue;
+        }
+
+        // Add user to hideFrom map
+        batch.update(messageRef, {
+          [`hideFrom.${userId}`]: timestamp,
+          updatedAt: timestamp,
+        });
+
+        successCount++;
+      }
+
+      if (successCount > 0) {
+        await batch.commit();
+      }
+
+      if (failedMessages.length > 0) {
+        return Resource.error('Beberapa pesan gagal dihapus (lebih dari 48 jam atau tidak ditemukan)', {
+          successCount,
+          failedMessages,
+        });
+      }
+
+      return Resource.success({ successCount, failedMessages: [] });
+    } catch (error: any) {
+      console.error('Error deleting messages for me:', error);
+      return Resource.error(error.message || 'Gagal menghapus pesan');
+    }
+  }
+
+  /**
+   * Delete message for everyone (hard delete)
+   * Sets isDeleted flag - message shows as "Pesan ini dihapus" for all users
+   * Restriction: Only own messages < 15 minutes old can be deleted for everyone
+   */
+  async deleteMessageForEveryone(
+    chatId: string,
+    messageIds: string[],
+    userId: string,
+    isGroupChat: boolean
+  ): Promise<Resource<{ successCount: number; failedMessages: string[] }>> {
+    try {
+      const collection_name = isGroupChat
+        ? this.GROUP_CHATS_COLLECTION
+        : this.DIRECT_CHATS_COLLECTION;
+
+      const timestamp = Timestamp.now();
+      const batch = writeBatch(db());
+      const failedMessages: string[] = [];
+      let successCount = 0;
+
+      // Process each message
+      for (const messageId of messageIds) {
+        const messageRef = doc(
+          db(),
+          collection_name,
+          chatId,
+          this.MESSAGES_SUBCOLLECTION,
+          messageId
+        );
+
+        const messageDoc = await getDoc(messageRef);
+        if (!messageDoc.exists()) {
+          failedMessages.push(messageId);
+          continue;
+        }
+
+        const message = messageDoc.data() as Message;
+
+        // Check if user is the sender
+        if (message.senderId !== userId) {
+          failedMessages.push(messageId);
+          continue;
+        }
+
+        // Check if message is within 15 minutes
+        if (message.timestamp) {
+          const messageTime = message.timestamp.toMillis();
+          const currentTime = Date.now();
+          const minutesDiff = (currentTime - messageTime) / (1000 * 60);
+
+          if (minutesDiff >= 15) {
+            failedMessages.push(messageId);
+            continue;
+          }
+        }
+
+        // Set isDeleted flag
+        batch.update(messageRef, {
+          isDeleted: true,
+          updatedAt: timestamp,
+        });
+
+        successCount++;
+      }
+
+      if (successCount > 0) {
+        await batch.commit();
+
+        // Update last message if needed
+        const chatRef = doc(db(), collection_name, chatId);
+        const chatSnapshot = await getDoc(chatRef);
+        const lastMessage = chatSnapshot.get('lastMessage');
+
+        if (lastMessage && lastMessage.timestamp) {
+          // Check if any of the deleted messages was the last message
+          for (const messageId of messageIds) {
+            if (failedMessages.includes(messageId)) continue;
+
+            const messageRef = doc(
+              db(),
+              collection_name,
+              chatId,
+              this.MESSAGES_SUBCOLLECTION,
+              messageId
+            );
+            const messageSnapshot = await getDoc(messageRef);
+            const messageTimestamp = messageSnapshot.get('timestamp');
+
+            if (messageTimestamp && messageTimestamp.seconds === lastMessage.timestamp.seconds) {
+              // Update chat's last message
+              await updateDoc(chatRef, {
+                'lastMessage.text': 'Pesan ini dihapus',
+                updatedAt: timestamp,
+              });
+
+              // Update userChats for all participants
+              const participants = chatSnapshot.get('participants') as string[];
+              if (participants && participants.length > 0) {
+                for (const participantId of participants) {
+                  if (isGroupChat) {
+                    await this.updateUserChatForGroupChat(
+                      participantId,
+                      chatId,
+                      chatSnapshot.get('name') || 'Group Chat',
+                      chatSnapshot.get('avatarUrl'),
+                      'Pesan ini dihapus',
+                      timestamp,
+                      lastMessage.senderId
+                    );
+                  } else {
+                    await this.updateUserChat(
+                      participantId,
+                      chatId,
+                      'Pesan ini dihapus',
+                      timestamp,
+                      lastMessage.senderId,
+                      participants
+                    );
+                  }
+                }
+              }
+              break;
+            }
+          }
+        }
+      }
+
+      if (failedMessages.length > 0) {
+        return Resource.error('Beberapa pesan gagal dihapus (bukan pengirim, lebih dari 15 menit, atau tidak ditemukan)', {
+          successCount,
+          failedMessages,
+        });
+      }
+
+      return Resource.success({ successCount, failedMessages: [] });
+    } catch (error: any) {
+      console.error('Error deleting messages for everyone:', error);
+      return Resource.error(error.message || 'Gagal menghapus pesan');
     }
   }
 }

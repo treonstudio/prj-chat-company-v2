@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { MessageRepository } from '@/lib/repositories/message.repository';
-import { Message, MessageType, MessageStatus } from '@/types/models';
+import { Message, MessageType, MessageStatus, ReplyTo } from '@/types/models';
 import { Timestamp } from 'firebase/firestore';
 
 const messageRepository = new MessageRepository();
@@ -80,7 +80,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
   }, [chatId, isGroupChat, currentUserId]);
 
   const sendTextMessage = useCallback(
-    async (currentUserId: string, currentUserName: string, text: string, currentUserAvatar?: string) => {
+    async (currentUserId: string, currentUserName: string, text: string, currentUserAvatar?: string, replyTo?: ReplyTo | null) => {
       if (!chatId || !text.trim()) return;
 
       // Create optimistic message
@@ -96,6 +96,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         deliveredTo: {},
         timestamp: Timestamp.now(),
         status: MessageStatus.SENDING,
+        replyTo: replyTo || null,
       };
 
       // Add to optimistic messages immediately
@@ -111,6 +112,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         type: MessageType.TEXT,
         readBy: {},
         deliveredTo: {},
+        replyTo: replyTo || null,
       };
 
       const result = await messageRepository.sendMessage(chatId, message, isGroupChat);

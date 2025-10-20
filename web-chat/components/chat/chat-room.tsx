@@ -10,10 +10,10 @@ import { UserRepository } from "@/lib/repositories/user.repository"
 import { ChatRepository } from "@/lib/repositories/chat.repository"
 import { format } from "date-fns"
 import { useState } from "react"
-import { ChatType, User, UserStatus } from "@/types/models"
+import { ChatType, User, UserStatus, Message } from "@/types/models"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { LogOut, Loader2, Users } from "lucide-react"
+import { LogOut, Loader2, Users, Trash2, X } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +27,8 @@ import {
 import { GroupInfoDialog } from "./group-info-dialog"
 import { ForwardMessageDialog } from "./forward-message-dialog"
 import { UserProfileDialog } from "./user-profile-dialog"
+import { DeleteMessageDialog } from "./delete-message-dialog"
+import { ReplyPreviewBar } from "./reply-preview-bar"
 import { MessageRepository } from "@/lib/repositories/message.repository"
 import { toast } from "sonner"
 
@@ -83,6 +85,35 @@ export function ChatRoom({
   const [showUserProfileDialog, setShowUserProfileDialog] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Selection mode for delete
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set())
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+
+  // Reply mode
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
+
+  // Reset selection when chatId changes
+  useEffect(() => {
+    setSelectionMode(false)
+    setSelectedMessageIds(new Set())
+  }, [chatId])
+
+  // Handle ESC key to cancel selection
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && selectionMode) {
+        setSelectionMode(false)
+        setSelectedMessageIds(new Set())
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [selectionMode])
 
   // Load room title and group members
   useEffect(() => {
@@ -220,6 +251,9 @@ export function ChatRoom({
 
   // Handle forward message
   const handleForwardClick = (messageId: string) => {
+    // Reset selection mode when opening forward dialog
+    setSelectionMode(false)
+    setSelectedMessageIds(new Set())
     setForwardMessageId(messageId)
     setShowForwardDialog(true)
   }
@@ -262,6 +296,10 @@ export function ChatRoom({
     // Don't show profile for system messages or current user
     if (userId === 'system' || userId === currentUserId) return
 
+    // Reset selection mode when opening user profile
+    setSelectionMode(false)
+    setSelectedMessageIds(new Set())
+
     try {
       const result = await userRepository.getUserById(userId)
       if (result.status === 'success') {
@@ -300,12 +338,120 @@ export function ChatRoom({
     }
   }
 
+  // Selection mode handlers
+  const handleLongPress = (messageId: string) => {
+    setSelectionMode(true)
+    setSelectedMessageIds(new Set([messageId]))
+  }
+
+  const handleToggleSelect = (messageId: string) => {
+    setSelectedMessageIds(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId)
+      } else {
+        newSet.add(messageId)
+      }
+      // Exit selection mode if no messages selected
+      if (newSet.size === 0) {
+        setSelectionMode(false)
+      }
+      return newSet
+    })
+  }
+
+  const handleCancelSelection = () => {
+    setSelectionMode(false)
+    setSelectedMessageIds(new Set())
+  }
+
+  const handleOpenDeleteDialog = () => {
+    if (selectedMessageIds.size === 0) return
+    setShowDeleteDialog(true)
+  }
+
+  const handleDeleteForMe = async () => {
+    try {
+      const result = await messageRepository.deleteMessageForMe(
+        chatId,
+        Array.from(selectedMessageIds),
+        currentUserId,
+        isGroupChat
+      )
+
+      if (result.status === 'success') {
+        toast.success(`${result.data.successCount} pesan berhasil dihapus`)
+        handleCancelSelection()
+      } else if (result.status === 'error') {
+        toast.error(result.message || 'Gagal menghapus pesan')
+      }
+    } catch (error) {
+      console.error('Delete error:', error)
+      toast.error('Gagal menghapus pesan')
+    }
+  }
+
+  const handleDeleteForEveryone = async () => {
+    try {
+      const result = await messageRepository.deleteMessageForEveryone(
+        chatId,
+        Array.from(selectedMessageIds),
+        currentUserId,
+        isGroupChat
+      )
+
+      if (result.status === 'success') {
+        toast.success(`${result.data.successCount} pesan berhasil dihapus untuk semua orang`)
+        handleCancelSelection()
+      } else if (result.status === 'error') {
+        toast.error(result.message || 'Gagal menghapus pesan')
+      }
+    } catch (error) {
+      console.error('Delete error:', error)
+      toast.error('Gagal menghapus pesan')
+    }
+  }
+
+  // Get selected messages for delete dialog
+  const selectedMessages = messages.filter(msg =>
+    selectedMessageIds.has(msg.messageId)
+  ) as unknown as Message[]
+
+  // Reply handlers
+  const handleReply = (messageId: string) => {
+    const message = messages.find(m => m.messageId === messageId)
+    if (message) {
+      setReplyingTo(message)
+    }
+  }
+
+  const handleCancelReply = () => {
+    setReplyingTo(null)
+  }
+
+  const handleReplyClick = (messageId: string) => {
+    // Find message index in reversed list and scroll to it
+    const reversedMessages = [...messages].reverse()
+    const index = reversedMessages.findIndex(m => m.messageId === messageId)
+
+    if (index >= 0) {
+      // Scroll to the message
+      const messageElement = document.querySelector(`[data-message-id="${messageId}"]`)
+      if (messageElement) {
+        messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }
+  }
+
   return (
     <div className="flex h-full w-full min-h-0 flex-col relative">
       <header className="flex items-center justify-between border-b px-4 py-3 shadow-sm z-10" style={{ backgroundColor: '#fafafa' }}>
         <button
           onClick={() => {
             if (isGroupChat) {
+              // Reset selection mode when opening group info
+              setSelectionMode(false)
+              setSelectedMessageIds(new Set())
               setShowGroupInfoDialog(true)
             }
           }}
@@ -397,7 +543,7 @@ export function ChatRoom({
                     : 'Deleted User'
 
                   return (
-                    <div key={m.messageId}>
+                    <div key={m.messageId} data-message-id={m.messageId}>
                       <ChatMessage
                         data={{
                           id: m.messageId,
@@ -413,6 +559,15 @@ export function ChatRoom({
                           editedAt: editedTimeStr,
                           status: m.status,
                           error: m.error,
+                          isDeleted: m.isDeleted,
+                          replyTo: m.replyTo ? {
+                            messageId: m.replyTo.messageId,
+                            senderId: m.replyTo.senderId,
+                            senderName: m.replyTo.senderName,
+                            text: m.replyTo.text,
+                            type: m.replyTo.type,
+                            mediaUrl: m.replyTo.mediaUrl
+                          } : null
                         }}
                         isMe={m.senderId === currentUserId}
                         isGroupChat={isGroupChat}
@@ -421,6 +576,12 @@ export function ChatRoom({
                         onDelete={deleteMessage}
                         onEdit={editMessage}
                         onAvatarClick={handleAvatarClick}
+                        selectionMode={selectionMode}
+                        isSelected={selectedMessageIds.has(m.messageId)}
+                        onToggleSelect={handleToggleSelect}
+                        onLongPress={handleLongPress}
+                        onReply={handleReply}
+                        onReplyClick={handleReplyClick}
                       />
                     </div>
                   )
@@ -435,7 +596,33 @@ export function ChatRoom({
       </ScrollArea>
       <Separator />
       <div className="absolute bottom-[0.5rem] left-0 right-0 w-full">
-        {isDeletedUser ? (
+        {/* Reply preview bar */}
+        {replyingTo && !selectionMode && (
+          <ReplyPreviewBar
+            replyingTo={replyingTo}
+            onCancel={handleCancelReply}
+          />
+        )}
+
+        {selectionMode ? (
+          /* Selection toolbar */
+          <div className="flex items-center justify-between border-t px-4 py-3 bg-background shadow-sm">
+            <div className="flex items-center gap-3 flex-1">
+              <Button variant="ghost" size="icon" onClick={handleCancelSelection}>
+                <X className="h-5 w-5" />
+              </Button>
+              <span className="text-sm font-medium">{selectedMessageIds.size} terpilih</span>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleOpenDeleteDialog}
+              disabled={selectedMessageIds.size === 0}
+            >
+              <Trash2 className="h-5 w-5" />
+            </Button>
+          </div>
+        ) : isDeletedUser ? (
           <div className="flex items-center justify-center px-4 py-3 bg-muted">
             <p className="text-sm text-muted-foreground">
               You can't send messages to this user
@@ -450,7 +637,18 @@ export function ChatRoom({
         ) : (
           <MessageComposer
             chatId={chatId}
-            onSendText={(text) => sendTextMessage(currentUserId, currentUserName, text, currentUserAvatar)}
+            onSendText={(text) => {
+              const replyToData = replyingTo ? {
+                messageId: replyingTo.messageId,
+                senderId: replyingTo.senderId,
+                senderName: replyingTo.senderName,
+                text: replyingTo.text.substring(0, 100), // Truncate to 100 chars
+                type: replyingTo.type,
+                mediaUrl: replyingTo.mediaUrl || null
+              } : null
+              sendTextMessage(currentUserId, currentUserName, text, currentUserAvatar, replyToData)
+              setReplyingTo(null) // Clear reply state after sending
+            }}
             onSendImage={(file, shouldCompress) => sendImage(currentUserId, currentUserName, file, shouldCompress, currentUserAvatar)}
             onSendVideo={(file) => sendVideo(currentUserId, currentUserName, file, currentUserAvatar)}
             onSendDocument={(file) => sendDocument(currentUserId, currentUserName, file, currentUserAvatar)}
@@ -527,6 +725,16 @@ export function ChatRoom({
         onOpenChange={setShowUserProfileDialog}
         user={selectedUser}
         onSendMessage={handleSendMessageToUser}
+      />
+
+      {/* Delete Message Dialog */}
+      <DeleteMessageDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        selectedMessages={selectedMessages}
+        currentUserId={currentUserId}
+        onDeleteForMe={handleDeleteForMe}
+        onDeleteForEveryone={handleDeleteForEveryone}
       />
     </div>
   )

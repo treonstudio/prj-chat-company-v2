@@ -44,6 +44,15 @@ export interface MediaMetadata {
   thumbnailUrl?: string;
 }
 
+export interface ReplyTo {
+  messageId: string;
+  senderId: string;
+  senderName: string;
+  text: string; // Truncated to 100 chars
+  type: MessageType;
+  mediaUrl?: string | null;
+}
+
 export interface Message {
   messageId: string;
   senderId: string;
@@ -61,6 +70,11 @@ export interface Message {
   editedAt?: Timestamp;
   status?: MessageStatus;
   error?: string;
+  isDeleted?: boolean; // For "Delete for Everyone"
+  isEdited?: boolean; // Track if message has been edited
+  isForwarded?: boolean; // Track if message was forwarded
+  hideFrom?: Record<string, Timestamp>; // For "Delete for Me" - maps userId to deletion timestamp
+  replyTo?: ReplyTo | null; // For reply/quote message feature
 }
 
 // Chat models

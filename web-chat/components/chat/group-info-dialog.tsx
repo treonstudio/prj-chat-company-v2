@@ -465,21 +465,21 @@ export function GroupInfoDialog({
       <Dialog open={showAddMemberDialog} onOpenChange={setShowAddMemberDialog}>
         <DialogContent className="sm:max-w-md p-0">
           <DialogTitle asChild>
-            <VisuallyHidden>Add Members to "{groupName}"</VisuallyHidden>
+            <VisuallyHidden>Tambahkan Anggota ke "{groupName}"</VisuallyHidden>
           </DialogTitle>
           <div className="flex flex-col h-[600px]">
             {/* Header */}
             <div className="px-6 py-4 border-b">
-              <h2 className="text-lg font-semibold">Add Members to "{groupName}"</h2>
+              <h2 className="text-lg font-semibold">Tambahkan Anggota ke "{groupName}"</h2>
               <p className="text-xs text-muted-foreground mt-1">
-                Select up to {MAX_PARTICIPANTS_PER_ACTION} members to add
+                Pilih hingga {MAX_PARTICIPANTS_PER_ACTION} anggota untuk ditambahkan
               </p>
             </div>
 
             {/* Selected Members */}
             {selectedUserIds.size > 0 && (
               <div className="px-6 py-3 border-b bg-muted/30">
-                <p className="text-sm font-medium mb-2">Selected Members ({selectedUserIds.size})</p>
+                <p className="text-sm font-medium mb-2">Anggota Terpilih ({selectedUserIds.size})</p>
                 <div className="flex flex-wrap gap-2">
                   {Array.from(selectedUserIds).map((userId) => {
                     const user = availableUsers.find(u => u.userId === userId)
@@ -512,7 +512,7 @@ export function GroupInfoDialog({
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search Users"
+                  placeholder="Cari Pengguna"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -528,7 +528,7 @@ export function GroupInfoDialog({
                 </div>
               ) : availableUsers.length === 0 ? (
                 <div className="flex items-center justify-center py-8">
-                  <p className="text-sm text-muted-foreground">No users available to add</p>
+                  <p className="text-sm text-muted-foreground">Tidak ada pengguna yang tersedia untuk ditambahkan</p>
                 </div>
               ) : (
                 <div className="px-4 py-2">
@@ -584,7 +584,7 @@ export function GroupInfoDialog({
             {selectedUserIds.size > 0 && (
               <div className="px-6 py-4 border-t flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
-                  {selectedUserIds.size} {selectedUserIds.size === 1 ? 'member' : 'members'} selected
+                  {selectedUserIds.size} anggota terpilih
                 </p>
                 <Button
                   onClick={handleAddMembers}
@@ -594,12 +594,12 @@ export function GroupInfoDialog({
                   {addingMembers ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Adding...
+                      Menambahkan...
                     </>
                   ) : (
                     <>
                       <UserPlus className="h-4 w-4" />
-                      Add Members
+                      Tambahkan Anggota
                     </>
                   )}
                 </Button>

@@ -2,7 +2,6 @@
 
 import { useState, useRef, FormEvent, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +36,7 @@ export function MessageComposer({
   const { draft, saveDraft, clearDraft } = useDraftMessage(chatId);
   const [message, setMessage] = useState('');
   const messageRef = useRef('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
@@ -59,6 +59,15 @@ export function MessageComposer({
     messageRef.current = message;
   }, [message]);
 
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`; // Max height 120px (about 5 lines)
+    }
+  }, [message]);
+
   // Save draft when chatId changes (user switches room)
   useEffect(() => {
     return () => {
@@ -73,7 +82,7 @@ export function MessageComposer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]); // Only run when chatId changes
 
-  const handleMessageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
 
     // Check if exceeds limit
@@ -97,6 +106,15 @@ export function MessageComposer({
     }
 
     setMessage(newValue);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Submit on Enter (without Shift)
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e as any);
+    }
+    // Shift + Enter will naturally create a new line (default behavior)
   };
 
   const handleSubmit = (e: FormEvent) => {
@@ -266,13 +284,17 @@ export function MessageComposer({
           {/* Message input - only show if allowSendText is true */}
           {featureFlags.allowSendText ? (
             <>
-              {/* Input field */}
-              <Input
+              {/* Textarea field */}
+              <textarea
+                ref={textareaRef}
                 value={message}
                 onChange={handleMessageChange}
+                onKeyDown={handleKeyDown}
                 placeholder="Ketik pesan"
                 disabled={disabled || uploading}
-                className="flex-1 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-0 h-auto text-[15px] shadow-none"
+                rows={1}
+                className="flex-1 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-0 text-[15px] shadow-none resize-none overflow-y-auto outline-none"
+                style={{ minHeight: '24px', maxHeight: '120px' }}
               />
 
               {/* Send button */}
