@@ -380,7 +380,13 @@ export function ChatRoom({
       )
 
       if (result.status === 'success') {
-        toast.success(`${result.data.successCount} pesan berhasil dihapus`)
+        if (result.data.failedMessages.length > 0) {
+          toast.warning(
+            `${result.data.successCount} pesan berhasil dihapus. ${result.data.failedMessages.length} pesan gagal (lebih dari 48 jam atau tidak ditemukan)`
+          )
+        } else {
+          toast.success(`${result.data.successCount} pesan berhasil dihapus`)
+        }
         handleCancelSelection()
       } else if (result.status === 'error') {
         toast.error(result.message || 'Gagal menghapus pesan')
@@ -401,7 +407,13 @@ export function ChatRoom({
       )
 
       if (result.status === 'success') {
-        toast.success(`${result.data.successCount} pesan berhasil dihapus untuk semua orang`)
+        if (result.data.failedMessages.length > 0) {
+          toast.warning(
+            `${result.data.successCount} pesan berhasil dihapus untuk semua orang. ${result.data.failedMessages.length} pesan gagal (bukan pengirim, lebih dari 15 menit, atau tidak ditemukan)`
+          )
+        } else {
+          toast.success(`${result.data.successCount} pesan berhasil dihapus untuk semua orang`)
+        }
         handleCancelSelection()
       } else if (result.status === 'error') {
         toast.error(result.message || 'Gagal menghapus pesan')

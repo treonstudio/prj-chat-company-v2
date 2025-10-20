@@ -1067,14 +1067,9 @@ export class MessageRepository {
         await batch.commit();
       }
 
-      if (failedMessages.length > 0) {
-        return Resource.error('Beberapa pesan gagal dihapus (lebih dari 48 jam atau tidak ditemukan)', {
-          successCount,
-          failedMessages,
-        });
-      }
-
-      return Resource.success({ successCount, failedMessages: [] });
+      // Return success with data about successes and failures
+      // Caller can check failedMessages.length to show appropriate message
+      return Resource.success({ successCount, failedMessages });
     } catch (error: any) {
       console.error('Error deleting messages for me:', error);
       return Resource.error(error.message || 'Gagal menghapus pesan');
@@ -1209,14 +1204,9 @@ export class MessageRepository {
         }
       }
 
-      if (failedMessages.length > 0) {
-        return Resource.error('Beberapa pesan gagal dihapus (bukan pengirim, lebih dari 15 menit, atau tidak ditemukan)', {
-          successCount,
-          failedMessages,
-        });
-      }
-
-      return Resource.success({ successCount, failedMessages: [] });
+      // Return success with data about successes and failures
+      // Caller can check failedMessages.length to show appropriate message
+      return Resource.success({ successCount, failedMessages });
     } catch (error: any) {
       console.error('Error deleting messages for everyone:', error);
       return Resource.error(error.message || 'Gagal menghapus pesan');
