@@ -11,7 +11,7 @@ import { useMemo, useState, useEffect } from "react"
 import { useChatList } from "@/lib/hooks/use-chat-list"
 import { useAuth } from "@/lib/contexts/auth.context"
 import { useFeatureFlags } from "@/lib/contexts/feature-flags.context"
-import { formatDistanceToNow } from "date-fns"
+import { formatChatListTimestamp } from "@/lib/utils/timestamp-formatter"
 import { NewChatDialog } from "./new-chat-dialog"
 import { GroupChatDialog } from "./group-chat-dialog"
 import { ProfileView } from "./profile-view"
@@ -229,7 +229,7 @@ export function Sidebar({
               const name = rawName && rawName.trim() !== '' ? rawName : 'Deleted User'
               const avatar = c.chatType === 'GROUP' ? c.groupAvatar : c.otherUserAvatar
               const isGroup = c.chatType === 'GROUP'
-              const timeAgo = formatDistanceToNow(c.lastMessageTime.toDate(), { addSuffix: true })
+              const timeAgo = formatChatListTimestamp(c.lastMessageTime)
 
               // Truncate chat name with ellipsis (max 25 chars)
               const truncatedName = name.length > 25
@@ -272,7 +272,7 @@ export function Sidebar({
                       <div className="min-w-0 flex-1 pt-0.5">
                         <div className="flex items-baseline justify-between gap-2 mb-0.5">
                           <p className="truncate text-sm font-semibold flex-1 leading-tight">{truncatedName}</p>
-                          <span className="shrink-0 text-[11px] text-muted-foreground whitespace-nowrap leading-tight">{timeAgo.replace('about ', '')}</span>
+                          <span className="shrink-0 text-[11px] text-muted-foreground whitespace-nowrap leading-tight">{timeAgo}</span>
                         </div>
                         <div className="flex items-center justify-between gap-2 mt-1">
                           <p className="text-xs text-muted-foreground flex-1 leading-tight overflow-hidden text-ellipsis whitespace-nowrap break-all line-clamp-1">

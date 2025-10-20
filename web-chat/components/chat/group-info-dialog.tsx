@@ -33,6 +33,9 @@ import {
 const chatRepository = new ChatRepository()
 const userRepository = new UserRepository()
 
+// Max participants that can be added per action (default: 5)
+const MAX_PARTICIPANTS_PER_ACTION = parseInt(process.env.NEXT_PUBLIC_MAX_PARTICIPANTS_PER_ACTION || '5')
+
 interface GroupInfoDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -82,7 +85,7 @@ export function GroupInfoDialog({
 
   const handleKickMember = async (userId: string, userName: string) => {
     if (!isCurrentUserAdmin) {
-      toast.error('Only admins can remove members')
+      toast.error('Hanya admin yang dapat menghapus anggota')
       return
     }
 
@@ -100,11 +103,11 @@ export function GroupInfoDialog({
     if (result.status === 'success') {
       const updatedMembers = groupMembers.filter(m => m.userId !== memberToRemove.userId)
       onMembersUpdate(updatedMembers)
-      toast.success(`${memberToRemove.userName} has been removed from the group`)
+      toast.success('Anggota berhasil dikeluarkan dari grup')
       setShowRemoveDialog(false)
       setMemberToRemove(null)
     } else if (result.status === 'error') {
-      toast.error(`Failed to remove member: ${result.message}`)
+      toast.error(`Gagal mengeluarkan anggota: ${result.message}`)
     }
   }
 
@@ -124,13 +127,13 @@ export function GroupInfoDialog({
     setUpdatingName(false)
 
     if (result.status === 'success') {
-      toast.success('Group name updated successfully')
+      toast.success('Nama grup berhasil diubah')
       setShowEditNameDialog(false)
       if (onNameUpdate) {
         onNameUpdate(editingName.trim())
       }
     } else if (result.status === 'error') {
-      toast.error(`Failed to update group name: ${result.message}`)
+      toast.error(`Gagal mengubah nama grup: ${result.message}`)
     }
   }
 
@@ -148,14 +151,14 @@ export function GroupInfoDialog({
     setLeaving(false)
 
     if (result.status === 'success') {
-      toast.success('You have left the group')
+      toast.success('Anda telah keluar dari grup')
       setShowLeaveDialog(false)
       onOpenChange(false)
       if (onLeaveGroup) {
         onLeaveGroup()
       }
     } else if (result.status === 'error') {
-      toast.error(`Failed to leave group: ${result.message}`)
+      toast.error(`Gagal keluar dari grup: ${result.message}`)
     }
   }
 
@@ -178,6 +181,14 @@ export function GroupInfoDialog({
     if (newSelected.has(userId)) {
       newSelected.delete(userId)
     } else {
+      // Check if selecting this user would exceed the max participants per action
+      if (newSelected.size >= MAX_PARTICIPANTS_PER_ACTION) {
+        toast.error(
+          `Maksimal ${MAX_PARTICIPANTS_PER_ACTION} peserta dapat dipilih sekaligus`,
+          { duration: 3000 }
+        )
+        return
+      }
       newSelected.add(userId)
     }
     setSelectedUserIds(newSelected)
@@ -191,6 +202,15 @@ export function GroupInfoDialog({
 
   const handleAddMembers = async () => {
     if (selectedUserIds.size === 0) return
+
+    // Validate max participants per action
+    if (selectedUserIds.size > MAX_PARTICIPANTS_PER_ACTION) {
+      toast.error(
+        `Maksimal ${MAX_PARTICIPANTS_PER_ACTION} peserta dapat ditambahkan sekaligus`,
+        { duration: 3000 }
+      )
+      return
+    }
 
     setAddingMembers(true)
     try {
@@ -213,17 +233,17 @@ export function GroupInfoDialog({
       onMembersUpdate([...groupMembers, ...newUsers])
 
       if (successCount > 0) {
-        toast.success(`${successCount} ${successCount === 1 ? 'member' : 'members'} added to the group`)
+        toast.success(`${successCount} anggota berhasil ditambahkan ke grup`)
       }
       if (failCount > 0) {
-        toast.error(`Failed to add ${failCount} ${failCount === 1 ? 'member' : 'members'}`)
+        toast.error(`Gagal menambahkan ${failCount} anggota`)
       }
 
       setShowAddMemberDialog(false)
       setSelectedUserIds(new Set())
     } catch (error) {
       console.error('Add members error:', error)
-      toast.error('Failed to add members')
+      toast.error('Gagal menambahkan anggota')
     } finally {
       setAddingMembers(false)
     }
@@ -234,7 +254,7 @@ export function GroupInfoDialog({
     if (!file || !isCurrentUserAdmin) return
 
     if (!file.type.startsWith('image/')) {
-      toast.error('Please select an image file')
+      toast.error('Harap pilih file gambar')
       return
     }
 
@@ -252,15 +272,15 @@ export function GroupInfoDialog({
 
         if (updateResult.status === 'success') {
           onAvatarUpdate(avatarUrl)
-          toast.success('Group photo updated successfully')
+          toast.success('Foto grup berhasil diubah')
         } else if (updateResult.status === 'error') {
-          toast.error(`Failed to update group photo: ${updateResult.message}`)
+          toast.error(`Gagal mengubah foto grup: ${updateResult.message}`)
         }
       } else if (uploadResult.status === 'error') {
-        toast.error(`Failed to upload image: ${uploadResult.message}`)
+        toast.error(`Gagal mengunggah gambar: ${uploadResult.message}`)
       }
     } catch (error: any) {
-      toast.error('Failed to update group photo')
+      toast.error('Gagal mengubah foto grup')
       console.error('Avatar update error:', error)
     } finally {
       setUploadingAvatar(false)
@@ -355,6 +375,7 @@ export function GroupInfoDialog({
                         loadAvailableUsers()
                       }}
                       className="gap-2"
+                      title="Add members to group"
                     >
                       <UserPlus className="h-4 w-4" />
                       Add
@@ -382,8 +403,8 @@ export function GroupInfoDialog({
                           <div className="flex items-center gap-1.5 mb-0.5">
                             <div className="flex items-baseline gap-1 flex-1 min-w-0">
                               <span className="text-sm font-medium truncate">
-                                {member.displayName.length > 35
-                                  ? member.displayName.slice(0, 35) + '...'
+                                {member.displayName.length > 25
+                                  ? member.displayName.slice(0, 25) + '...'
                                   : member.displayName}
                               </span>
                               {isCurrentUser && (
@@ -422,10 +443,17 @@ export function GroupInfoDialog({
                 <Button
                   variant="ghost"
                   onClick={handleLeaveGroup}
-                  className="w-full justify-start gap-3 text-destructive hover:text-destructive hover:bg-destructive/10 h-auto py-3"
+                  className="w-full justify-start gap-3 h-auto py-3 text-white hover:text-white transition-colors"
+                  style={{ backgroundColor: '#E54C38' }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#D43D28'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#E54C38'
+                  }}
                 >
                   <LogOut className="h-5 w-5" />
-                  <span className="text-sm font-medium">Leave Group</span>
+                  <span className="text-sm font-medium">Keluar dari Grup</span>
                 </Button>
               </div>
             </div>
@@ -443,6 +471,9 @@ export function GroupInfoDialog({
             {/* Header */}
             <div className="px-6 py-4 border-b">
               <h2 className="text-lg font-semibold">Add Members to "{groupName}"</h2>
+              <p className="text-xs text-muted-foreground mt-1">
+                Select up to {MAX_PARTICIPANTS_PER_ACTION} members to add
+              </p>
             </div>
 
             {/* Selected Members */}
@@ -582,28 +613,41 @@ export function GroupInfoDialog({
       <AlertDialog open={showRemoveDialog} onOpenChange={setShowRemoveDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove {memberToRemove?.userName} from this group?</AlertDialogTitle>
+            <AlertDialogTitle asChild>
+              <VisuallyHidden>Keluarkan anggota dari grup?</VisuallyHidden>
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This action will remove {memberToRemove?.userName} from the group. They can be added back later by a group admin.
+              Tindakan ini akan mengeluarkan anggota dari grup. Mereka dapat ditambahkan kembali nanti oleh admin grup.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={removingMember}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={removingMember}>Batal</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault()
                 confirmRemoveMember()
               }}
               disabled={removingMember}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="text-white hover:text-white transition-colors"
+              style={{ backgroundColor: '#E54C38' }}
+              onMouseEnter={(e) => {
+                if (!removingMember) {
+                  e.currentTarget.style.backgroundColor = '#D43D28'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!removingMember) {
+                  e.currentTarget.style.backgroundColor = '#E54C38'
+                }
+              }}
             >
               {removingMember ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Removing...
+                  Mengeluarkan...
                 </>
               ) : (
-                "Remove"
+                "Keluarkan"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -664,28 +708,39 @@ export function GroupInfoDialog({
       <AlertDialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Leave "{groupName}"?</AlertDialogTitle>
+            <AlertDialogTitle>Keluar dari Grup?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to leave this group? You will no longer receive messages from this group and will need to be re-added by a member to rejoin.
+              Apakah Anda yakin ingin keluar dari grup ini? Anda tidak akan lagi menerima pesan dari grup ini dan perlu ditambahkan kembali oleh anggota untuk bergabung lagi.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={leaving}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={leaving}>Batal</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault()
                 confirmLeaveGroup()
               }}
               disabled={leaving}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="text-white hover:text-white transition-colors"
+              style={{ backgroundColor: '#E54C38' }}
+              onMouseEnter={(e) => {
+                if (!leaving) {
+                  e.currentTarget.style.backgroundColor = '#D43D28'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!leaving) {
+                  e.currentTarget.style.backgroundColor = '#E54C38'
+                }
+              }}
             >
               {leaving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Leaving...
+                  Keluar...
                 </>
               ) : (
-                "Leave Group"
+                "Keluar dari Grup"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

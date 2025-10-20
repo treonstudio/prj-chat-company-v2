@@ -322,10 +322,10 @@ export function ChatRoom({
               )}
             </AvatarFallback>
           </Avatar>
-          <div className="flex-1 min-w-0 text-left">
+          <div className="flex-1 min-w-0 text-left overflow-hidden">
             <h1 className="text-balance text-base font-semibold truncate">{roomTitle}</h1>
             {isGroupChat && groupMembers.length > 0 ? (
-              <p className="text-xs text-muted-foreground truncate">
+              <p className="text-xs text-muted-foreground truncate overflow-hidden whitespace-nowrap text-ellipsis">
                 {getMemberNamesDisplay()}
               </p>
             ) : !isGroupChat ? (

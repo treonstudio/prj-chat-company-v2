@@ -55,6 +55,10 @@ export function GroupChatDialog({
 
   // Max character limits
   const MAX_GROUP_NAME_LENGTH = 100
+  // Max participants that can be selected per action (default: 5)
+  const MAX_PARTICIPANTS_PER_ACTION = parseInt(process.env.NEXT_PUBLIC_MAX_PARTICIPANTS_PER_ACTION || '5')
+  // Minimum participants required to create a group (must be more than 1)
+  const MIN_PARTICIPANTS_REQUIRED = 2
 
   useEffect(() => {
     if (!open) {
@@ -110,8 +114,8 @@ export function GroupChatDialog({
 
     if (newValue.length > MAX_GROUP_NAME_LENGTH) {
       toast.error(
-        `Group name too long! Maximum ${MAX_GROUP_NAME_LENGTH} characters. ` +
-        `Current: ${newValue.length} characters.`,
+        `Nama grup terlalu panjang! Maksimal ${MAX_GROUP_NAME_LENGTH} karakter. ` +
+        `Saat ini: ${newValue.length} karakter.`,
         { duration: 3000 }
       )
       return
@@ -126,6 +130,14 @@ export function GroupChatDialog({
       if (isSelected) {
         return prev.filter((u) => u.userId !== user.userId)
       } else {
+        // Check if selecting this user would exceed the max participants per action
+        if (prev.length >= MAX_PARTICIPANTS_PER_ACTION) {
+          toast.error(
+            `Maksimal ${MAX_PARTICIPANTS_PER_ACTION} peserta dapat dipilih sekaligus`,
+            { duration: 3000 }
+          )
+          return prev
+        }
         return [...prev, user]
       }
     })
@@ -140,7 +152,7 @@ export function GroupChatDialog({
     if (!file) return
 
     if (!file.type.startsWith('image/')) {
-      toast.error('Please select an image file')
+      toast.error('Harap pilih file gambar')
       return
     }
 
@@ -199,13 +211,17 @@ export function GroupChatDialog({
       }, 'image/jpeg', 0.95)
     } catch (error) {
       console.error('Error cropping image:', error)
-      toast.error('Failed to crop image')
+      toast.error('Gagal memotong gambar')
     }
   }
 
   const handleNext = () => {
-    if (selectedUsers.length === 0) {
-      toast.error("Please select at least one participant")
+    if (selectedUsers.length < MIN_PARTICIPANTS_REQUIRED) {
+      toast.error(`Harap pilih minimal ${MIN_PARTICIPANTS_REQUIRED} peserta`)
+      return
+    }
+    if (selectedUsers.length > MAX_PARTICIPANTS_PER_ACTION) {
+      toast.error(`Maksimal ${MAX_PARTICIPANTS_PER_ACTION} peserta dapat dipilih sekaligus`)
       return
     }
     setStep("settings")
@@ -219,13 +235,18 @@ export function GroupChatDialog({
 
   const handleCreateGroup = async () => {
     // Validation
-    if (selectedUsers.length === 0) {
-      toast.error("Please select at least one participant")
+    if (selectedUsers.length < MIN_PARTICIPANTS_REQUIRED) {
+      toast.error(`Harap pilih minimal ${MIN_PARTICIPANTS_REQUIRED} peserta`)
+      return
+    }
+
+    if (selectedUsers.length > MAX_PARTICIPANTS_PER_ACTION) {
+      toast.error(`Maksimal ${MAX_PARTICIPANTS_PER_ACTION} peserta dapat dipilih sekaligus`)
       return
     }
 
     if (groupName.trim().length > MAX_GROUP_NAME_LENGTH) {
-      toast.error(`Group name maximum ${MAX_GROUP_NAME_LENGTH} characters`)
+      toast.error(`Nama grup maksimal ${MAX_GROUP_NAME_LENGTH} karakter`)
       return
     }
 
@@ -246,12 +267,12 @@ export function GroupChatDialog({
     setCreating(false)
 
     if (result.status === 'success') {
-      toast.success('Group created successfully')
+      toast.success('Grup berhasil dibuat')
       onGroupCreated(result.data.chatId, true)
       onOpenChange(false)
     } else if (result.status === 'error') {
-      setError(result.message || "Failed to create group")
-      toast.error(result.message || "Failed to create group")
+      setError(result.message || "Gagal membuat grup")
+      toast.error(result.message || "Gagal membuat grup")
     }
   }
 
@@ -268,7 +289,7 @@ export function GroupChatDialog({
             <div className="px-4 py-4 border-b">
               <h2 className="text-lg font-semibold">Add Group Participants</h2>
               <p className="text-xs text-muted-foreground">
-                {selectedUsers.length} of {users.length} selected
+                {selectedUsers.length} of {MAX_PARTICIPANTS_PER_ACTION} selected
               </p>
             </div>
 
@@ -277,27 +298,34 @@ export function GroupChatDialog({
               <div className="px-4 py-3 border-b bg-muted/30">
                 <div className="max-h-24 overflow-y-auto">
                   <div className="flex flex-wrap gap-2 pr-2">
-                    {selectedUsers.map((user) => (
-                      <Badge
-                        key={user.userId}
-                        variant="secondary"
-                        className="gap-1.5 pl-2 pr-1 py-1.5 flex-shrink-0"
-                      >
-                        <Avatar className="h-5 w-5">
-                          <AvatarImage src={user.imageURL || user.imageUrl || "/placeholder-user.jpg"} />
-                          <AvatarFallback className="text-[10px]">
-                            {user.displayName?.slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-xs font-medium">{user.displayName}</span>
-                        <button
-                          onClick={() => removeSelectedUser(user.userId)}
-                          className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                    {selectedUsers.map((user) => {
+                      // Truncate user name if longer than 25 characters
+                      const displayName = user.displayName && user.displayName.length > 25
+                        ? user.displayName.slice(0, 25) + '...'
+                        : user.displayName
+
+                      return (
+                        <Badge
+                          key={user.userId}
+                          variant="secondary"
+                          className="gap-1.5 pl-2 pr-1 py-1.5 flex-shrink-0"
                         >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))}
+                          <Avatar className="h-5 w-5">
+                            <AvatarImage src={user.imageURL || user.imageUrl || "/placeholder-user.jpg"} />
+                            <AvatarFallback className="text-[10px]">
+                              {user.displayName?.slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-xs font-medium">{displayName}</span>
+                          <button
+                            onClick={() => removeSelectedUser(user.userId)}
+                            className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      )
+                    })}
                   </div>
                 </div>
               </div>
@@ -391,12 +419,13 @@ export function GroupChatDialog({
             </ScrollArea>
 
             {/* Next Button */}
-            {selectedUsers.length > 0 && (
+            {selectedUsers.length >= MIN_PARTICIPANTS_REQUIRED && (
               <div className="p-4 border-t flex justify-end">
                 <Button
                   size="icon"
                   onClick={handleNext}
                   className="h-14 w-14 rounded-full"
+                  title={`Create group with ${selectedUsers.length} participants`}
                 >
                   <ArrowRight className="h-6 w-6" />
                 </Button>

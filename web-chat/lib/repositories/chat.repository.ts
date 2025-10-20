@@ -408,8 +408,16 @@ export class ChatRepository {
         return Resource.error('User is not a member of this group');
       }
 
+      // Get removed member's name for system message
+      const removedMemberRef = doc(db(), 'users', userIdToRemove);
+      const removedMemberDoc = await getDoc(removedMemberRef);
+      const removedMemberName = removedMemberDoc.exists()
+        ? (removedMemberDoc.data().displayName || 'User')
+        : 'User';
+
       // Use batch to update group chat and user's chat list
       const batch = writeBatch(db());
+      const now = Timestamp.now();
 
       // Remove user from group participants
       const updatedParticipants = groupChat.participants.filter(
@@ -424,10 +432,53 @@ export class ChatRepository {
       batch.update(groupChatRef, {
         participants: updatedParticipants,
         admins: updatedAdmins,
-        updatedAt: Timestamp.now(),
+        updatedAt: now,
       });
 
-      // Remove chat from user's chat list
+      // Create system message for removing member
+      const messagesRef = collection(db(), this.GROUP_CHATS_COLLECTION, chatId, 'messages');
+      const systemMessageRef = doc(messagesRef);
+      const systemMessageText = `${removedMemberName} telah dikeluarkan dari grup`;
+
+      batch.set(systemMessageRef, {
+        messageId: systemMessageRef.id,
+        senderId: 'system',
+        senderName: 'System',
+        text: systemMessageText,
+        type: 'TEXT',
+        timestamp: now,
+        createdAt: now,
+        status: 'SENT',
+        readBy: {},
+      });
+
+      // Update lastMessage for all remaining participants
+      for (const participantId of updatedParticipants) {
+        const participantChatsRef = doc(db(), this.USER_CHATS_COLLECTION, participantId);
+        const participantChatsDoc = await getDoc(participantChatsRef);
+
+        if (participantChatsDoc.exists()) {
+          const participantChats = participantChatsDoc.data() as UserChats;
+          const updatedChats = participantChats.chats.map((chat) => {
+            if (chat.chatId === chatId) {
+              return {
+                ...chat,
+                lastMessage: systemMessageText,
+                lastMessageTime: now,
+                unreadCount: chat.unreadCount + 1,
+              };
+            }
+            return chat;
+          });
+
+          batch.update(participantChatsRef, {
+            chats: updatedChats,
+            updatedAt: now,
+          });
+        }
+      }
+
+      // Remove chat from removed user's chat list
       const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, userIdToRemove);
       const userChatsDoc = await getDoc(userChatsRef);
 
@@ -439,7 +490,7 @@ export class ChatRepository {
 
         batch.update(userChatsRef, {
           chats: updatedChats,
-          updatedAt: Timestamp.now(),
+          updatedAt: now,
         });
       }
 

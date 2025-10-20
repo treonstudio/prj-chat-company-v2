@@ -166,10 +166,16 @@ export function ChatMessage({
       ? "ml-auto bg-primary text-primary-foreground rounded-tl-lg rounded-tr-lg rounded-bl-lg items-end"
       : "mr-auto bg-gray-100 text-secondary-foreground rounded-tl-lg rounded-tr-lg rounded-br-lg items-start",
     // padding varies by type
-    data.type === 'doc' ? 'px-3 py-3' : 'px-3 py-2'
+    data.type === 'doc'
+      ? 'px-3 py-3'
+      : data.type === 'image' || data.type === 'video'
+      ? 'p-1.5'  // 6px padding for media
+      : 'px-3 py-2'
   )
 
   const maxWidthStyle = data.type === 'text'
+    ? { maxWidth: '640px' }
+    : data.type === 'image'
     ? { maxWidth: '640px' }
     : { maxWidth: '640px' }
 
@@ -317,10 +323,10 @@ export function ChatMessage({
           )}
 
           {data.type === "image" && (
-            <div className="relative min-h-[200px] group">
+            <div className="relative group">
               {/* Skeleton loader */}
               {!imageLoaded && (
-                <div className="absolute inset-0 bg-muted rounded-md animate-pulse flex items-center justify-center">
+                <div className="absolute inset-0 bg-muted rounded-md animate-pulse flex items-center justify-center min-h-[200px]">
                   <svg
                     className="w-12 h-12 text-muted-foreground/30"
                     fill="none"
@@ -340,9 +346,18 @@ export function ChatMessage({
                 src={data.content || "/placeholder.svg?height=320&width=480&query=pastel%20green%20chat%20image"}
                 alt="Shared image"
                 className={cn(
-                  "h-auto w-full rounded-md cursor-pointer hover:opacity-90 transition-opacity",
+                  "cursor-pointer hover:opacity-90 transition-opacity",
                   !imageLoaded && "opacity-0"
                 )}
+                style={{
+                  maxWidth: '330px',
+                  maxHeight: '330px',
+                  minWidth: '200px',
+                  width: 'auto',
+                  height: 'auto',
+                  objectFit: 'contain',
+                  display: 'block'
+                }}
                 loading="lazy"
                 onLoad={() => setImageLoaded(true)}
                 onClick={() => setShowImagePreview(true)}
@@ -451,6 +466,7 @@ export function ChatMessage({
               </button>
             )}
           </div>
+          </div>
 
           {/* Forward button - appears on hover (hide for deleted messages) */}
           {onForward && data.content !== "Pesan ini dihapus" && (
@@ -471,7 +487,6 @@ export function ChatMessage({
               <Forward className="h-4 w-4 text-muted-foreground" />
             </button>
           )}
-          </div>
 
         </div>
       </div>

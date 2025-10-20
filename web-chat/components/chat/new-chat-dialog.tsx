@@ -101,7 +101,7 @@ export function NewChatDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>New Chat</DialogTitle>
         </DialogHeader>
@@ -128,7 +128,7 @@ export function NewChatDialog({
           )}
 
           {/* User List */}
-          <ScrollArea className="h-[400px] pr-4">
+          <ScrollArea className="h-[350px] pr-4">
             {loading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -155,7 +155,11 @@ export function NewChatDialog({
                       <AvatarFallback>{user.displayName?.slice(0, 2).toUpperCase()}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1 text-left min-w-0">
-                      <p className="text-sm font-medium truncate">{user.displayName}</p>
+                      <p className="text-sm font-medium truncate">
+                        {user.displayName && user.displayName.length > 35
+                          ? user.displayName.slice(0, 35) + '...'
+                          : user.displayName}
+                      </p>
                       <p className="text-xs text-muted-foreground truncate">
                         {user.username || user.email?.split('@')[0] || 'Unknown'}
                       </p>
