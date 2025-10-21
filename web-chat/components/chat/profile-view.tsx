@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, Pencil, Check, X, LogOut, Eye, EyeOff, Camera, Loader2 } from "lucide-react"
+import { ArrowLeft, Pencil, Check, X, LogOut, Eye, EyeOff, Camera, Loader2, Copy } from "lucide-react"
 import { User } from "@/types/models"
 import { StorageRepository } from "@/lib/repositories/storage.repository"
 import { UserRepository } from "@/lib/repositories/user.repository"
@@ -43,6 +43,17 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
 
   // Max character limit for profile name
   const MAX_PROFILE_NAME_LENGTH = 25
+
+  const handleCopyUsername = async () => {
+    const username = user.username || user.userId || '-'
+    try {
+      await navigator.clipboard.writeText(username)
+      toast.success('Username berhasil disalin')
+    } catch (err) {
+      console.error('Failed to copy username:', err)
+      toast.error('Gagal menyalin username')
+    }
+  }
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value
@@ -274,6 +285,25 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
             />
           </div>
         </div>
+
+        {/* Username Section - Read Only */}
+        <div className="px-4 py-4">
+          <label className="text-sm text-muted-foreground">Username</label>
+          <div className="flex items-center justify-between gap-2 py-2">
+            <p className="flex-1 text-base text-muted-foreground">
+              {user.username || user.userId || '-'}
+            </p>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleCopyUsername}
+            >
+              <Copy className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          </div>
+        </div>
+
+        <Separator />
 
         {/* Name Section */}
         <div className="px-4 py-4">

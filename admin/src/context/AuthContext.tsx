@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
 import firebase_app from '@/firebase/config';
+import LoadingScreen from '@/components/LoadingScreen';
 
 // Initialize Firebase auth instance
 const auth = getAuth(firebase_app);
@@ -50,16 +51,7 @@ export function AuthContextProvider({ children }: AuthContextProviderProps) {
   // Provide the authentication context to child components
   return (
     <AuthContext.Provider value={{ user, loading }}>
-      {loading ? (
-        <div className="flex min-h-screen items-center justify-center">
-          <div className="text-center">
-            <div className="h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading...</p>
-          </div>
-        </div>
-      ) : (
-        children
-      )}
+      {loading ? <LoadingScreen /> : children}
     </AuthContext.Provider>
   );
 }

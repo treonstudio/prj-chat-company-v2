@@ -107,6 +107,7 @@ export interface GroupChat {
   participants: string[];
   admins?: string[];
   leftMembers?: Record<string, Timestamp>; // Track when users left
+  usersJoinedAt?: Record<string, Timestamp>; // Track when users joined (for message filtering on rejoin)
   lastMessage?: LastMessage;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;

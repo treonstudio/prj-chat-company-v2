@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthContext } from '@/context/AuthContext'
+import LoadingScreen from '@/components/LoadingScreen'
 
 export default function Home() {
   const { user }: any = useAuthContext()
@@ -19,11 +20,5 @@ export default function Home() {
     }
   }, [user, router])
 
-  return (
-    <div className="flex h-screen items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <div className="mb-4 text-lg font-medium text-gray-900">Loading...</div>
-      </div>
-    </div>
-  )
+  return <LoadingScreen />
 }

@@ -91,14 +91,22 @@ export class ChatRepository {
       // Ensure creator is in the participants list
       const participants = Array.from(new Set([creatorId, ...memberIds]));
 
+      // Initialize usersJoinedAt for all founding members
+      const now = Timestamp.now();
+      const usersJoinedAt: Record<string, Timestamp> = {};
+      participants.forEach(userId => {
+        usersJoinedAt[userId] = now;
+      });
+
       const newGroupChat: GroupChat = {
         chatId,
         name: groupName,
         ...(imageUrl && { avatarUrl: imageUrl }),
         participants,
         admins: [creatorId], // Creator is automatically admin
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
+        usersJoinedAt, // Track join dates for message filtering on rejoin
+        createdAt: now,
+        updatedAt: now,
       };
 
       // Use batch write to create group chat and update all participants' userChats
@@ -541,10 +549,15 @@ export class ChatRepository {
         delete leftMembers[newMemberId];
       }
 
+      // Update usersJoinedAt - set join timestamp (overwrites if rejoining)
+      const usersJoinedAt = groupChat.usersJoinedAt || {};
+      usersJoinedAt[newMemberId] = now;  // CRITICAL: This overwrites previous timestamp for rejoin scenarios
+
       // Add user to group participants
       batch.update(groupChatRef, {
         participants: arrayUnion(newMemberId),
         leftMembers: leftMembers,
+        usersJoinedAt: usersJoinedAt,  // Track join date for message filtering
         updatedAt: now,
       });
 

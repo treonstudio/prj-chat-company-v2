@@ -11,6 +11,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import Cropper from "react-easy-crop"
 import type { Area } from "react-easy-crop"
+import LoadingScreen from "@/components/LoadingScreen"
 import {
   Table,
   TableBody,
@@ -569,21 +570,7 @@ export default function DashboardPage() {
 
   // Show loading state while checking auth
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="w-full max-w-7xl p-8 space-y-8">
-          <div className="h-8 w-64 bg-gray-200 rounded animate-pulse"></div>
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="space-y-6">
-              <div className="h-32 bg-gray-200 rounded-lg animate-pulse"></div>
-              <div className="h-32 bg-gray-200 rounded-lg animate-pulse"></div>
-            </div>
-            <div className="lg:col-span-2 h-40 bg-gray-200 rounded-lg animate-pulse"></div>
-          </div>
-          <div className="h-96 bg-gray-200 rounded-lg animate-pulse"></div>
-        </div>
-      </div>
-    )
+    return <LoadingScreen />
   }
 
   // Don't render if not authenticated

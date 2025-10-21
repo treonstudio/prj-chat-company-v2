@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { MessageRepository } from '@/lib/repositories/message.repository';
 import { Message, MessageType, MessageStatus, ReplyTo } from '@/types/models';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp, doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase/config';
 
 const messageRepository = new MessageRepository();
 
@@ -15,12 +16,14 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingMessage, setUploadingMessage] = useState<Message | null>(null);
+  const [userJoinedAt, setUserJoinedAt] = useState<Timestamp | null>(null);
 
   useEffect(() => {
     // Reset uploading state when chatId changes
     setUploadingMessage(null);
     setUploading(false);
     setOptimisticMessages([]);
+    setUserJoinedAt(null);
 
     if (!chatId) {
       setLoading(false);
@@ -29,54 +32,95 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
 
     setLoading(true);
 
-    const unsubscribe = messageRepository.getMessages(
-      chatId,
-      isGroupChat,
-      (messages) => {
-        setMessages(messages);
-        setLoading(false);
-        setError(null);
+    // CRITICAL: Load group join date BEFORE subscribing to messages
+    // This prevents race conditions where messages load before we know the filter timestamp
+    const setupMessageListener = async () => {
+      let joinedAtTimestamp: Timestamp | null = null;
 
-        // Remove optimistic messages that have been confirmed
-        setOptimisticMessages(prev => {
-          // Only keep optimistic messages (temp_ ids)
-          // If a message with same content exists in real messages, remove optimistic version
-          return prev.filter(optMsg => {
-            if (!optMsg.messageId.startsWith('temp_')) {
-              return false; // Remove non-temp messages from optimistic list
-            }
+      // For group chats, load user's join date first
+      if (isGroupChat && currentUserId) {
+        try {
+          const groupRef = doc(db(), 'groupChats', chatId);
+          const groupDoc = await getDoc(groupRef);
 
-            // Check if this optimistic message now exists in real messages
-            const hasRealVersion = messages.some(msg => {
-              if (msg.messageId.startsWith('temp_')) {
-                return false; // Skip other temp messages
+          if (groupDoc.exists()) {
+            const groupData = groupDoc.data();
+            const usersJoinedAt = groupData?.usersJoinedAt || {};
+            joinedAtTimestamp = usersJoinedAt[currentUserId] || null;
+            setUserJoinedAt(joinedAtTimestamp);
+          }
+        } catch (err) {
+          console.error('Error loading group join date:', err);
+          // Continue without filtering if we can't load join date
+        }
+      }
+
+      // Now subscribe to messages with filtering applied
+      const unsubscribe = messageRepository.getMessages(
+        chatId,
+        isGroupChat,
+        (messages) => {
+          // CRITICAL: Filter messages based on user's join date for group chats
+          let filteredMessages = messages;
+
+          if (isGroupChat && joinedAtTimestamp) {
+            filteredMessages = messages.filter(msg => {
+              if (!msg.timestamp) return true; // Include messages without timestamp (edge case)
+              return msg.timestamp.toMillis() >= joinedAtTimestamp.toMillis();
+            });
+          }
+
+          setMessages(filteredMessages);
+          setLoading(false);
+          setError(null);
+
+          // Remove optimistic messages that have been confirmed
+          setOptimisticMessages(prev => {
+            // Only keep optimistic messages (temp_ ids)
+            // If a message with same content exists in real messages, remove optimistic version
+            return prev.filter(optMsg => {
+              if (!optMsg.messageId.startsWith('temp_')) {
+                return false; // Remove non-temp messages from optimistic list
               }
 
-              const timeDiff = Math.abs(
-                (msg.timestamp?.toMillis() || 0) - (optMsg.timestamp?.toMillis() || 0)
-              );
+              // Check if this optimistic message now exists in real messages
+              const hasRealVersion = filteredMessages.some(msg => {
+                if (msg.messageId.startsWith('temp_')) {
+                  return false; // Skip other temp messages
+                }
 
-              // Match by content and time
-              return (
-                msg.senderId === optMsg.senderId &&
-                msg.text === optMsg.text &&
-                msg.type === optMsg.type &&
-                timeDiff < 10000 // 10 second window
-              );
+                const timeDiff = Math.abs(
+                  (msg.timestamp?.toMillis() || 0) - (optMsg.timestamp?.toMillis() || 0)
+                );
+
+                // Match by content and time
+                return (
+                  msg.senderId === optMsg.senderId &&
+                  msg.text === optMsg.text &&
+                  msg.type === optMsg.type &&
+                  timeDiff < 10000 // 10 second window
+                );
+              });
+
+              return !hasRealVersion; // Keep if no real version exists yet
             });
-
-            return !hasRealVersion; // Keep if no real version exists yet
           });
-        });
-      },
-      (error) => {
-        setError(error);
-        setLoading(false);
-      },
-      currentUserId
-    );
+        },
+        (error) => {
+          setError(error);
+          setLoading(false);
+        },
+        currentUserId
+      );
 
-    return () => unsubscribe();
+      return unsubscribe;
+    };
+
+    let unsubscribePromise = setupMessageListener();
+
+    return () => {
+      unsubscribePromise.then(unsubscribe => unsubscribe());
+    };
   }, [chatId, isGroupChat, currentUserId]);
 
   const sendTextMessage = useCallback(

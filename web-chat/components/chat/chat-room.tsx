@@ -13,7 +13,7 @@ import { useState } from "react"
 import { ChatType, User, UserStatus, Message } from "@/types/models"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { LogOut, Loader2, Users, Trash2, X } from "lucide-react"
+import { LogOut, Loader2, Users, Trash2, X, MoreVertical, Info } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,6 +31,13 @@ import { DeleteMessageDialog } from "./delete-message-dialog"
 import { ReplyPreviewBar } from "./reply-preview-bar"
 import { MessageRepository } from "@/lib/repositories/message.repository"
 import { toast } from "sonner"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 const userRepository = new UserRepository()
 const chatRepository = new ChatRepository()
@@ -491,6 +498,49 @@ export function ChatRoom({
             ) : null}
           </div>
         </button>
+
+        {/* Three dots menu */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shrink-0 h-10 w-10"
+              aria-label="Menu options"
+            >
+              <MoreVertical className="h-5 w-5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            {isGroupChat && (
+              <>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSelectionMode(false)
+                    setSelectedMessageIds(new Set())
+                    setShowGroupInfoDialog(true)
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <Info className="h-4 w-4" />
+                  <span>Info grup</span>
+                </DropdownMenuItem>
+                {isParticipant && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => setShowLeaveDialog(true)}
+                      className="flex items-center gap-2 text-destructive focus:text-destructive"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      <span>Keluar dari grup</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </header>
       <ScrollArea className="flex-1 min-h-0" style={{ backgroundImage: 'url(/tile-pattern.png)', backgroundRepeat: 'repeat' }}>
         {loading ? (

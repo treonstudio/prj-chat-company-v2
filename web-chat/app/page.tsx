@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/chat/sidebar';
 import { ChatRoom } from '@/components/chat/chat-room';
 import { useAuth } from '@/lib/contexts/auth.context';
+import packageJson from '../package.json';
+
+// Get commit hash - will be set during build
+const COMMIT_HASH = process.env.NEXT_PUBLIC_COMMIT_HASH || '539132f';
 
 export default function Page() {
   const { currentUser, userData, loading } = useAuth();
@@ -46,17 +50,9 @@ export default function Page() {
             />
           </div>
 
-          {/* Encryption notice */}
+          {/* Version info */}
           <div className="flex items-center gap-1.5 text-xs text-[#667781] mt-8">
-            <svg
-              viewBox="0 0 10 12"
-              width="10"
-              height="12"
-              fill="currentColor"
-            >
-              <path d="M5 0C3.1 0 1.6 1.5 1.6 3.4V5H1c-.6 0-1 .4-1 1v5c0 .6.4 1 1 1h8c.6 0 1-.4 1-1V6c0-.6-.4-1-1-1H8.4V3.4C8.4 1.5 6.9 0 5 0zm0 1.5c1.1 0 1.9.8 1.9 1.9V5H3.1V3.4c0-1.1.8-1.9 1.9-1.9z" />
-            </svg>
-            <span>Terenkripsi secara end-to-end</span>
+            <span>Chatku Web v{packageJson.version}(#{COMMIT_HASH}) by TreonStudio</span>
           </div>
         </div>
 

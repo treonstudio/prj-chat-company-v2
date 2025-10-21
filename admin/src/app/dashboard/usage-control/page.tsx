@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch"
 import { Header } from "@/components/header"
 import { useAuthContext } from "@/context/AuthContext"
 import { useRouter } from "next/navigation"
+import LoadingScreen from "@/components/LoadingScreen"
 import getUsageControls from "@/firebase/firestore/getUsageControls"
 import updateUsageControls from "@/firebase/firestore/updateUsageControls"
 import getMaxFileSize from "@/firebase/firestore/getMaxFileSize"
@@ -125,20 +126,7 @@ export default function UsageControlPage() {
 
   // Show loading state while checking auth
   if (loading || isLoadingData) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="border-b bg-white px-8 py-4">
-          <div className="h-8 w-48 bg-gray-200 rounded animate-pulse"></div>
-        </div>
-        <div className="p-8">
-          <div className="mx-auto max-w-7xl space-y-8">
-            <div className="h-64 bg-gray-200 rounded-lg animate-pulse"></div>
-            <div className="h-48 bg-gray-200 rounded-lg animate-pulse"></div>
-            <div className="h-16 bg-gray-200 rounded-lg animate-pulse"></div>
-          </div>
-        </div>
-      </div>
-    )
+    return <LoadingScreen />
   }
 
   // Don't render if not authenticated

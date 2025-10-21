@@ -74,6 +74,7 @@ export function ChatMessage({
   onLongPress,
   onReply,
   onReplyClick,
+  isDeletedUser = false,
 }: {
   data: ChatMessageUnion
   isMe: boolean
@@ -89,6 +90,7 @@ export function ChatMessage({
   onLongPress?: (messageId: string) => void
   onReply?: (messageId: string) => void
   onReplyClick?: (messageId: string) => void
+  isDeletedUser?: boolean
 }) {
   const [showImagePreview, setShowImagePreview] = useState(false)
   const [showVideoPreview, setShowVideoPreview] = useState(false)
@@ -311,9 +313,30 @@ export function ChatMessage({
           )}
 
           {/* Sender name inside bubble only for group chat and other users */}
-          {isGroupChat && !isMe ? (
-            <span className="text-xs font-bold text-primary">{sanitizeMessageText(data.senderName)}</span>
-          ) : null}
+          {isGroupChat && !isMe ? (() => {
+            const isDeleted = isDeletedUser || data.senderName === "Deleted User" || !data.senderName?.trim()
+            let displayName = "Deleted User"
+
+            if (isDeleted) {
+              // If name exists and is not "Deleted User", show "Name (Deleted User)"
+              if (data.senderName && data.senderName.trim() && data.senderName !== "Deleted User") {
+                displayName = `${data.senderName} (Deleted User)`
+              }
+            } else {
+              displayName = data.senderName
+            }
+
+            return (
+              <span
+                className={cn(
+                  "text-xs font-bold",
+                  isDeleted ? "text-red-500" : "text-primary" // Red 500 for deleted users
+                )}
+              >
+                {sanitizeMessageText(displayName)}
+              </span>
+            )
+          })() : null}
 
           {/* Quoted section - shows the message being replied to */}
           {data.replyTo && (
@@ -321,13 +344,24 @@ export function ChatMessage({
               onClick={() => onReplyClick?.(data.replyTo!.messageId)}
               className={cn(
                 "flex items-start gap-2 p-2 rounded-lg mb-2 cursor-pointer",
-                "bg-black/15 hover:bg-black/20 transition-colors border-l-[3px] border-primary"
+                "bg-black/15 hover:bg-black/20 transition-colors border-l-[3px] border-primary max-w-[620px]"
               )}
             >
               {/* Vertical indicator bar */}
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-semibold text-primary mb-0.5">
-                  {data.replyTo.senderName}
+                <div className={cn(
+                  "text-xs font-semibold mb-0.5",
+                  data.replyTo.senderName === "Deleted User" || !data.replyTo.senderName?.trim()
+                    ? "text-red-500"
+                    : "text-primary"
+                )}>
+                  {(() => {
+                    const replyToName = data.replyTo!.senderName
+                    if (replyToName === "Deleted User" || !replyToName?.trim()) {
+                      return "Deleted User"
+                    }
+                    return replyToName
+                  })()}
                 </div>
                 <div className="text-xs opacity-70 italic truncate flex items-center gap-1">
                   {data.replyTo.type === 'IMAGE' && <ImageIcon className="h-3 w-3" />}

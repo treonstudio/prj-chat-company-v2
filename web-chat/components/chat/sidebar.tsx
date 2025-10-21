@@ -84,6 +84,20 @@ export function Sidebar({
     })
   }, [chats, query])
 
+  // Calculate total unread count
+  const totalUnreadCount = useMemo(() => {
+    return chats.reduce((total, chat) => total + (chat.unreadCount || 0), 0)
+  }, [chats])
+
+  // Update document title with unread count
+  useEffect(() => {
+    if (totalUnreadCount > 0) {
+      document.title = `(${totalUnreadCount}) Chatku Web`
+    } else {
+      document.title = 'Chatku Web'
+    }
+  }, [totalUnreadCount])
+
   const handleLogout = async () => {
     await signOut()
   }
