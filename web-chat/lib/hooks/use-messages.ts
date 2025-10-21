@@ -17,6 +17,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
   const [uploading, setUploading] = useState(false);
   const [uploadingMessage, setUploadingMessage] = useState<Message | null>(null);
   const [userJoinedAt, setUserJoinedAt] = useState<Timestamp | null>(null);
+  const [deleteHistoryTimestamp, setDeleteHistoryTimestamp] = useState<Timestamp | null>(null);
 
   useEffect(() => {
     // Reset uploading state when chatId changes
@@ -24,6 +25,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     setUploading(false);
     setOptimisticMessages([]);
     setUserJoinedAt(null);
+    setDeleteHistoryTimestamp(null);
 
     if (!chatId) {
       setLoading(false);
@@ -32,26 +34,37 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
 
     setLoading(true);
 
-    // CRITICAL: Load group join date BEFORE subscribing to messages
+    // CRITICAL: Load group join date and deleteHistory BEFORE subscribing to messages
     // This prevents race conditions where messages load before we know the filter timestamp
     const setupMessageListener = async () => {
       let joinedAtTimestamp: Timestamp | null = null;
+      let deleteHistoryTs: Timestamp | null = null;
 
-      // For group chats, load user's join date first
-      if (isGroupChat && currentUserId) {
+      // Load deleteHistory and join date from chat document
+      if (currentUserId) {
         try {
-          const groupRef = doc(db(), 'groupChats', chatId);
-          const groupDoc = await getDoc(groupRef);
+          const collection = isGroupChat ? 'groupChats' : 'directChats';
+          const chatRef = doc(db(), collection, chatId);
+          const chatDoc = await getDoc(chatRef);
 
-          if (groupDoc.exists()) {
-            const groupData = groupDoc.data();
-            const usersJoinedAt = groupData?.usersJoinedAt || {};
-            joinedAtTimestamp = usersJoinedAt[currentUserId] || null;
-            setUserJoinedAt(joinedAtTimestamp);
+          if (chatDoc.exists()) {
+            const chatData = chatDoc.data();
+
+            // Get deleteHistory for current user
+            const deleteHistory = chatData?.deleteHistory || {};
+            deleteHistoryTs = deleteHistory[currentUserId] || null;
+            setDeleteHistoryTimestamp(deleteHistoryTs);
+
+            // For group chats, also get join date
+            if (isGroupChat) {
+              const usersJoinedAt = chatData?.usersJoinedAt || {};
+              joinedAtTimestamp = usersJoinedAt[currentUserId] || null;
+              setUserJoinedAt(joinedAtTimestamp);
+            }
           }
         } catch (err) {
-          console.error('Error loading group join date:', err);
-          // Continue without filtering if we can't load join date
+          console.error('Error loading chat metadata:', err);
+          // Continue without filtering if we can't load metadata
         }
       }
 
@@ -60,12 +73,21 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         chatId,
         isGroupChat,
         (messages) => {
-          // CRITICAL: Filter messages based on user's join date for group chats
+          // CRITICAL: Filter messages based on user's join date and deleteHistory
           let filteredMessages = messages;
 
+          // Apply deleteHistory filter (for both group and direct chats)
+          if (deleteHistoryTs) {
+            filteredMessages = filteredMessages.filter(msg => {
+              if (!msg.timestamp) return true;
+              return msg.timestamp.toMillis() > deleteHistoryTs.toMillis();
+            });
+          }
+
+          // Apply join date filter (only for group chats)
           if (isGroupChat && joinedAtTimestamp) {
-            filteredMessages = messages.filter(msg => {
-              if (!msg.timestamp) return true; // Include messages without timestamp (edge case)
+            filteredMessages = filteredMessages.filter(msg => {
+              if (!msg.timestamp) return true;
               return msg.timestamp.toMillis() >= joinedAtTimestamp.toMillis();
             });
           }

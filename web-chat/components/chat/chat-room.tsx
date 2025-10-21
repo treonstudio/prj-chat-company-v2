@@ -92,6 +92,8 @@ export function ChatRoom({
   const [leaving, setLeaving] = useState(false)
   const [showDeleteChatDialog, setShowDeleteChatDialog] = useState(false)
   const [deletingChat, setDeletingChat] = useState(false)
+  const [showDeleteHistoryDialog, setShowDeleteHistoryDialog] = useState(false)
+  const [deletingHistory, setDeletingHistory] = useState(false)
   const [isDeletedUser, setIsDeletedUser] = useState(false)
   const [showForwardDialog, setShowForwardDialog] = useState(false)
   const [forwardMessageId, setForwardMessageId] = useState<string | null>(null)
@@ -378,6 +380,23 @@ export function ChatRoom({
       }
     } else if (result.status === 'error') {
       toast.error(result.message || 'Gagal menghapus chat')
+    }
+  }
+
+  // Handle delete history
+  const handleDeleteHistory = async () => {
+    setDeletingHistory(true)
+    const result = await chatRepository.deleteHistory(chatId, currentUserId, isGroupChat)
+    setDeletingHistory(false)
+
+    if (result.status === 'success') {
+      toast.success('Riwayat chat berhasil dihapus')
+      setShowDeleteHistoryDialog(false)
+      if (onCloseChat) {
+        onCloseChat()
+      }
+    } else if (result.status === 'error') {
+      toast.error(result.message || 'Gagal menghapus riwayat chat')
     }
   }
 
@@ -712,6 +731,13 @@ export function ChatRoom({
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
+                  onClick={() => setShowDeleteHistoryDialog(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Hapus riwayat chat</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   onClick={() => setShowDeleteChatDialog(true)}
                   className="flex items-center gap-2 text-destructive focus:text-destructive"
                 >
@@ -745,6 +771,13 @@ export function ChatRoom({
                   <span>Tutup chat</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setShowDeleteHistoryDialog(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Hapus riwayat chat</span>
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => setShowDeleteChatDialog(true)}
                   className="flex items-center gap-2 text-destructive focus:text-destructive"
@@ -1055,6 +1088,49 @@ export function ChatRoom({
                 </>
               ) : (
                 "Hapus"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete History Dialog */}
+      <AlertDialog open={showDeleteHistoryDialog} onOpenChange={setShowDeleteHistoryDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Riwayat Chat?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Semua pesan dalam chat ini akan dihapus dari perangkat Anda. Chat akan hilang dari daftar, namun akan muncul kembali jika ada pesan baru. User lain tetap dapat melihat semua pesan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingHistory}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleDeleteHistory()
+              }}
+              disabled={deletingHistory}
+              className="text-white hover:text-white transition-colors"
+              style={{ backgroundColor: '#E54C38' }}
+              onMouseEnter={(e) => {
+                if (!deletingHistory) {
+                  e.currentTarget.style.backgroundColor = '#D43D28'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!deletingHistory) {
+                  e.currentTarget.style.backgroundColor = '#E54C38'
+                }
+              }}
+            >
+              {deletingHistory ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Menghapus...
+                </>
+              ) : (
+                "Hapus Riwayat"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

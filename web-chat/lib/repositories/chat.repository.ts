@@ -969,4 +969,52 @@ export class ChatRepository {
       return Resource.error(error.message || 'Failed to delete chat');
     }
   }
+
+  /**
+   * Delete chat history for current user only
+   * Sets deleteHistory timestamp - messages before this time will be hidden
+   */
+  async deleteHistory(
+    chatId: string,
+    userId: string,
+    isGroupChat: boolean
+  ): Promise<Resource<void>> {
+    try {
+      const cleanChatId = chatId.replace('direct_', '').replace('group_', '');
+      const timestamp = Timestamp.now();
+
+      // Update chat document with deleteHistory
+      const collection = isGroupChat ? this.GROUP_CHATS_COLLECTION : this.DIRECT_CHATS_COLLECTION;
+      const chatRef = doc(db(), collection, cleanChatId);
+
+      await updateDoc(chatRef, {
+        [`deleteHistory.${userId}`]: timestamp,
+        updatedAt: timestamp
+      });
+
+      // Remove chat from user's chat list
+      const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, userId);
+      const userChatsDoc = await getDoc(userChatsRef);
+
+      if (userChatsDoc.exists()) {
+        const userChats = userChatsDoc.data() as UserChats;
+        const chatPrefix = isGroupChat ? 'group_' : 'direct_';
+        const fullChatId = `${chatPrefix}${cleanChatId}`;
+
+        const updatedChats = userChats.chats.filter(
+          chat => chat.chatId !== fullChatId && chat.chatId !== cleanChatId
+        );
+
+        await updateDoc(userChatsRef, {
+          chats: updatedChats,
+          updatedAt: timestamp
+        });
+      }
+
+      return Resource.success(undefined);
+    } catch (error: any) {
+      console.error('Delete history error:', error);
+      return Resource.error(error.message || 'Failed to delete history');
+    }
+  }
 }
