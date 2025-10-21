@@ -124,14 +124,11 @@ export function ForwardMessageDialog({
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0 text-left">
-                        <p className="text-sm font-medium truncate">{displayName}</p>
-                        {chat.lastMessage && (
-                          <p className="text-xs text-muted-foreground truncate">
-                            {chat.lastMessage.length > 35
-                              ? chat.lastMessage.slice(0, 35) + '...'
-                              : chat.lastMessage}
-                          </p>
-                        )}
+                        <p className="text-sm font-medium">
+                          {displayName.length > 35
+                            ? displayName.slice(0, 35) + '...'
+                            : displayName}
+                        </p>
                       </div>
                       {isForwarding && (
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />

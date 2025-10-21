@@ -257,9 +257,9 @@ export function Sidebar({
               // Use draft message if available, otherwise use last message
               const displayMessage = hasDraft ? draftText : c.lastMessage
 
-              // Truncate long messages with ellipsis (max 40 chars)
-              const truncatedMessage = displayMessage.length > 40
-                ? displayMessage.slice(0, 40) + '...'
+              // Truncate long messages with ellipsis (max 35 chars)
+              const truncatedMessage = displayMessage.length > 35
+                ? displayMessage.slice(0, 35) + '...'
                 : displayMessage
 
               return (

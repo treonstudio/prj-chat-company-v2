@@ -13,6 +13,8 @@ import getUsageControls from "@/firebase/firestore/getUsageControls"
 import updateUsageControls from "@/firebase/firestore/updateUsageControls"
 import getMaxFileSize from "@/firebase/firestore/getMaxFileSize"
 import updateMaxFileSize from "@/firebase/firestore/updateMaxFileSize"
+import getMaintenanceMode from "@/firebase/firestore/getMaintenanceMode"
+import updateMaintenanceMode from "@/firebase/firestore/updateMaintenanceMode"
 import { toast } from "sonner"
 import firebase_app from "@/firebase/config"
 import { getFirestore, doc, onSnapshot } from "firebase/firestore"
@@ -23,6 +25,7 @@ export default function UsageControlPage() {
   const [callsAllowed, setCallsAllowed] = useState(true)
   const [textMessageAllowed, setTextMessageAllowed] = useState(true)
   const [mediaSendAllowed, setMediaSendAllowed] = useState(true)
+  const [maintenanceMode, setMaintenanceMode] = useState(false)
   const [maxFileSize, setMaxFileSize] = useState("60")
   const [isLoadingData, setIsLoadingData] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -42,14 +45,15 @@ export default function UsageControlPage() {
 
     const db = getFirestore(firebase_app)
     const featuresRef = doc(db, "appConfigs", "features")
+    const usageControlsRef = doc(db, "appConfigs", "usageControls")
 
-    // Set up real-time listener
-    const unsubscribe = onSnapshot(
+    // Set up real-time listener for features
+    const unsubscribeFeatures = onSnapshot(
       featuresRef,
       (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data()
-          console.log("Real-time update from Firebase:", data)
+          console.log("Real-time update from Firebase features:", data)
 
           setCallsAllowed(data.allowCall ?? true)
           setTextMessageAllowed(data.allowSendText ?? true)
@@ -60,31 +64,42 @@ export default function UsageControlPage() {
           setTextMessageAllowed(true)
           setMediaSendAllowed(true)
         }
-        setIsLoadingData(false)
       },
       (error) => {
         console.error("Error listening to usage controls:", error)
         toast.error("Error loading usage controls data")
+      }
+    )
+
+    // Set up real-time listener for usageControls (maintenance mode & max file size)
+    const unsubscribeUsageControls = onSnapshot(
+      usageControlsRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data()
+          console.log("Real-time update from Firebase usageControls:", data)
+
+          setMaintenanceMode(data.isMaintaince ?? false)
+          setMaxFileSize((data.maxFileSizeUploadedInMB ?? 64).toString())
+        } else {
+          // Set defaults if document doesn't exist
+          setMaintenanceMode(false)
+          setMaxFileSize("64")
+        }
+        setIsLoadingData(false)
+      },
+      (error) => {
+        console.error("Error listening to usageControls:", error)
+        toast.error("Error loading maintenance mode and max file size")
         setIsLoadingData(false)
       }
     )
 
-    // Fetch max file size separately (one-time fetch)
-    const fetchMaxFileSize = async () => {
-      const { result: maxFileSizeResult, error: maxFileSizeError } = await getMaxFileSize()
-
-      if (maxFileSizeError) {
-        console.error("Error fetching max file size:", maxFileSizeError)
-        toast.error("Error loading max file size data")
-      } else if (maxFileSizeResult !== null) {
-        setMaxFileSize(maxFileSizeResult.toString())
-      }
+    // Cleanup listeners on unmount
+    return () => {
+      unsubscribeFeatures()
+      unsubscribeUsageControls()
     }
-
-    fetchMaxFileSize()
-
-    // Cleanup listener on unmount
-    return () => unsubscribe()
   }, [user])
 
   // Handle update button click
@@ -105,13 +120,18 @@ export default function UsageControlPage() {
         allowSendMedia: mediaSendAllowed ?? true,
       })
 
+      // Update maintenance mode in usageControls collection
+      const { error: maintenanceError } = await updateMaintenanceMode(
+        maintenanceMode ?? false
+      )
+
       // Update max file size in usageControls collection
       const { error: maxFileSizeError } = await updateMaxFileSize(
         parseInt(maxFileSize) || 64
       )
 
-      if (usageError || maxFileSizeError) {
-        console.error("Error updating:", usageError || maxFileSizeError)
+      if (usageError || maintenanceError || maxFileSizeError) {
+        console.error("Error updating:", usageError || maintenanceError || maxFileSizeError)
         toast.error("Failed to save changes. Please try again.")
       } else {
         toast.success("Changes saved successfully!")
@@ -189,16 +209,28 @@ export default function UsageControlPage() {
                 <h2 className="text-xl font-semibold text-emerald-600">Usage Control</h2>
               </div>
 
-              <div className="space-y-4">
-                <label className="text-base font-medium text-gray-900">
-                  Max File Size
-                </label>
-                <Input
-                  type="number"
-                  value={maxFileSize}
-                  onChange={(e) => setMaxFileSize(e.target.value)}
-                  className="h-12 border-gray-200 bg-gray-50"
-                />
+              <div className="space-y-8">
+                {/* Maintenance Mode */}
+                <div className="flex items-center justify-between">
+                  <span className="text-base text-gray-900">Maintenance Mode</span>
+                  <Switch
+                    checked={maintenanceMode}
+                    onCheckedChange={setMaintenanceMode}
+                  />
+                </div>
+
+                {/* Max File Size */}
+                <div className="space-y-4">
+                  <label className="text-base font-medium text-gray-900">
+                    Max File Size
+                  </label>
+                  <Input
+                    type="number"
+                    value={maxFileSize}
+                    onChange={(e) => setMaxFileSize(e.target.value)}
+                    className="h-12 border-gray-200 bg-gray-50"
+                  />
+                </div>
               </div>
             </CardContent>
           </Card>

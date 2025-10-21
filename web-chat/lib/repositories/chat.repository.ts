@@ -9,6 +9,7 @@ import {
   Timestamp,
   updateDoc,
   arrayUnion,
+  arrayRemove,
   writeBatch
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
@@ -273,7 +274,8 @@ export class ChatRepository {
   }
 
   /**
-   * Leave a group chat
+   * Leave a group chat (voluntary leave)
+   * Based on: LEAVE_GROUP_FEATURE.md
    */
   async leaveGroupChat(
     userId: string,
@@ -305,21 +307,25 @@ export class ChatRepository {
       }
 
       const batch = writeBatch(db());
+      const now = Timestamp.now();
 
-      // Remove user from group participants
+      // 1. Remove user from participants array
       const updatedParticipants = groupChat.participants.filter(
         (id) => id !== userId
       );
 
-      // Check if user is admin
+      // 2. Remove user from participantsMap
+      const updatedParticipantsMap = { ...(groupChat.participantsMap || {}) };
+      delete updatedParticipantsMap[userId];
+
+      // 3. Remove user from admins if applicable
       const isAdmin = (groupChat.admins || []).includes(userId);
       let updatedAdmins = [...(groupChat.admins || [])];
 
       if (isAdmin) {
-        // Remove from admins
         updatedAdmins = updatedAdmins.filter((id) => id !== userId);
 
-        // Rule 1: If admin leaves and there are other participants, randomly pick new admin
+        // If last admin leaves and there are other participants, randomly pick new admin
         if (updatedParticipants.length > 0 && updatedAdmins.length === 0) {
           const randomIndex = Math.floor(Math.random() * updatedParticipants.length);
           const newAdmin = updatedParticipants[randomIndex];
@@ -327,20 +333,26 @@ export class ChatRepository {
         }
       }
 
-      // Track when user left (for filtering messages)
-      const leftAt = Timestamp.now();
-      const leftMembers = groupChat.leftMembers || {};
-      leftMembers[userId] = leftAt;
+      // 4. Remove user from unreadCount
+      const updatedUnreadCount = { ...(groupChat.unreadCount || {}) };
+      delete updatedUnreadCount[userId];
 
-      // Update group chat
+      // 5. Add user to leftMembers with timestamp
+      const updatedLeftMembers = { ...(groupChat.leftMembers || {}) };
+      updatedLeftMembers[userId] = now;
+
+      // 6. Update group chat document
+      // NOTE: usersJoinedAt is NOT modified (preserved for rejoin)
       batch.update(groupChatRef, {
         participants: updatedParticipants,
+        participantsMap: updatedParticipantsMap,
         admins: updatedAdmins,
-        leftMembers: leftMembers,
-        updatedAt: leftAt,
+        unreadCount: updatedUnreadCount,
+        leftMembers: updatedLeftMembers,
+        updatedAt: now,
       });
 
-      // Rule 7: Create system message for leave notification
+      // 7. Create system message for leave notification
       const messagesRef = collection(
         db(),
         this.GROUP_CHATS_COLLECTION,
@@ -353,14 +365,16 @@ export class ChatRepository {
         messageId: systemMessageRef.id,
         senderId: 'system',
         senderName: 'System',
-        text: `${userName} telah keluar dari grup`,
+        text: `${userName} keluar`,
         type: 'TEXT',
-        timestamp: Timestamp.now(),
+        timestamp: now,
+        createdAt: now,
         status: 'SENT',
-        readBy: [],
+        readBy: {},
       });
 
-      // Update last message in all participants' userChats
+      // 8. Update last message in remaining participants' userChats
+      const systemMessageText = `${userName} keluar`;
       for (const participantId of updatedParticipants) {
         const participantChatsRef = doc(db(), this.USER_CHATS_COLLECTION, participantId);
         const participantChatsDoc = await getDoc(participantChatsRef);
@@ -368,12 +382,11 @@ export class ChatRepository {
         if (participantChatsDoc.exists()) {
           const participantData = participantChatsDoc.data() as UserChats;
           const updatedChats = participantData.chats.map((chat) => {
-            // Compare with cleanChatId
             if (chat.chatId === cleanChatId) {
               return {
                 ...chat,
-                lastMessage: `${userName} telah keluar dari grup`,
-                lastMessageTime: Timestamp.now(),
+                lastMessage: systemMessageText,
+                lastMessageTime: now,
               };
             }
             return chat;
@@ -381,9 +394,25 @@ export class ChatRepository {
 
           batch.update(participantChatsRef, {
             chats: updatedChats,
-            updatedAt: Timestamp.now(),
+            updatedAt: now,
           });
         }
+      }
+
+      // 9. Delete group from user's userChats collection
+      const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, userId);
+      const userChatsDoc = await getDoc(userChatsRef);
+
+      if (userChatsDoc.exists()) {
+        const userData = userChatsDoc.data() as UserChats;
+        const updatedChats = userData.chats.filter(
+          (chat) => chat.chatId !== cleanChatId
+        );
+
+        batch.update(userChatsRef, {
+          chats: updatedChats,
+          updatedAt: now,
+        });
       }
 
       await batch.commit();
@@ -394,10 +423,13 @@ export class ChatRepository {
   }
 
   /**
-   * Remove a member from group chat (admin action)
+   * Remove participants from group chat (admin action)
+   * Based on: LEAVE_GROUP_FEATURE.md
    */
   async removeGroupMember(
     chatId: string,
+    adminId: string,
+    adminName: string,
     userIdToRemove: string
   ): Promise<Resource<void>> {
     try {
@@ -411,9 +443,28 @@ export class ChatRepository {
 
       const groupChat = groupChatDoc.data() as GroupChat;
 
+      // Verify admin permission
+      if (!groupChat.admins?.includes(adminId)) {
+        return Resource.error('Only admins can remove participants');
+      }
+
       // Check if user is a participant
       if (!groupChat.participants.includes(userIdToRemove)) {
         return Resource.error('User is not a member of this group');
+      }
+
+      // Safety check: Prevent removing all participants
+      if (groupChat.participants.length === 1) {
+        return Resource.error('Cannot remove all participants');
+      }
+
+      // Safety check: Ensure at least one admin remains
+      const isRemovedUserAdmin = groupChat.admins?.includes(userIdToRemove);
+      if (isRemovedUserAdmin) {
+        const remainingAdmins = groupChat.admins.filter(id => id !== userIdToRemove);
+        if (remainingAdmins.length === 0) {
+          return Resource.error('Cannot remove all admins. At least one admin must remain.');
+        }
       }
 
       // Get removed member's name for system message
@@ -427,26 +478,43 @@ export class ChatRepository {
       const batch = writeBatch(db());
       const now = Timestamp.now();
 
-      // Remove user from group participants
+      // 1. Remove user from participants array
       const updatedParticipants = groupChat.participants.filter(
         (id) => id !== userIdToRemove
       );
 
-      // Also remove from admins if they are an admin
+      // 2. Remove user from participantsMap
+      const updatedParticipantsMap = { ...(groupChat.participantsMap || {}) };
+      delete updatedParticipantsMap[userIdToRemove];
+
+      // 3. Remove from admins if they are an admin
       const updatedAdmins = (groupChat.admins || []).filter(
         (id) => id !== userIdToRemove
       );
 
+      // 4. Remove user from unreadCount
+      const updatedUnreadCount = { ...(groupChat.unreadCount || {}) };
+      delete updatedUnreadCount[userIdToRemove];
+
+      // 5. Add to leftMembers with timestamp
+      const updatedLeftMembers = { ...(groupChat.leftMembers || {}) };
+      updatedLeftMembers[userIdToRemove] = now;
+
+      // 6. Update group chat document
+      // NOTE: usersJoinedAt is NOT modified (preserved for rejoin)
       batch.update(groupChatRef, {
         participants: updatedParticipants,
+        participantsMap: updatedParticipantsMap,
         admins: updatedAdmins,
+        unreadCount: updatedUnreadCount,
+        leftMembers: updatedLeftMembers,
         updatedAt: now,
       });
 
-      // Create system message for removing member
+      // 7. Create system message for removing member
       const messagesRef = collection(db(), this.GROUP_CHATS_COLLECTION, chatId, 'messages');
       const systemMessageRef = doc(messagesRef);
-      const systemMessageText = `${removedMemberName} telah dikeluarkan dari grup`;
+      const systemMessageText = `${adminName} mengeluarkan ${removedMemberName}`;
 
       batch.set(systemMessageRef, {
         messageId: systemMessageRef.id,
@@ -460,7 +528,7 @@ export class ChatRepository {
         readBy: {},
       });
 
-      // Update lastMessage for all remaining participants
+      // 8. Update lastMessage for all remaining participants
       for (const participantId of updatedParticipants) {
         const participantChatsRef = doc(db(), this.USER_CHATS_COLLECTION, participantId);
         const participantChatsDoc = await getDoc(participantChatsRef);
@@ -473,7 +541,6 @@ export class ChatRepository {
                 ...chat,
                 lastMessage: systemMessageText,
                 lastMessageTime: now,
-                unreadCount: chat.unreadCount + 1,
               };
             }
             return chat;
@@ -486,7 +553,7 @@ export class ChatRepository {
         }
       }
 
-      // Remove chat from removed user's chat list
+      // 9. Delete group from removed user's userChats collection
       const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, userIdToRemove);
       const userChatsDoc = await getDoc(userChatsRef);
 
@@ -506,6 +573,90 @@ export class ChatRepository {
       return Resource.success(undefined);
     } catch (error: any) {
       return Resource.error(error.message || 'Failed to remove group member');
+    }
+  }
+
+  /**
+   * Promote member to admin
+   */
+  async promoteToAdmin(
+    chatId: string,
+    userId: string
+  ): Promise<Resource<void>> {
+    try {
+      const groupChatRef = doc(db(), this.GROUP_CHATS_COLLECTION, chatId);
+      const groupChatDoc = await getDoc(groupChatRef);
+
+      if (!groupChatDoc.exists()) {
+        return Resource.error('Group chat not found');
+      }
+
+      const groupChat = groupChatDoc.data() as GroupChat;
+
+      // Check if user is a participant
+      if (!groupChat.participants.includes(userId)) {
+        return Resource.error('User is not a member of this group');
+      }
+
+      // Check if user is already an admin
+      if (groupChat.admins?.includes(userId)) {
+        return Resource.error('User is already an admin');
+      }
+
+      // Check max admin limit (5 admins)
+      const currentAdminCount = groupChat.admins?.length || 0;
+      if (currentAdminCount >= 5) {
+        return Resource.error('Maksimal 5 admin per grup. Hapus admin lain terlebih dahulu.');
+      }
+
+      // Add user to admins list
+      await updateDoc(groupChatRef, {
+        admins: arrayUnion(userId),
+        updatedAt: Timestamp.now(),
+      });
+
+      return Resource.success(undefined);
+    } catch (error: any) {
+      return Resource.error(error.message || 'Failed to promote user to admin');
+    }
+  }
+
+  /**
+   * Demote admin to regular member
+   */
+  async demoteFromAdmin(
+    chatId: string,
+    userId: string
+  ): Promise<Resource<void>> {
+    try {
+      const groupChatRef = doc(db(), this.GROUP_CHATS_COLLECTION, chatId);
+      const groupChatDoc = await getDoc(groupChatRef);
+
+      if (!groupChatDoc.exists()) {
+        return Resource.error('Group chat not found');
+      }
+
+      const groupChat = groupChatDoc.data() as GroupChat;
+
+      // Check if user is an admin
+      if (!groupChat.admins?.includes(userId)) {
+        return Resource.error('User is not an admin');
+      }
+
+      // Cannot demote if they are the last admin
+      if (groupChat.admins.length === 1) {
+        return Resource.error('Cannot remove the last admin');
+      }
+
+      // Remove user from admins list
+      await updateDoc(groupChatRef, {
+        admins: arrayRemove(userId),
+        updatedAt: Timestamp.now(),
+      });
+
+      return Resource.success(undefined);
+    } catch (error: any) {
+      return Resource.error(error.message || 'Failed to demote admin');
     }
   }
 
@@ -773,5 +924,49 @@ export class ChatRepository {
     );
 
     return unsubscribe;
+  }
+
+  /**
+   * Delete chat from user's chat list
+   * Note: This only removes the chat from user's list, doesn't delete actual chat or messages
+   */
+  async deleteChat(
+    chatId: string,
+    userId: string,
+    isGroupChat: boolean
+  ): Promise<Resource<void>> {
+    try {
+      // Remove any prefix from chatId if exists
+      const cleanChatId = chatId.replace('direct_', '').replace('group_', '');
+
+      // Get user's chats
+      const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, userId);
+      const userChatsDoc = await getDoc(userChatsRef);
+
+      if (!userChatsDoc.exists()) {
+        return Resource.error('User chats not found');
+      }
+
+      const userChats = userChatsDoc.data() as UserChats;
+
+      // Find and remove the chat from user's chat list
+      const chatPrefix = isGroupChat ? 'group_' : 'direct_';
+      const fullChatId = `${chatPrefix}${cleanChatId}`;
+
+      const updatedChats = userChats.chats.filter(
+        chat => chat.chatId !== fullChatId && chat.chatId !== cleanChatId
+      );
+
+      // Update user's chats
+      await updateDoc(userChatsRef, {
+        chats: updatedChats,
+        updatedAt: Timestamp.now()
+      });
+
+      return Resource.success(undefined);
+    } catch (error: any) {
+      console.error('Delete chat error:', error);
+      return Resource.error(error.message || 'Failed to delete chat');
+    }
   }
 }

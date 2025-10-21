@@ -73,6 +73,7 @@ export default async function createUser(username: string, password: string, add
         email: email, // Store the generated email
         createdAt: serverTimestamp(), // Use Firestore server timestamp
         isActive: true,
+        isDeleted: false, // User is not deleted by default
         role: additionalData?.role || "user", // Default role is "user", can be overridden
         ...(imageURL && { imageURL }), // Add imageURL only if it exists
         ...restAdditionalData,

@@ -105,7 +105,9 @@ export interface GroupChat {
   avatar?: string;
   avatarUrl?: string; // Alias for backward compatibility
   participants: string[];
+  participantsMap?: Record<string, boolean>; // For efficient queries
   admins?: string[];
+  unreadCount?: Record<string, number>; // Unread count per user
   leftMembers?: Record<string, Timestamp>; // Track when users left
   usersJoinedAt?: Record<string, Timestamp>; // Track when users joined (for message filtering on rejoin)
   lastMessage?: LastMessage;
@@ -169,4 +171,28 @@ export interface FeatureFlags {
   allowCreateGroup: boolean;
   allowSendText: boolean;
   allowSendMedia: boolean;
+}
+
+// Device Session Models (for device locking)
+export type DeviceType = 'mobile' | 'web';
+
+export interface DeviceSession {
+  deviceId: string;
+  deviceType: DeviceType;
+  platform: string; // Android, iOS, Web
+  browser?: string; // Chrome, Firefox, Safari, etc
+  os?: string; // Windows, macOS, Linux, etc
+  deviceName: string; // e.g., "Chrome on Windows"
+  userAgent?: string;
+  loginAt: Timestamp;
+  lastActive: Timestamp;
+  status: 'online' | 'offline';
+}
+
+export interface KickedSession {
+  userId: string;
+  deviceType: DeviceType;
+  deviceId: string;
+  kickedAt: Timestamp;
+  reason: 'new_device_login' | 'manual_logout' | 'session_expired';
 }

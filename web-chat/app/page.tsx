@@ -110,6 +110,11 @@ export default function Page() {
                 setSelectedChatId(null);
                 setSelectedChatIsGroup(false);
               }}
+              onCloseChat={() => {
+                // Close chat and return to chat list
+                setSelectedChatId(null);
+                setSelectedChatIsGroup(false);
+              }}
               onChatSelect={(chatId, isGroup) => {
                 setSelectedChatId(chatId);
                 setSelectedChatIsGroup(isGroup);

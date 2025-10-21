@@ -984,6 +984,7 @@ export class MessageRepository {
         type: originalMessage.type,
         readBy: {},
         deliveredTo: {},
+        isForwarded: true, // Mark as forwarded message
         ...(originalMessage.mediaUrl && { mediaUrl: originalMessage.mediaUrl }),
         ...(originalMessage.mediaMetadata && { mediaMetadata: originalMessage.mediaMetadata }),
       };

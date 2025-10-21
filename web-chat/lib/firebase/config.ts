@@ -3,6 +3,7 @@ import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { getStorage, type FirebaseStorage } from 'firebase/storage';
 import { getFunctions, type Functions } from 'firebase/functions';
+import { getDatabase, type Database } from 'firebase/database';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -11,6 +12,7 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
 };
 
 // Lazy initialization - only initialize when accessed
@@ -19,6 +21,7 @@ let auth: Auth | undefined;
 let db: Firestore | undefined;
 let storage: FirebaseStorage | undefined;
 let functions: Functions | undefined;
+let realtimeDb: Database | undefined;
 
 function getFirebaseApp(): FirebaseApp {
   if (typeof window === 'undefined') {
@@ -58,13 +61,21 @@ function getFirebaseFunctions(): Functions {
   return functions;
 }
 
+function getFirebaseRealtimeDb(): Database {
+  if (!realtimeDb) {
+    realtimeDb = getDatabase(getFirebaseApp());
+  }
+  return realtimeDb;
+}
+
 // Export getters instead of direct instances
 export {
   getFirebaseApp as getApp,
   getFirebaseAuth as auth,
   getFirebaseDb as db,
   getFirebaseStorage as storage,
-  getFirebaseFunctions as functions
+  getFirebaseFunctions as functions,
+  getFirebaseRealtimeDb as realtimeDatabase
 };
 
 export default getFirebaseApp;

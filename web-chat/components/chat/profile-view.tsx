@@ -238,16 +238,15 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
   return (
     <div className="flex h-full flex-col bg-card">
       {/* Header */}
-      <div className="flex items-center gap-4 px-4 py-5 bg-primary text-primary-foreground">
-        <Button
-          variant="ghost"
-          size="icon"
+      <div className="flex items-center gap-4 px-6 py-4" style={{ backgroundColor: '#008069' }}>
+        <button
           onClick={onBack}
-          className="text-primary-foreground hover:bg-primary-foreground/20"
+          className="p-2 hover:bg-white/10 rounded-full transition-colors"
+          aria-label="Back"
         >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <h2 className="text-lg font-semibold">Profil</h2>
+          <ArrowLeft className="h-6 w-6 text-white" />
+        </button>
+        <h2 className="text-xl font-medium text-white">Profil</h2>
       </div>
 
       {/* Content */}

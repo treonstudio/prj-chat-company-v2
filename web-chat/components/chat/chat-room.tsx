@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator"
 import { ChatMessage } from "./chat-message"
 import { MessageComposer } from "./message-composer"
 import { useMessages } from "@/lib/hooks/use-messages"
+import { useUserStatus } from "@/lib/hooks/use-user-status"
 import { UserRepository } from "@/lib/repositories/user.repository"
 import { ChatRepository } from "@/lib/repositories/chat.repository"
 import { format } from "date-fns"
@@ -14,6 +15,8 @@ import { ChatType, User, UserStatus, Message } from "@/types/models"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { LogOut, Loader2, Users, Trash2, X, MoreVertical, Info } from "lucide-react"
+import { doc, onSnapshot } from "firebase/firestore"
+import { db } from "@/lib/firebase/config"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,6 +54,7 @@ export function ChatRoom({
   isGroupChat,
   onLeaveGroup,
   onChatSelect,
+  onCloseChat,
 }: {
   chatId: string
   currentUserId: string
@@ -59,6 +63,7 @@ export function ChatRoom({
   isGroupChat: boolean
   onLeaveGroup?: () => void
   onChatSelect?: (chatId: string, isGroup: boolean) => void
+  onCloseChat?: () => void
 }) {
   const {
     messages,
@@ -79,11 +84,14 @@ export function ChatRoom({
 
   const [roomTitle, setRoomTitle] = useState<string>('Chat')
   const [roomAvatar, setRoomAvatar] = useState<string>('')
+  const [otherUserId, setOtherUserId] = useState<string | null>(null)
   const [groupMembers, setGroupMembers] = useState<User[]>([])
   const [groupAdmins, setGroupAdmins] = useState<string[]>([])
   const [showGroupInfoDialog, setShowGroupInfoDialog] = useState(false)
   const [showLeaveDialog, setShowLeaveDialog] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  const [showDeleteChatDialog, setShowDeleteChatDialog] = useState(false)
+  const [deletingChat, setDeletingChat] = useState(false)
   const [isDeletedUser, setIsDeletedUser] = useState(false)
   const [showForwardDialog, setShowForwardDialog] = useState(false)
   const [forwardMessageId, setForwardMessageId] = useState<string | null>(null)
@@ -100,6 +108,11 @@ export function ChatRoom({
 
   // Reply mode
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
+
+  // Monitor other user's status (for direct chat only)
+  const { status: otherUserStatus, lastSeenText } = useUserStatus(
+    !isGroupChat ? otherUserId : null
+  )
 
   // Reset selection when chatId changes
   useEffect(() => {
@@ -124,14 +137,26 @@ export function ChatRoom({
 
   // Load room title and group members
   useEffect(() => {
+    let unsubscribeDirectUser: (() => void) | null = null
+
     async function loadRoomInfo() {
+      console.log('[ChatRoom] Loading room info:', { chatId, isGroupChat })
+
       if (isGroupChat) {
         // For group chats, fetch group info
         const groupResult = await chatRepository.getGroupChat(chatId)
+        console.log('[ChatRoom] Group chat result:', groupResult)
+
         if (groupResult.status === 'success') {
           setRoomTitle(groupResult.data.name)
           setRoomAvatar(groupResult.data.avatar || groupResult.data.avatarUrl || '')
           setGroupAdmins(groupResult.data.admins || [])
+
+          console.log('[ChatRoom] Group info loaded:', {
+            name: groupResult.data.name,
+            participants: groupResult.data.participants,
+            admins: groupResult.data.admins,
+          })
 
           // Check if current user is still a participant
           const isStillParticipant = groupResult.data.participants.includes(currentUserId)
@@ -149,10 +174,13 @@ export function ChatRoom({
             userRepository.getUserById(userId)
           )
           const memberResults = await Promise.all(memberPromises)
+          console.log('[ChatRoom] Member results:', memberResults)
+
           const members = memberResults.map((r, index) => {
             if (r.status === 'success') {
               // If displayName is missing, set to "Deleted User"
               if (!r.data.displayName || r.data.displayName.trim() === '') {
+                console.log('[ChatRoom] Member has no displayName:', r.data.userId)
                 return {
                   ...r.data,
                   displayName: 'Deleted User',
@@ -162,6 +190,7 @@ export function ChatRoom({
               return r.data
             } else {
               // If user not found, create placeholder
+              console.log('[ChatRoom] Member not found:', groupResult.data.participants[index])
               return {
                 userId: groupResult.data.participants[index],
                 displayName: 'Deleted User',
@@ -171,41 +200,135 @@ export function ChatRoom({
               } as User
             }
           })
+          console.log('[ChatRoom] All members loaded:', members)
           setGroupMembers(members)
         }
         // Reset for group chats
         setIsDeletedUser(false)
       } else {
-        // For direct chats, get the other user's name
+        // For direct chats, get the other user's info and listen for changes
         const parts = chatId.replace('direct_', '').split('_')
-        const otherUserId = parts.find(id => id !== currentUserId)
+        const foundOtherUserId = parts.find(id => id !== currentUserId)
+        console.log('[ChatRoom] Direct chat - Other user ID:', foundOtherUserId)
 
-        if (otherUserId) {
-          const result = await userRepository.getUserById(otherUserId)
-          if (result.status === 'success') {
-            // Handle deleted user or missing displayName
-            const displayName = result.data.displayName && result.data.displayName.trim() !== ''
-              ? result.data.displayName
-              : 'Deleted User'
-            setRoomTitle(displayName)
-            setRoomAvatar(result.data.imageURL || result.data.imageUrl || '')
-            setIsDeletedUser(displayName === 'Deleted User')
-          } else {
-            // User not found
-            setRoomTitle('Deleted User')
-            setRoomAvatar('')
-            setIsDeletedUser(true)
-          }
+        if (foundOtherUserId) {
+          setOtherUserId(foundOtherUserId)
+
+          // Setup real-time listener for user data
+          unsubscribeDirectUser = userRepository.listenToUser(
+            foundOtherUserId,
+            (userData: User) => {
+              // Handle deleted user or missing displayName
+              const displayName = userData.displayName && userData.displayName.trim() !== ''
+                ? userData.displayName
+                : 'Deleted User'
+              console.log('[ChatRoom] Direct chat user data updated:', {
+                userId: userData.userId,
+                displayName,
+                isDeleted: displayName === 'Deleted User'
+              })
+              setRoomTitle(displayName)
+              setRoomAvatar(userData.imageURL || userData.imageUrl || '')
+              setIsDeletedUser(displayName === 'Deleted User')
+            },
+            (error: string) => {
+              // User not found or error
+              console.error('[ChatRoom] Error listening to user:', error)
+              setRoomTitle('Deleted User')
+              setRoomAvatar('')
+              setIsDeletedUser(true)
+            }
+          )
+        } else {
+          console.error('[ChatRoom] Could not find other user ID in chat ID')
+          setOtherUserId(null)
         }
       }
     }
 
     loadRoomInfo()
+
+    return () => {
+      if (unsubscribeDirectUser) {
+        unsubscribeDirectUser()
+      }
+    }
   }, [chatId, currentUserId, isGroupChat])
+
+  // Real-time detection for removed users and admin changes (group chat only)
+  // Based on: LEAVE_GROUP_FEATURE.md - Real-time Updates section
+  useEffect(() => {
+    if (!isGroupChat) return
+
+    console.log('[ChatRoom] Setting up real-time listener for group:', chatId)
+
+    // Listen to group document for participant changes and admin updates
+    const groupRef = doc(db(), 'groupChats', chatId)
+    const unsubscribe = onSnapshot(
+      groupRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          // Group deleted
+          console.log('[ChatRoom] Group deleted:', chatId)
+          toast.info('Grup telah dihapus')
+          onLeaveGroup?.()
+          return
+        }
+
+        const groupData = snapshot.data()
+        const participantsMap = groupData?.participantsMap || {}
+        const participants = groupData?.participants || []
+        const admins = groupData?.admins || []
+
+        console.log('[ChatRoom] Real-time group update:', {
+          participants,
+          admins,
+          participantsMap,
+          currentUserInParticipants: participants.includes(currentUserId),
+          currentUserInParticipantsMap: !!participantsMap[currentUserId]
+        })
+
+        // Update admins state in real-time
+        setGroupAdmins(admins)
+
+        // Update room title and avatar in real-time
+        if (groupData?.name) {
+          setRoomTitle(groupData.name)
+        }
+        if (groupData?.avatar || groupData?.avatarUrl) {
+          setRoomAvatar(groupData.avatar || groupData.avatarUrl || '')
+        }
+
+        // Check if current user is still in participantsMap
+        if (!participantsMap[currentUserId] && !participants.includes(currentUserId)) {
+          // User was removed from group
+          console.log('[ChatRoom] Current user removed from group')
+          toast.info('Anda telah dikeluarkan dari grup ini')
+          onLeaveGroup?.()
+        }
+      },
+      (error) => {
+        console.error('[ChatRoom] Error listening to group changes:', error)
+      }
+    )
+
+    return () => unsubscribe()
+  }, [chatId, currentUserId, isGroupChat, onLeaveGroup])
 
   // Mark messages as read when viewing
   useEffect(() => {
     if (messages.length > 0 && !loading) {
+      console.log('[ChatRoom] Messages loaded:', {
+        count: messages.length,
+        messages: messages.map(m => ({
+          messageId: m.messageId,
+          senderId: m.senderId,
+          senderName: m.senderName,
+          type: m.type,
+          timestamp: m.timestamp,
+          isDeleted: m.isDeleted
+        }))
+      })
       markAsRead(currentUserId)
     }
   }, [messages.length, loading, currentUserId, markAsRead])
@@ -241,6 +364,23 @@ export function ChatRoom({
     }
   }
 
+  // Handle delete chat
+  const handleDeleteChat = async () => {
+    setDeletingChat(true)
+    const result = await chatRepository.deleteChat(chatId, currentUserId, isGroupChat)
+    setDeletingChat(false)
+
+    if (result.status === 'success') {
+      toast.success('Chat berhasil dihapus')
+      setShowDeleteChatDialog(false)
+      if (onCloseChat) {
+        onCloseChat()
+      }
+    } else if (result.status === 'error') {
+      toast.error(result.message || 'Gagal menghapus chat')
+    }
+  }
+
   // Handle members update
   const handleMembersUpdate = (members: User[]) => {
     setGroupMembers(members)
@@ -254,6 +394,11 @@ export function ChatRoom({
   // Handle name update
   const handleNameUpdate = (newName: string) => {
     setRoomTitle(newName)
+  }
+
+  // Handle admins update
+  const handleAdminsUpdate = (admins: string[]) => {
+    setGroupAdmins(admins)
   }
 
   // Handle forward message
@@ -462,20 +607,45 @@ export function ChatRoom({
     }
   }
 
+  // Handle click on header (name/avatar)
+  const handleHeaderClick = async () => {
+    // Reset selection mode
+    setSelectionMode(false)
+    setSelectedMessageIds(new Set())
+
+    if (isGroupChat) {
+      // Open group info dialog
+      setShowGroupInfoDialog(true)
+    } else {
+      // Open user profile for direct chat
+      if (otherUserId && !isDeletedUser) {
+        try {
+          const result = await userRepository.getUserById(otherUserId)
+          if (result.status === 'success') {
+            console.log('[ChatRoom] User data for profile:', {
+              userId: result.data.userId,
+              displayName: result.data.displayName,
+              imageURL: result.data.imageURL,
+              imageUrl: result.data.imageUrl,
+              hasImage: !!(result.data.imageURL || result.data.imageUrl)
+            })
+            setSelectedUser(result.data)
+            setShowUserProfileDialog(true)
+          }
+        } catch (error) {
+          console.error('Load user profile error:', error)
+        }
+      }
+    }
+  }
+
   return (
     <div className="flex h-full w-full min-h-0 flex-col relative">
       <header className="flex items-center justify-between border-b px-4 py-3 shadow-sm z-10" style={{ backgroundColor: '#fafafa' }}>
         <button
-          onClick={() => {
-            if (isGroupChat) {
-              // Reset selection mode when opening group info
-              setSelectionMode(false)
-              setSelectedMessageIds(new Set())
-              setShowGroupInfoDialog(true)
-            }
-          }}
+          onClick={handleHeaderClick}
           className="flex items-center gap-3 flex-1 min-w-0 hover:bg-muted/50 transition-colors rounded-lg px-2 py-1 -ml-2 disabled:hover:bg-transparent"
-          disabled={!isGroupChat}
+          disabled={isDeletedUser}
         >
           <Avatar className="h-10 w-10 shrink-0">
             <AvatarImage src={roomAvatar || "/placeholder-user.jpg"} alt="" />
@@ -487,14 +657,18 @@ export function ChatRoom({
               )}
             </AvatarFallback>
           </Avatar>
-          <div className="flex-1 min-w-0 text-left overflow-hidden">
-            <h1 className="text-balance text-base font-semibold truncate">{roomTitle}</h1>
+          <div className="flex-1 min-w-0 text-left">
+            <h1 className="text-base font-semibold break-words line-clamp-2">
+              {roomTitle}
+            </h1>
             {isGroupChat && groupMembers.length > 0 ? (
               <p className="text-xs text-muted-foreground truncate overflow-hidden whitespace-nowrap text-ellipsis">
                 {getMemberNamesDisplay()}
               </p>
-            ) : !isGroupChat ? (
-              <p className="text-xs text-muted-foreground">Messages are end-to-end encrypted</p>
+            ) : !isGroupChat && lastSeenText ? (
+              <p className={`text-xs truncate ${otherUserStatus === UserStatus.ONLINE ? 'text-green-600' : 'text-muted-foreground'}`}>
+                {lastSeenText}
+              </p>
             ) : null}
           </div>
         </button>
@@ -512,7 +686,7 @@ export function ChatRoom({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            {isGroupChat && (
+            {isGroupChat ? (
               <>
                 <DropdownMenuItem
                   onClick={() => {
@@ -524,6 +698,25 @@ export function ChatRoom({
                 >
                   <Info className="h-4 w-4" />
                   <span>Info grup</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (onCloseChat) {
+                      onCloseChat()
+                    }
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <X className="h-4 w-4" />
+                  <span>Tutup chat</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setShowDeleteChatDialog(true)}
+                  className="flex items-center gap-2 text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Hapus chat</span>
                 </DropdownMenuItem>
                 {isParticipant && (
                   <>
@@ -537,6 +730,28 @@ export function ChatRoom({
                     </DropdownMenuItem>
                   </>
                 )}
+              </>
+            ) : (
+              <>
+                <DropdownMenuItem
+                  onClick={() => {
+                    if (onCloseChat) {
+                      onCloseChat()
+                    }
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <X className="h-4 w-4" />
+                  <span>Tutup chat</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setShowDeleteChatDialog(true)}
+                  className="flex items-center gap-2 text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Hapus chat</span>
+                </DropdownMenuItem>
               </>
             )}
           </DropdownMenuContent>
@@ -622,6 +837,7 @@ export function ChatRoom({
                           status: m.status,
                           error: m.error,
                           isDeleted: m.isDeleted,
+                          isForwarded: m.isForwarded,
                           replyTo: m.replyTo ? {
                             messageId: m.replyTo.messageId,
                             senderId: m.replyTo.senderId,
@@ -734,6 +950,7 @@ export function ChatRoom({
           onMembersUpdate={handleMembersUpdate}
           onAvatarUpdate={handleAvatarUpdate}
           onNameUpdate={handleNameUpdate}
+          onAdminsUpdate={handleAdminsUpdate}
           onLeaveGroup={() => {
             setShowGroupInfoDialog(false)
             onLeaveGroup?.()
@@ -798,6 +1015,51 @@ export function ChatRoom({
         onDeleteForMe={handleDeleteForMe}
         onDeleteForEveryone={handleDeleteForEveryone}
       />
+
+      {/* Delete Chat Dialog */}
+      <AlertDialog open={showDeleteChatDialog} onOpenChange={setShowDeleteChatDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Chat?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {isGroupChat
+                ? 'Apakah Anda yakin ingin menghapus chat grup ini? Semua pesan dalam chat ini akan dihapus dari perangkat Anda.'
+                : 'Apakah Anda yakin ingin menghapus chat ini? Semua pesan dalam chat ini akan dihapus dari perangkat Anda.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingChat}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleDeleteChat()
+              }}
+              disabled={deletingChat}
+              className="text-white hover:text-white transition-colors"
+              style={{ backgroundColor: '#E54C38' }}
+              onMouseEnter={(e) => {
+                if (!deletingChat) {
+                  e.currentTarget.style.backgroundColor = '#D43D28'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!deletingChat) {
+                  e.currentTarget.style.backgroundColor = '#E54C38'
+                }
+              }}
+            >
+              {deletingChat ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Menghapus...
+                </>
+              ) : (
+                "Hapus"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

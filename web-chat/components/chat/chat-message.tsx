@@ -36,6 +36,7 @@ type Base = {
   status?: MessageStatus
   error?: string
   isDeleted?: boolean
+  isForwarded?: boolean
   replyTo?: {
     messageId: string
     senderId: string
@@ -200,6 +201,8 @@ export function ChatMessage({
     ? { maxWidth: '640px' }
     : data.type === 'image'
     ? { maxWidth: '640px' }
+    : data.type === 'video'
+    ? {} // Video has its own max-width constraints
     : { maxWidth: '640px' }
 
   return (
@@ -242,18 +245,21 @@ export function ChatMessage({
         <div className="relative">
           <div onClick={() => selectionMode && onToggleSelect?.(data.id)}>
           <div className={bubble} style={maxWidthStyle}>
-          {/* Dropdown menu - appears on hover (hide for deleted messages and selection mode) */}
-          {!selectionMode && !data.isDeleted && (
+          {/* Dropdown menu - appears on hover (hide for deleted messages, selection mode, and video) */}
+          {!selectionMode && !data.isDeleted && data.type !== 'video' && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   className={cn(
-                    "absolute top-1 p-0.5 opacity-0 group-hover/message:opacity-100 transition-opacity hover:bg-black/10 rounded",
+                    "absolute top-1 p-1 opacity-0 group-hover/message:opacity-100 data-[state=open]:opacity-100 transition-opacity rounded-full backdrop-blur-sm",
                     isMe ? "left-1" : "right-1"
                   )}
+                  style={{
+                    backgroundColor: isMe ? '#5a8f5a' : '#f6f3f4'
+                  }}
                   aria-label="Message options"
                 >
-                  <ChevronDown className="h-4 w-4" />
+                  <ChevronDown className={cn("h-4 w-4", isMe ? "text-white" : "text-gray-800")} />
                 </button>
               </DropdownMenuTrigger>
             <DropdownMenuContent align={isMe ? "start" : "end"}>
@@ -274,15 +280,13 @@ export function ChatMessage({
               )}
 
               {/* Unduh - untuk media dan dokumen */}
-              {(data.type === 'image' || data.type === 'video' || data.type === 'doc') && (
+              {(data.type === 'image' || data.type === 'doc') && (
                 <DropdownMenuItem
                   className="flex items-center gap-2"
                   onClick={() => {
                     const filename = data.type === 'doc' ? (data as DocMsg).fileName : `${data.type}-${data.id}`
                     const mimeType = data.type === 'doc'
                       ? (data as DocMsg).mimeType
-                      : data.type === 'video'
-                      ? (data as VideoMsg).mimeType
                       : undefined
                     handleDownload(data.content, filename, mimeType)
                   }}
@@ -337,6 +341,14 @@ export function ChatMessage({
               </span>
             )
           })() : null}
+
+          {/* Forwarded indicator */}
+          {data.isForwarded && (
+            <div className="flex items-center gap-1.5 mb-1 opacity-80">
+              <Forward className="h-3 w-3" />
+              <span className="text-xs italic">Diteruskan</span>
+            </div>
+          )}
 
           {/* Quoted section - shows the message being replied to */}
           {data.replyTo && (
@@ -479,13 +491,21 @@ export function ChatMessage({
                     handleDownload(data.content, `image-${data.id}.jpg`, 'image/jpeg')
                   }}
                   disabled={downloading}
-                  className="absolute top-2 right-2 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                  className={cn(
+                    "absolute top-2 right-2 p-2 rounded-full backdrop-blur-sm transition-opacity opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                  )}
+                  style={{
+                    backgroundColor: isMe ? '#5a8f5a' : '#f6f3f4'
+                  }}
                   aria-label="Download image"
                 >
                   {downloading ? (
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    <div className={cn(
+                      "h-4 w-4 animate-spin rounded-full border-2 border-t-transparent",
+                      isMe ? "border-white" : "border-gray-800"
+                    )} />
                   ) : (
-                    <Download className="h-4 w-4 text-white" />
+                    <Download className={cn("h-4 w-4", isMe ? "text-white" : "text-gray-800")} />
                   )}
                 </button>
               )}
@@ -494,18 +514,93 @@ export function ChatMessage({
 
           {data.type === "video" && (
             <div
-              className="relative cursor-pointer group"
+              className="relative cursor-pointer group max-w-[320px] sm:max-w-[450px]"
               onClick={() => setShowVideoPreview(true)}
+              style={{
+                minWidth: '200px',
+              }}
             >
               <video
                 className="h-auto w-full rounded-md pointer-events-none"
+                style={{
+                  maxHeight: '500px',
+                  objectFit: 'contain',
+                }}
                 preload="metadata"
               >
                 <source src={data.content} type={data.mimeType || 'video/mp4'} />
                 Your browser does not support the video tag.
               </video>
+
+              {/* Options menu button - top right */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className={cn(
+                      "absolute top-2 right-2 p-1.5 rounded-full backdrop-blur-sm transition-opacity opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
+                    )}
+                    style={{
+                      backgroundColor: isMe ? '#5a8f5a' : '#f6f3f4'
+                    }}
+                    aria-label="Message options"
+                  >
+                    <ChevronDown className={cn("h-4 w-4", isMe ? "text-white" : "text-gray-800")} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  {/* Forward */}
+                  <DropdownMenuItem
+                    className="flex items-center gap-2"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onForward?.(data.id)
+                    }}
+                  >
+                    <Forward className="h-4 w-4" />
+                    <span>Teruskan</span>
+                  </DropdownMenuItem>
+
+                  {/* Reply */}
+                  <DropdownMenuItem
+                    className="flex items-center gap-2"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onReply?.(data.id)
+                    }}
+                  >
+                    <Reply className="h-4 w-4" />
+                    <span>Balas</span>
+                  </DropdownMenuItem>
+
+                  {/* Download */}
+                  <DropdownMenuItem
+                    className="flex items-center gap-2"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const filename = `video-${data.id}.mp4`
+                      handleDownload(data.content, filename, (data as VideoMsg).mimeType)
+                    }}
+                  >
+                    <Download className="h-4 w-4" />
+                    <span>Unduh</span>
+                  </DropdownMenuItem>
+
+                  {/* Delete */}
+                  <DropdownMenuItem
+                    className="flex items-center gap-2 text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onLongPress?.(data.id)
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Hapus</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
               {/* Play overlay */}
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors rounded-md">
+              <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors rounded-md pointer-events-none">
                 <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center">
                   <svg
                     className="w-8 h-8 text-primary ml-1"

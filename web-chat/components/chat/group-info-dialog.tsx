@@ -10,9 +10,15 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
 import { User } from '@/types/models'
-import { UserMinus, UserPlus, Camera, Users as UsersIcon, Loader2, Pencil, Search, X, LogOut } from 'lucide-react'
+import { UserMinus, UserPlus, Camera, Users as UsersIcon, Loader2, Pencil, Search, X, LogOut, ChevronDown, UserCog } from 'lucide-react'
 import { ChatRepository } from '@/lib/repositories/chat.repository'
 import { toast } from 'sonner'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { UserRepository } from '@/lib/repositories/user.repository'
 import { uploadGroupAvatar } from '@/lib/utils/storage.utils'
 import { cn } from '@/lib/utils'
@@ -49,6 +55,7 @@ interface GroupInfoDialogProps {
   onAvatarUpdate: (avatarUrl: string) => void
   onNameUpdate?: (newName: string) => void
   onLeaveGroup?: () => void
+  onAdminsUpdate?: (admins: string[]) => void
 }
 
 export function GroupInfoDialog({
@@ -64,6 +71,7 @@ export function GroupInfoDialog({
   onAvatarUpdate,
   onNameUpdate,
   onLeaveGroup,
+  onAdminsUpdate,
 }: GroupInfoDialogProps) {
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false)
   const [availableUsers, setAvailableUsers] = useState<User[]>([])
@@ -80,6 +88,7 @@ export function GroupInfoDialog({
   const [updatingName, setUpdatingName] = useState(false)
   const [showLeaveDialog, setShowLeaveDialog] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  const [hoveredMemberId, setHoveredMemberId] = useState<string | null>(null)
 
   const isCurrentUserAdmin = groupAdmins.includes(currentUserId)
 
@@ -93,11 +102,58 @@ export function GroupInfoDialog({
     setShowRemoveDialog(true)
   }
 
+  const handlePromoteToAdmin = async (userId: string, userName: string) => {
+    if (!isCurrentUserAdmin) {
+      toast.error('Hanya admin yang dapat menambahkan admin baru')
+      return
+    }
+
+    const result = await chatRepository.promoteToAdmin(chatId, userId)
+
+    if (result.status === 'success') {
+      toast.success(`${userName} sekarang menjadi admin`)
+      // Update parent state with new admin
+      if (onAdminsUpdate) {
+        onAdminsUpdate([...groupAdmins, userId])
+      }
+    } else if (result.status === 'error') {
+      toast.error(result.message || 'Gagal menjadikan admin')
+    }
+  }
+
+  const handleDemoteFromAdmin = async (userId: string, userName: string) => {
+    if (!isCurrentUserAdmin) {
+      toast.error('Hanya admin yang dapat menghapus admin')
+      return
+    }
+
+    const result = await chatRepository.demoteFromAdmin(chatId, userId)
+
+    if (result.status === 'success') {
+      toast.success(`${userName} bukan lagi admin`)
+      // Update parent state by removing admin
+      if (onAdminsUpdate) {
+        onAdminsUpdate(groupAdmins.filter(id => id !== userId))
+      }
+    } else if (result.status === 'error') {
+      toast.error(result.message || 'Gagal menghapus admin')
+    }
+  }
+
   const confirmRemoveMember = async () => {
     if (!memberToRemove) return
 
+    // Get current user name for system message
+    const currentUser = groupMembers.find(m => m.userId === currentUserId)
+    const adminName = currentUser?.displayName || 'Admin'
+
     setRemovingMember(true)
-    const result = await chatRepository.removeGroupMember(chatId, memberToRemove.userId)
+    const result = await chatRepository.removeGroupMember(
+      chatId,
+      currentUserId,
+      adminName,
+      memberToRemove.userId
+    )
     setRemovingMember(false)
 
     if (result.status === 'success') {
@@ -294,10 +350,23 @@ export function GroupInfoDialog({
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full sm:max-w-md p-0 gap-0 flex flex-col" side="right">
+        <SheetContent className="w-full sm:max-w-md p-0 gap-0 flex flex-col" side="right" showClose={false}>
           <SheetTitle asChild>
             <VisuallyHidden>Group Info</VisuallyHidden>
           </SheetTitle>
+
+          {/* Header */}
+          <div className="flex items-center gap-4 px-6 py-4 bg-background border-b">
+            <button
+              onClick={() => onOpenChange(false)}
+              className="p-1 hover:bg-muted rounded-full transition-colors"
+              aria-label="Close"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <h2 className="text-lg font-medium">Info grup</h2>
+          </div>
+
           <ScrollArea className="flex-1">
             <div className="flex flex-col pb-4">
               {/* Group Photo Header */}
@@ -342,7 +411,7 @@ export function GroupInfoDialog({
 
               {/* Group Name and Info */}
               <div className="px-6 py-6 bg-background">
-                <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="flex items-center justify-between gap-3 mb-2 break-words w-[400px] inline-block">
                   <h2 className="text-xl font-medium flex-1">{groupName}</h2>
                   {isCurrentUserAdmin && (
                     <button
@@ -386,50 +455,97 @@ export function GroupInfoDialog({
                 <div className="space-y-1">
                   {groupMembers.map((member) => {
                     const isAdmin = groupAdmins.includes(member.userId)
-                    const canKick = isCurrentUserAdmin && member.userId !== currentUserId
+                    const canManage = isCurrentUserAdmin && member.userId !== currentUserId
                     const isCurrentUser = member.userId === currentUserId
+                    const isHovered = hoveredMemberId === member.userId
+                    const canPromoteToAdmin = !isAdmin && groupAdmins.length < 5
+
                     return (
                       <div
                         key={member.userId}
-                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors"
+                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors group"
+                        onMouseEnter={() => setHoveredMemberId(member.userId)}
+                        onMouseLeave={() => setHoveredMemberId(null)}
                       >
-                        <Avatar className="h-12 w-12">
+                        <Avatar className="h-12 w-12 shrink-0">
                           <AvatarImage src={member.imageURL || member.imageUrl} alt="" />
                           <AvatarFallback className="text-sm font-semibold">
                             {member.displayName.slice(0, 2).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 mb-0.5">
-                            <div className="flex items-baseline gap-1 flex-1 min-w-0">
-                              <span className="text-sm font-medium truncate">
-                                {member.displayName.length > 25
-                                  ? member.displayName.slice(0, 25) + '...'
-                                  : member.displayName}
-                              </span>
-                              {isCurrentUser && (
-                                <span className="text-sm text-muted-foreground font-normal shrink-0">(You)</span>
-                              )}
-                            </div>
-                            {isAdmin && (
-                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium shrink-0">
-                                Admin
-                              </Badge>
+                        <div className="flex-1 min-w-0 max-w-[calc(100%-140px)]">
+                          <div className="flex items-baseline gap-1 mb-0.5">
+                            <span className="text-sm font-medium">
+                              {member.displayName.length > 35
+                                ? member.displayName.slice(0, 35) + '...'
+                                : member.displayName}
+                            </span>
+                            {isCurrentUser && (
+                              <span className="text-sm text-muted-foreground font-normal shrink-0">(You)</span>
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground truncate">{member.username || member.email?.split('@')[0]}</p>
                         </div>
-                        {canKick && (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => handleKickMember(member.userId, member.displayName)}
-                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
-                            aria-label={`Remove ${member.displayName}`}
-                          >
-                            <UserMinus className="h-4 w-4" />
-                          </Button>
-                        )}
+
+                        {/* Right side: Badge and Dropdown horizontal */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          {isAdmin && (
+                            <Badge variant="secondary" className="text-xs px-2 py-0.5 font-normal">
+                              Admin
+                            </Badge>
+                          )}
+                          {canManage && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className={cn(
+                                    "h-8 w-8 transition-opacity",
+                                    isHovered ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                  )}
+                                  aria-label={`Manage ${member.displayName}`}
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-48">
+                                {isAdmin ? (
+                                  <DropdownMenuItem
+                                    onClick={() => handleDemoteFromAdmin(member.userId, member.displayName)}
+                                  >
+                                    <UserCog className="h-4 w-4 mr-2" />
+                                    <span>Hapus dari admin</span>
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      if (canPromoteToAdmin) {
+                                        handlePromoteToAdmin(member.userId, member.displayName)
+                                      }
+                                    }}
+                                    disabled={!canPromoteToAdmin}
+                                    className={!canPromoteToAdmin ? 'opacity-50 cursor-not-allowed' : ''}
+                                    title={!canPromoteToAdmin ? 'Maksimal 5 admin per grup' : ''}
+                                  >
+                                    <UserCog className="h-4 w-4 mr-2" />
+                                    <span>Jadikan admin grup</span>
+                                    {!canPromoteToAdmin && (
+                                      <span className="ml-auto text-[10px] text-muted-foreground">(Max)</span>
+                                    )}
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem
+                                  onClick={() => handleKickMember(member.userId, member.displayName)}
+                                  className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                                >
+                                  <UserMinus className="h-4 w-4 mr-2" />
+                                  <span>Keluarkan</span>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
                       </div>
                     )
                   })}
