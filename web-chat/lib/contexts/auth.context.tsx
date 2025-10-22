@@ -95,6 +95,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             const result = await userRepositoryRef.current.getUserById(user.uid);
             if (result.status === 'success') {
+              // Check if user is deleted
+              if (result.data.isDeleted === true) {
+                if (typeof window !== 'undefined') {
+                  console.log('User account has been deleted, logging out...');
+                }
+                await authRepositoryRef.current.signOut();
+                setUserData(null);
+                setCurrentUser(null);
+                setLoading(false);
+                return;
+              }
+
               // Check if user is active
               if (result.data.isActive === false) {
                 if (typeof window !== 'undefined') {
@@ -146,6 +158,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               unsubscribeUserData = userRepositoryRef.current.listenToUser(
                 user.uid,
                 (userData: User) => {
+                  // Check if user has been deleted
+                  if (userData.isDeleted === true) {
+                    if (typeof window !== 'undefined') {
+                      console.log('User account has been deleted by admin');
+                    }
+                    // Auto logout if user is deleted
+                    authRepositoryRef.current.signOut();
+                    setUserData(null);
+                    setCurrentUser(null);
+                    return;
+                  }
+
                   // Check if user is still active
                   if (userData.isActive === false) {
                     if (typeof window !== 'undefined') {
@@ -274,16 +298,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Verify user data exists in Firestore
         const userResult = await userRepositoryRef.current.getUserById(result.data.uid);
         if (userResult.status === 'success') {
+          console.log('[Login] User data:', {
+            isDeleted: userResult.data.isDeleted,
+            isActive: userResult.data.isActive,
+            displayName: userResult.data.displayName
+          });
+
+          // Check if user is deleted
+          if (userResult.data.isDeleted === true) {
+            console.log('[Login] User is deleted, logging out...');
+            await authRepositoryRef.current.signOut();
+            return { success: false, error: 'Akun Anda telah dihapus oleh administrator. Silakan hubungi administrator untuk informasi lebih lanjut.' };
+          }
+
           // Check if user is active
           if (userResult.data.isActive === false) {
             await authRepositoryRef.current.signOut();
-            return { success: false, error: 'Akun Anda telah dinonaktifkan. Silakan hubungi administrator.' };
+            return { success: false, error: 'Akun Anda telah dinonaktifkan. Silakan hubungi administrator untuk informasi lebih lanjut.' };
           }
 
           // Check if displayName exists
           if (!userResult.data.displayName || userResult.data.displayName.trim() === '') {
             await authRepositoryRef.current.signOut();
-            return { success: false, error: 'Akun tidak memiliki username. Silakan hubungi administrator.' };
+            return { success: false, error: 'Akun Anda tidak memiliki username. Silakan hubungi administrator untuk informasi lebih lanjut.' };
           }
 
           return { success: true };

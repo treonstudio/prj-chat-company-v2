@@ -15,6 +15,7 @@ export interface User {
   imageUrl?: string; // Fallback for backward compatibility
   status: UserStatus;
   isActive?: boolean;
+  isDeleted?: boolean; // Track if user has been deleted by admin
   lastSeen?: Timestamp;
   fcmToken?: string;
   createdAt?: Timestamp;
