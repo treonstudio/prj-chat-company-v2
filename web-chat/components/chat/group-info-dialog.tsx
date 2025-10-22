@@ -89,6 +89,7 @@ export function GroupInfoDialog({
   const [showLeaveDialog, setShowLeaveDialog] = useState(false)
   const [leaving, setLeaving] = useState(false)
   const [hoveredMemberId, setHoveredMemberId] = useState<string | null>(null)
+  const [showImageViewer, setShowImageViewer] = useState(false)
 
   const isCurrentUserAdmin = groupAdmins.includes(currentUserId)
 
@@ -371,21 +372,32 @@ export function GroupInfoDialog({
             <div className="flex flex-col pb-4">
               {/* Group Photo Header */}
               <div className="relative w-full aspect-square max-h-[400px] bg-muted/50 flex items-center justify-center group">
-                {groupAvatar ? (
-                  <img
-                    src={groupAvatar}
-                    alt={groupName}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <UsersIcon className="h-24 w-24 text-muted-foreground" />
-                )}
+                {/* Clickable area to view full image */}
+                <button
+                  onClick={() => {
+                    if (groupAvatar) {
+                      setShowImageViewer(true)
+                    }
+                  }}
+                  className="absolute inset-0 w-full h-full"
+                  disabled={!groupAvatar}
+                >
+                  {groupAvatar ? (
+                    <img
+                      src={groupAvatar}
+                      alt={groupName}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <UsersIcon className="h-24 w-24 text-muted-foreground" />
+                  )}
+                </button>
 
                 {/* Upload overlay for admin */}
                 {isCurrentUserAdmin && (
                   <label
                     htmlFor="avatar-upload"
-                    className="absolute inset-0 cursor-pointer bg-black/40 flex flex-col items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute inset-0 cursor-pointer bg-black/40 flex flex-col items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10"
                   >
                     <div className="rounded-full bg-background/90 p-3">
                       {uploadingAvatar ? (
@@ -862,6 +874,31 @@ export function GroupInfoDialog({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Image Viewer Dialog */}
+      <Dialog open={showImageViewer} onOpenChange={setShowImageViewer}>
+        <DialogContent className="max-w-4xl w-full p-0 bg-black/95 border-0">
+          <div className="relative w-full h-[80vh] flex items-center justify-center">
+            {/* Close Button */}
+            <button
+              onClick={() => setShowImageViewer(false)}
+              className="absolute top-4 right-4 z-50 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
+              aria-label="Close"
+            >
+              <X className="h-6 w-6 text-white" />
+            </button>
+
+            {/* Image */}
+            {groupAvatar && (
+              <img
+                src={groupAvatar}
+                alt={groupName}
+                className="max-w-full max-h-full object-contain"
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

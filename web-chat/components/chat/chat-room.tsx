@@ -119,11 +119,12 @@ export function ChatRoom({
     !isGroupChat ? otherUserId : null
   )
 
-  // Reset selection and clear cache when chatId changes
+  // Reset selection, clear cache and reply when chatId changes
   useEffect(() => {
     setSelectionMode(false)
     setSelectedMessageIds(new Set())
     setUserCache(new Map()) // Clear user cache for new chat
+    setReplyingTo(null) // Clear reply preview when switching rooms
   }, [chatId])
 
   // Lookup missing sender names from users collection
@@ -139,6 +140,13 @@ export function ChatRoom({
         // Check if senderName is missing or empty and not already in cache
         if ((!m.senderName || m.senderName.trim() === '') && !userCache.has(m.senderId)) {
           senderIdsToFetch.add(m.senderId)
+        }
+
+        // Also check replyTo senderName
+        if (m.replyTo && (!m.replyTo.senderName || m.replyTo.senderName.trim() === '' || m.replyTo.senderName === 'Deleted User')) {
+          if (!userCache.has(m.replyTo.senderId)) {
+            senderIdsToFetch.add(m.replyTo.senderId)
+          }
         }
       })
 
@@ -947,6 +955,7 @@ export function ChatRoom({
                         }}
                         isMe={m.senderId === currentUserId}
                         isGroupChat={isGroupChat}
+                        userCache={userCache}
                         onRetry={retryMessage}
                         onForward={handleForwardClick}
                         onDelete={deleteMessage}
@@ -1028,7 +1037,7 @@ export function ChatRoom({
             onSendImage={(file, shouldCompress) => sendImage(currentUserId, currentUserName, file, shouldCompress, currentUserAvatar)}
             onSendVideo={(file) => sendVideo(currentUserId, currentUserName, file, currentUserAvatar)}
             onSendDocument={(file) => sendDocument(currentUserId, currentUserName, file, currentUserAvatar)}
-            disabled={sending}
+            disabled={false}
             uploading={uploading}
           />
         )}

@@ -137,6 +137,11 @@ export function MessageComposer({
       setMessage('');
       // Clear draft after sending
       clearDraft();
+
+      // Auto-focus back to textarea after sending
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 0);
     }
   };
 

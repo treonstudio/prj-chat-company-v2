@@ -76,8 +76,10 @@ export function ChatMessage({
   onReply,
   onReplyClick,
   isDeletedUser = false,
+  userCache,
 }: {
   data: ChatMessageUnion
+  userCache?: Map<string, string>
   isMe: boolean
   isGroupChat: boolean
   onRetry?: (messageId: string) => void
@@ -369,7 +371,12 @@ export function ChatMessage({
                 )}>
                   {(() => {
                     const replyToName = data.replyTo!.senderName
-                    if (replyToName === "Deleted User" || !replyToName?.trim()) {
+                    // Try to get name from cache if senderName is empty or "Deleted User"
+                    if (!replyToName || replyToName.trim() === '' || replyToName === "Deleted User") {
+                      const cachedName = userCache?.get(data.replyTo!.senderId)
+                      if (cachedName) {
+                        return cachedName
+                      }
                       return "Deleted User"
                     }
                     return replyToName
