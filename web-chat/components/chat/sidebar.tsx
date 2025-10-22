@@ -38,6 +38,7 @@ export function Sidebar({
   const [showNewChatDialog, setShowNewChatDialog] = useState(false)
   const [showGroupChatDialog, setShowGroupChatDialog] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
+  const [avatarCacheKey, setAvatarCacheKey] = useState(Date.now())
   const { signOut } = useAuth()
   const { chats, loading, error } = useChatList(currentUserId)
   const { featureFlags } = useFeatureFlags()
@@ -50,6 +51,13 @@ export function Sidebar({
       setActiveId(selectedChatId)
     }
   }, [selectedChatId])
+
+  // Update cache key when avatar URL changes to force image reload
+  useEffect(() => {
+    if (currentUserData?.imageURL || currentUserData?.imageUrl) {
+      setAvatarCacheKey(Date.now())
+    }
+  }, [currentUserData?.imageURL, currentUserData?.imageUrl])
 
   // Load drafts for all chats
   useEffect(() => {
@@ -107,6 +115,11 @@ export function Sidebar({
     onChatSelect(chatId, isGroup)
   }
 
+  // Get avatar URL with cache busting to ensure fresh image loads
+  const currentUserAvatarUrl = currentUserData.imageURL || currentUserData.imageUrl
+    ? `${currentUserData.imageURL || currentUserData.imageUrl}?t=${avatarCacheKey}`
+    : "/placeholder-user.jpg"
+
   return (
     <div className="flex h-full min-h-0 flex-col relative overflow-hidden" style={{ backgroundColor: '#fafafa' }}>
       {/* Main Sidebar Content */}
@@ -125,7 +138,7 @@ export function Sidebar({
             onClick={() => setShowProfile(true)}
           >
             <Avatar className="h-8 w-8">
-              <AvatarImage src={currentUserData.imageURL || currentUserData.imageUrl || "/placeholder-user.jpg"} alt="" />
+              <AvatarImage src={currentUserAvatarUrl} alt="" />
               <AvatarFallback aria-hidden>{currentUserName?.slice(0, 2).toUpperCase() || 'U'}</AvatarFallback>
             </Avatar>
             <div className="min-w-0 text-left">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -38,11 +38,25 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [showCropDialog, setShowCropDialog] = useState(false)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [optimisticAvatar, setOptimisticAvatar] = useState<string | null>(null)
+  const [avatarCacheKey, setAvatarCacheKey] = useState(Date.now())
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { usageControls } = useUsageControls()
 
   // Max character limit for profile name
   const MAX_PROFILE_NAME_LENGTH = 25
+
+  // Update cache key when user avatar URL changes from real-time listener
+  useEffect(() => {
+    if (user.imageURL || user.imageUrl) {
+      setAvatarCacheKey(Date.now())
+      // Clear optimistic avatar since real data has arrived
+      setOptimisticAvatar(null)
+    }
+  }, [user.imageURL, user.imageUrl])
+
+  // Get the current avatar URL with cache busting for real-time updates
+  const currentAvatarUrl = optimisticAvatar || (user.imageURL || user.imageUrl ? `${user.imageURL || user.imageUrl}?t=${avatarCacheKey}` : "/placeholder-user.jpg")
 
   const handleCopyUsername = async () => {
     const username = user.username || user.userId || '-'
@@ -211,20 +225,25 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
       const uploadResult = await storageRepository.uploadAvatar(user.userId, croppedImageFile)
 
       if (uploadResult.status === 'success') {
+        // Immediately update the displayed avatar (optimistic update)
+        setOptimisticAvatar(uploadResult.data + `?t=${Date.now()}`)
+
         // Update user document with new avatar URL
         const updateResult = await userRepository.updateAvatar(user.userId, uploadResult.data)
 
         if (updateResult.status === 'success') {
           toast.success('Foto profil berhasil diperbarui')
+          // The real-time listener in AuthContext will update the UI everywhere else
         } else if (updateResult.status === 'error') {
           toast.error(updateResult.message || 'Gagal memperbarui foto profil')
+          setOptimisticAvatar(null) // Reset optimistic update on error
         }
-        // Success - the real-time listener in AuthContext will update the UI automatically
       } else if (uploadResult.status === 'error') {
         toast.error(uploadResult.message || 'Gagal mengunggah foto profil')
       }
     } catch (error) {
       toast.error('Terjadi kesalahan saat mengunggah foto profil')
+      setOptimisticAvatar(null) // Reset optimistic update on error
     } finally {
       setUploadingAvatar(false)
       // Clean up object URL
@@ -255,24 +274,25 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
         <div className="flex flex-col items-center py-8 bg-muted/30">
           <div className="relative group">
             <Avatar className="h-40 w-40">
-              <AvatarImage src={user.imageURL || user.imageUrl || "/placeholder-user.jpg"} alt="" />
+              <AvatarImage src={currentAvatarUrl} alt="" />
               <AvatarFallback className="text-4xl">
-                {user.displayName?.slice(0, 2).toUpperCase()}
+                {uploadingAvatar ? (
+                  <Loader2 className="h-12 w-12 animate-spin" />
+                ) : (
+                  user.displayName?.slice(0, 2).toUpperCase()
+                )}
               </AvatarFallback>
             </Avatar>
 
             {/* Camera overlay button */}
-            <button
-              onClick={handleAvatarClick}
-              disabled={uploadingAvatar}
-              className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity disabled:cursor-not-allowed"
-            >
-              {uploadingAvatar ? (
-                <Loader2 className="h-8 w-8 text-white animate-spin" />
-              ) : (
+            {!uploadingAvatar && (
+              <button
+                onClick={handleAvatarClick}
+                className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+              >
                 <Camera className="h-8 w-8 text-white" />
-              )}
-            </button>
+              </button>
+            )}
 
             {/* Hidden file input */}
             <input

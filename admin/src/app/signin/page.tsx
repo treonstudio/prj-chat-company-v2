@@ -30,7 +30,7 @@ function Page() {
     let hasError = false;
 
     if (!username.trim()) {
-      setUsernameError('Email atau Username tidak boleh kosong');
+      setUsernameError('Username tidak boleh kosong');
       hasError = true;
     }
 
@@ -54,9 +54,9 @@ function Page() {
         const firebaseError = error as any;
 
         if (firebaseError.code === 'auth/user-not-found') {
-          setUsernameError('Email atau Username tidak ditemukan');
+          setUsernameError('Username tidak ditemukan');
           toast.error('Login gagal', {
-            description: 'Email atau Username tidak ditemukan'
+            description: 'Username tidak ditemukan'
           });
         } else if (firebaseError.code === 'auth/wrong-password') {
           setPasswordError('Password salah');
@@ -64,9 +64,9 @@ function Page() {
             description: 'Password salah'
           });
         } else if (firebaseError.code === 'auth/invalid-email') {
-          setUsernameError('Format email tidak valid');
+          setUsernameError('Format username tidak valid');
           toast.error('Login gagal', {
-            description: 'Format email tidak valid'
+            description: 'Format username tidak valid'
           });
         } else if (firebaseError.code === 'auth/user-disabled') {
           setError('Akun ini telah dinonaktifkan');
@@ -79,9 +79,9 @@ function Page() {
             description: 'Terlalu banyak percobaan gagal. Silakan coba lagi nanti.'
           });
         } else if (firebaseError.code === 'auth/invalid-credential') {
-          setError('Email/Username atau password salah. Silakan periksa kembali.');
+          setError('Username atau password salah. Silakan periksa kembali.');
           toast.error('Login gagal', {
-            description: 'Email/Username atau password salah'
+            description: 'Username atau password salah'
           });
         } else if (firebaseError.code === 'auth/access-denied') {
           setError('Akses ditolak. Hanya admin yang dapat login.');
@@ -157,7 +157,7 @@ function Page() {
 
             <div>
               <label htmlFor="username" className="mb-2 block text-sm font-medium text-gray-500">
-                Email / Username
+                Username
               </label>
               <Input
                 onChange={(e) => {
@@ -167,7 +167,7 @@ function Page() {
                 type="text"
                 name="username"
                 id="username"
-                placeholder="admin@example.com or admin"
+                placeholder="Enter your username"
                 className={`h-12 text-gray-700 placeholder:text-gray-400 focus:ring-0 shadow-none ${usernameError ? "focus:border-red-300" : "focus:border-emerald-300"}`}
                 style={{ borderColor: usernameError ? '#fca5a5' : '#e6e7ea', borderWidth: '1.6px' }}
                 value={username}

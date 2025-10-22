@@ -194,6 +194,32 @@ export function MessageComposer({
   const handleDocumentSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Allowed document file extensions
+      const allowedExtensions = [
+        // Documents
+        '.doc', '.docx', '.pdf', '.rtf', '.odt',
+        // Spreadsheets
+        '.xls', '.xlsx', '.csv', '.ods',
+        // Presentations
+        '.ppt', '.pptx', '.odp'
+      ];
+
+      // Get file extension
+      const fileName = file.name.toLowerCase();
+      const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
+
+      // Validate file type
+      if (!allowedExtensions.includes(fileExtension)) {
+        toast.error(
+          'Format file tidak didukung. Hanya dokumen (PDF, Word, Text), spreadsheet (Excel, CSV), dan presentasi (PowerPoint) yang diperbolehkan.',
+          { duration: 5000 }
+        );
+        if (documentInputRef.current) {
+          documentInputRef.current.value = '';
+        }
+        return;
+      }
+
       // Validate file size
       const maxSizeInBytes = usageControls.maxFileSizeUploadedInMB * 1024 * 1024;
       if (file.size > maxSizeInBytes) {
@@ -276,7 +302,7 @@ export function MessageComposer({
           <input
             ref={documentInputRef}
             type="file"
-            accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx"
+            accept=".doc,.docx,.pdf,.rtf,.odt,.xls,.xlsx,.csv,.ods,.ppt,.pptx,.odp"
             onChange={handleDocumentSelect}
             className="hidden"
           />

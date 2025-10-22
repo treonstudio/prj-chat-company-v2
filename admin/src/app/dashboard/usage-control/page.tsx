@@ -224,12 +224,17 @@ export default function UsageControlPage() {
                   <label className="text-base font-medium text-gray-900">
                     Max File Size
                   </label>
-                  <Input
-                    type="number"
-                    value={maxFileSize}
-                    onChange={(e) => setMaxFileSize(e.target.value)}
-                    className="h-12 border-gray-200 bg-gray-50"
-                  />
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      value={maxFileSize}
+                      onChange={(e) => setMaxFileSize(e.target.value)}
+                      className="h-12 border-gray-200 bg-gray-50 pr-14"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-500">
+                      MB
+                    </span>
+                  </div>
                 </div>
               </div>
             </CardContent>

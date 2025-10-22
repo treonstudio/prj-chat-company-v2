@@ -15,12 +15,20 @@ export default function Page() {
   const router = useRouter();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [selectedChatIsGroup, setSelectedChatIsGroup] = useState(false);
+  const [avatarCacheKey, setAvatarCacheKey] = useState(Date.now());
 
   useEffect(() => {
     if (!loading && (!currentUser || !userData)) {
       router.push('/login');
     }
   }, [currentUser, userData, loading, router]);
+
+  // Update cache key when avatar URL changes to force image reload
+  useEffect(() => {
+    if (userData?.imageURL || userData?.imageUrl) {
+      setAvatarCacheKey(Date.now());
+    }
+  }, [userData?.imageURL, userData?.imageUrl]);
 
   if (loading) {
     return (
@@ -82,6 +90,11 @@ export default function Page() {
     return null;
   }
 
+  // Add cache busting to avatar URL for real-time updates
+  const currentUserAvatar = userData.imageURL || userData.imageUrl
+    ? `${userData.imageURL || userData.imageUrl}?t=${avatarCacheKey}`
+    : undefined
+
   return (
     <main className="theme-mint h-dvh overflow-hidden">
       <div className="flex h-dvh w-full flex-col overflow-hidden md:flex-row min-h-0">
@@ -103,7 +116,7 @@ export default function Page() {
               chatId={selectedChatId}
               currentUserId={currentUser.uid}
               currentUserName={userData.displayName}
-              currentUserAvatar={userData.imageURL || userData.imageUrl}
+              currentUserAvatar={currentUserAvatar}
               isGroupChat={selectedChatIsGroup}
               onLeaveGroup={() => {
                 // Reset to no chat selected after leaving

@@ -85,6 +85,7 @@ export default function DashboardPage() {
   const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null)
   const [pageSize] = useState(10)
   const [totalPages, setTotalPages] = useState(0)
+  const [pageHistory, setPageHistory] = useState<Map<number, DocumentSnapshot | null>>(new Map([[0, null]])) // Track lastDoc for each page (0-indexed)
 
   // Calls state
   const [totalCalls, setTotalCalls] = useState(0)
@@ -183,6 +184,8 @@ export default function DashboardPage() {
       if (!error && result) {
         setUsers(result as User[])
         setLastDoc(lastVisible || null)
+        setPageHistory(new Map([[0, null]])) // Reset page history
+        setCurrentPage(1)
       } else {
         console.error("Error fetching users:", error)
         toast.error("Gagal memuat data users")
@@ -198,65 +201,265 @@ export default function DashboardPage() {
 
   // Load next page
   const loadNextPage = async () => {
-    if (!lastDoc) return
+    if (!lastDoc || usersLoading || currentPage >= totalPages) return
 
     setUsersLoading(true)
-    // Exclude current user from list
-    const { result, error, lastVisible } = await getUsers(pageSize, lastDoc, user?.uid)
+    const nextPage = currentPage + 1
 
-    if (!error && result) {
+    console.log(`[Next] Current page: ${currentPage}, going to: ${nextPage}`)
+    console.log(`[Next] Using cursor from page ${currentPage}:`, lastDoc?.id)
+
+    try {
+      // Exclude current user from list
+      const { result, error, lastVisible } = await getUsers(pageSize, lastDoc, user?.uid)
+
+      if (error || !result) {
+        console.error("Error fetching users:", error)
+        toast.error("Gagal memuat data users")
+        setUsersLoading(false)
+        return
+      }
+
+      // Store cursor for NEXT page (current position becomes the cursor for going back)
+      setPageHistory(prev => {
+        const newMap = new Map(prev)
+        newMap.set(currentPage, lastDoc) // Store cursor at current page index
+        console.log(`[Next] Stored cursor at index ${currentPage}:`, lastDoc?.id)
+        console.log(`[Next] Page history size:`, newMap.size)
+        return newMap
+      })
+
+      // Update UI
       setUsers(result as User[])
+      setCurrentPage(nextPage)
       setLastDoc(lastVisible || null)
-      setCurrentPage((prev) => prev + 1)
-    } else {
-      console.error("Error fetching users:", error)
-      toast.error("Gagal memuat data users")
-    }
 
-    setUsersLoading(false)
+      console.log(`[Next] Now on page ${nextPage}, loaded ${result.length} users`)
+      console.log(`[Next] New lastDoc:`, lastVisible?.id)
+    } catch (error) {
+      console.error("Error in loadNextPage:", error)
+      toast.error("Terjadi kesalahan")
+    } finally {
+      setUsersLoading(false)
+    }
   }
 
   // Load previous page
   const loadPreviousPage = async () => {
-    if (currentPage === 1) return
+    if (currentPage === 1 || usersLoading) return
 
     setUsersLoading(true)
-    // Reset to first page for now (simplified pagination)
-    // Exclude current user from list
-    const { result, error, lastVisible } = await getUsers(pageSize, undefined, user?.uid)
+    const prevPage = currentPage - 1
+    const startAfterDoc = pageHistory.get(prevPage - 1) // Get cursor for previous page (0-indexed)
 
-    if (!error && result) {
+    console.log(`[Prev] Current page: ${currentPage}, going to: ${prevPage}`)
+    console.log(`[Prev] Using cursor from index ${prevPage - 1}:`, startAfterDoc?.id)
+    console.log(`[Prev] Page history:`, Array.from(pageHistory.keys()))
+
+    try {
+      // Exclude current user from list
+      const { result, error, lastVisible } = await getUsers(pageSize, startAfterDoc || undefined, user?.uid)
+
+      if (error || !result) {
+        console.error("Error fetching users:", error)
+        toast.error("Gagal memuat data users")
+        setUsersLoading(false)
+        return
+      }
+
       setUsers(result as User[])
       setLastDoc(lastVisible || null)
-      setCurrentPage(1)
-    } else {
-      console.error("Error fetching users:", error)
-      toast.error("Gagal memuat data users")
-    }
+      setCurrentPage(prevPage)
 
-    setUsersLoading(false)
+      console.log(`[Prev] Now on page ${prevPage}, loaded ${result.length} users`)
+      console.log(`[Prev] New lastDoc:`, lastVisible?.id)
+    } catch (error) {
+      console.error("Error in loadPreviousPage:", error)
+      toast.error("Terjadi kesalahan")
+    } finally {
+      setUsersLoading(false)
+    }
+  }
+
+  // Load specific page
+  const goToPage = async (pageNum: number) => {
+    if (pageNum === currentPage || pageNum < 1 || pageNum > totalPages || usersLoading) return
+
+    setUsersLoading(true)
+    setUsers([]) // Clear current users to show loading state
+
+    console.log(`[GoTo] Going from page ${currentPage} to ${pageNum}`)
+    console.log(`[GoTo] Current lastDoc:`, lastDoc?.id)
+    console.log(`[GoTo] Page history:`, Array.from(pageHistory.keys()))
+
+    try {
+      // First, save current page cursor if not already saved
+      const workingHistory = new Map(pageHistory)
+      if (currentPage > 1 && lastDoc && !workingHistory.has(currentPage)) {
+        workingHistory.set(currentPage, lastDoc)
+        console.log(`[GoTo] Saved current page ${currentPage} cursor:`, lastDoc?.id)
+      }
+
+      const hasCursor = workingHistory.has(pageNum - 1)
+      console.log(`[GoTo] Has cursor for page ${pageNum}:`, hasCursor)
+
+      // If we have the cursor, jump directly
+      if (hasCursor) {
+        const startAfterDoc = workingHistory.get(pageNum - 1)
+        console.log(`[GoTo] Using cached cursor for page ${pageNum}:`, startAfterDoc?.id)
+
+        const { result, error, lastVisible } = await getUsers(pageSize, startAfterDoc || undefined, user?.uid)
+
+        if (error || !result) {
+          console.error("Error fetching users:", error)
+          toast.error("Gagal memuat data users")
+          setUsersLoading(false)
+          return
+        }
+
+        setUsers(result as User[])
+        setLastDoc(lastVisible || null)
+        setCurrentPage(pageNum)
+        setPageHistory(workingHistory)
+        console.log(`[GoTo] Loaded page ${pageNum} from cache, ${result.length} users`)
+      } else {
+        // Need to load sequentially
+        toast.loading(`Loading page ${pageNum}...`, { id: 'page-loading' })
+
+        // Find the closest page we can start from
+        let startPage = currentPage
+        let startCursor = lastDoc
+
+        // If target page is before current page, start from beginning or closest saved page
+        if (pageNum < currentPage) {
+          startPage = 1
+          startCursor = null
+          for (let i = pageNum - 2; i >= 0; i--) {
+            if (workingHistory.has(i)) {
+              startPage = i + 2
+              startCursor = workingHistory.get(i)
+              break
+            }
+          }
+        }
+        // If target page is after current page, start from current page
+        else {
+          startPage = currentPage + 1
+        }
+
+        console.log(`[GoTo] Loading sequentially from page ${startPage} to ${pageNum}`)
+        console.log(`[GoTo] Start cursor:`, startCursor?.id)
+
+        let currentLoadPage = startPage
+        let currentCursor = startCursor
+        let targetPageData = null
+        let targetPageLastDoc = null
+
+        while (currentLoadPage <= pageNum) {
+          console.log(`[GoTo] Loading page ${currentLoadPage} with cursor:`, currentCursor?.id)
+
+          const { result, error, lastVisible } = await getUsers(pageSize, currentCursor || undefined, user?.uid)
+
+          if (error || !result) {
+            console.error("Error fetching users:", error)
+            toast.error("Gagal memuat data users")
+            toast.dismiss('page-loading')
+            setUsersLoading(false)
+            return
+          }
+
+          console.log(`[GoTo] Page ${currentLoadPage} loaded ${result.length} users, new cursor:`, lastVisible?.id)
+
+          // Save cursor for next page
+          if (lastVisible && currentLoadPage < pageNum) {
+            workingHistory.set(currentLoadPage, lastVisible)
+            console.log(`[GoTo] Saved cursor at index ${currentLoadPage} for page ${currentLoadPage + 1}`)
+          }
+
+          // If this is the target page, save it
+          if (currentLoadPage === pageNum) {
+            targetPageData = result
+            targetPageLastDoc = lastVisible || null
+          }
+
+          currentCursor = lastVisible || null
+          currentLoadPage++
+        }
+
+        // Update all state
+        if (targetPageData) {
+          setUsers(targetPageData as User[])
+          setLastDoc(targetPageLastDoc)
+          setCurrentPage(pageNum)
+          setPageHistory(workingHistory)
+          console.log(`[GoTo] Now on page ${pageNum}, history size: ${workingHistory.size}`)
+          console.log(`[GoTo] History keys:`, Array.from(workingHistory.keys()))
+        }
+
+        toast.dismiss('page-loading')
+      }
+    } catch (error) {
+      console.error("Error in goToPage:", error)
+      toast.error("Terjadi kesalahan")
+      toast.dismiss('page-loading')
+    } finally {
+      setUsersLoading(false)
+    }
   }
 
   // Reload users after adding new user
   const reloadUsers = async () => {
-    setUsersLoading(true)
-    // Invalidate cache first
-    invalidateUsersCache()
-    // Exclude current user from list
-    const { result, error, lastVisible } = await getUsers(pageSize, undefined, user?.uid)
+    try {
+      setUsersLoading(true)
 
-    if (!error && result) {
-      setUsers(result as User[])
-      setLastDoc(lastVisible || null)
+      // Reset ALL pagination state first
+      setUsers([])
       setCurrentPage(1)
+      setLastDoc(null)
+      setPageHistory(new Map([[0, null]]))
+      setTotalUsers(0)
+      setTotalPages(0)
 
-      // Update count (exclude current user)
+      // Invalidate cache
+      invalidateUsersCache()
+
+      // Wait a bit to ensure Firebase has updated
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Get fresh count first
       const { count } = await getUsersCount(user?.uid)
-      setTotalUsers(count)
-      setTotalPages(Math.ceil(count / pageSize))
-    }
+      const newTotalPages = Math.ceil(count / pageSize)
 
-    setUsersLoading(false)
+      console.log('Reload users - Total:', count, 'Pages:', newTotalPages, 'PageSize:', pageSize)
+
+      // Get users for page 1
+      const { result, error, lastVisible } = await getUsers(pageSize, undefined, user?.uid)
+
+      if (error) {
+        console.error("Error reloading users:", error)
+        toast.error("Gagal memuat ulang data users")
+        return
+      }
+
+      if (result) {
+        console.log('Loaded users count:', result.length)
+
+        // Update all state
+        setUsers(result as User[])
+        setLastDoc(lastVisible || null)
+        setTotalUsers(count)
+        setTotalPages(newTotalPages)
+
+        // Ensure we're on page 1
+        setCurrentPage(1)
+        setPageHistory(new Map([[0, null]]))
+      }
+    } catch (error) {
+      console.error("Error in reloadUsers:", error)
+      toast.error("Terjadi kesalahan saat memuat data")
+    } finally {
+      setUsersLoading(false)
+    }
   }
 
   const handleStatusToggle = async (userId: string, currentStatus: boolean) => {
@@ -291,17 +494,10 @@ export default function DashboardPage() {
         console.error("Error deleting user:", error)
         toast.error("Gagal menghapus user")
       } else {
-        // Invalidate cache
-        invalidateUsersCache()
-
-        // Update local state - remove deleted user
-        setUsers((prevUsers) => prevUsers.filter((u) => u.id !== userId))
-
-        // Update count
-        setTotalUsers((prev) => prev - 1)
-        setTotalPages(Math.ceil((totalUsers - 1) / pageSize))
-
         toast.success("User berhasil dihapus")
+
+        // Reload all users to ensure pagination is correct
+        await reloadUsers()
       }
     } catch (err) {
       console.error("Error deleting user:", err)
@@ -364,14 +560,19 @@ export default function DashboardPage() {
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      if (!file.type.startsWith('image/')) {
-        toast.error('Please select an image file')
+      // Validate file type - only allow common image formats
+      const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
+      if (!allowedTypes.includes(file.type)) {
+        toast.error('Format file tidak didukung. Gunakan PNG, JPG, atau WEBP')
+        e.target.value = ''
         return
       }
 
-      // Max 5MB
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image size should be less than 5MB')
+      // Validate file size (max 5MB)
+      const maxSize = 5 * 1024 * 1024 // 5MB
+      if (file.size > maxSize) {
+        toast.error('Ukuran file terlalu besar. Maksimal 5MB')
+        e.target.value = ''
         return
       }
 
@@ -380,7 +581,7 @@ export default function DashboardPage() {
         setSelectedImage(reader.result as string)
         setShowCropper(true)
         setCrop({ x: 0, y: 0 })
-        setZoom(1)
+        setZoom(1) // Reset zoom to default
       }
       reader.readAsDataURL(file)
     }
@@ -544,12 +745,13 @@ export default function DashboardPage() {
         setDisplayName("")
         setPhotoFile(null)
         setPhotoPreview(null)
+        setCroppedImage(null)
 
-        // Reload users list
-        reloadUsers()
-
-        // Close sheet
+        // Close sheet first for better UX
         setAddUserSheetOpen(false)
+
+        // Reload users list after closing sheet
+        await reloadUsers()
 
         // Auto-clear success message after 3 seconds
         setTimeout(() => {
@@ -647,7 +849,7 @@ export default function DashboardPage() {
                         <input
                           type="file"
                           id="photo-upload"
-                          accept="image/*"
+                          accept="image/png,image/jpeg,image/jpg,image/webp"
                           onChange={handlePhotoChange}
                           className="hidden"
                           disabled={isLoading}
@@ -772,16 +974,8 @@ export default function DashboardPage() {
               <DialogContent className="max-w-2xl p-0">
                 <div className="flex flex-col h-[600px]">
                   {/* Header */}
-                  <div className="px-4 py-3 border-b flex items-center justify-between bg-emerald-500">
+                  <div className="px-4 py-3 border-b bg-emerald-500">
                     <h3 className="text-lg font-semibold text-white">Crop Image</h3>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setShowCropper(false)}
-                      className="text-white hover:bg-white/20"
-                    >
-                      <XIcon className="h-5 w-5" />
-                    </Button>
                   </div>
 
                   {/* Cropper */}
@@ -794,6 +988,9 @@ export default function DashboardPage() {
                         aspect={1}
                         cropShape="round"
                         showGrid={false}
+                        minZoom={1}
+                        maxZoom={3}
+                        restrictPosition={false}
                         onCropChange={setCrop}
                         onZoomChange={setZoom}
                         onCropComplete={onCropComplete}
@@ -886,11 +1083,12 @@ export default function DashboardPage() {
 
               {usersLoading ? (
                 <div className="space-y-4">
-                  <div className="h-12 bg-gray-200 rounded animate-pulse"></div>
-                  <div className="h-12 bg-gray-100 rounded animate-pulse"></div>
-                  <div className="h-12 bg-gray-200 rounded animate-pulse"></div>
-                  <div className="h-12 bg-gray-100 rounded animate-pulse"></div>
-                  <div className="h-12 bg-gray-200 rounded animate-pulse"></div>
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-center">
+                      <div className="h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent mx-auto mb-4"></div>
+                      <p className="text-sm text-gray-600">Loading users...</p>
+                    </div>
+                  </div>
                 </div>
               ) : users.length === 0 ? (
                 <div className="py-8 text-center text-gray-500">
@@ -1093,22 +1291,106 @@ export default function DashboardPage() {
                     <div className="text-sm text-gray-600">
                       Page {currentPage} of {totalPages || 1}
                     </div>
-                    <div className="flex gap-2 w-full sm:w-auto">
+                    <div className="flex items-center gap-1">
+                      {/* Previous Button */}
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={loadPreviousPage}
                         disabled={currentPage === 1 || usersLoading}
-                        className="disabled:opacity-50 flex-1 sm:flex-none"
+                        className="disabled:opacity-50 h-9 px-3"
                       >
                         Previous
                       </Button>
+
+                      {/* Page Numbers */}
+                      {(() => {
+                        const pages = []
+                        const maxVisible = 5 // Show max 5 page numbers
+                        let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2))
+                        let endPage = Math.min(totalPages, startPage + maxVisible - 1)
+
+                        // Adjust start if we're near the end
+                        if (endPage - startPage < maxVisible - 1) {
+                          startPage = Math.max(1, endPage - maxVisible + 1)
+                        }
+
+                        // First page + ellipsis
+                        if (startPage > 1) {
+                          pages.push(
+                            <Button
+                              key={1}
+                              variant="outline"
+                              size="sm"
+                              onClick={() => goToPage(1)}
+                              disabled={usersLoading}
+                              className="h-9 w-9 p-0"
+                            >
+                              1
+                            </Button>
+                          )
+                          if (startPage > 2) {
+                            pages.push(
+                              <span key="ellipsis-start" className="px-2 text-gray-400">
+                                ...
+                              </span>
+                            )
+                          }
+                        }
+
+                        // Page numbers
+                        for (let i = startPage; i <= endPage; i++) {
+                          pages.push(
+                            <Button
+                              key={i}
+                              variant={i === currentPage ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => goToPage(i)}
+                              disabled={usersLoading}
+                              className={`h-9 w-9 p-0 ${
+                                i === currentPage
+                                  ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                                  : ""
+                              }`}
+                            >
+                              {i}
+                            </Button>
+                          )
+                        }
+
+                        // Ellipsis + last page
+                        if (endPage < totalPages) {
+                          if (endPage < totalPages - 1) {
+                            pages.push(
+                              <span key="ellipsis-end" className="px-2 text-gray-400">
+                                ...
+                              </span>
+                            )
+                          }
+                          pages.push(
+                            <Button
+                              key={totalPages}
+                              variant="outline"
+                              size="sm"
+                              onClick={() => goToPage(totalPages)}
+                              disabled={usersLoading}
+                              className="h-9 w-9 p-0"
+                            >
+                              {totalPages}
+                            </Button>
+                          )
+                        }
+
+                        return pages
+                      })()}
+
+                      {/* Next Button */}
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={loadNextPage}
                         disabled={!lastDoc || currentPage >= totalPages || usersLoading}
-                        className="disabled:opacity-50 flex-1 sm:flex-none"
+                        className="disabled:opacity-50 h-9 px-3"
                       >
                         Next
                       </Button>
