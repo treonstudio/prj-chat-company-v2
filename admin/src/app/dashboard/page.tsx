@@ -337,7 +337,7 @@ export default function DashboardPage() {
           for (let i = pageNum - 2; i >= 0; i--) {
             if (workingHistory.has(i)) {
               startPage = i + 2
-              startCursor = workingHistory.get(i)
+              startCursor = workingHistory.get(i) ?? null
               break
             }
           }
