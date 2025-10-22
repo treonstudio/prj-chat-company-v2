@@ -111,16 +111,72 @@ export function ChatRoom({
   // Reply mode
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
 
+  // User cache for looking up sender names
+  const [userCache, setUserCache] = useState<Map<string, string>>(new Map())
+
   // Monitor other user's status (for direct chat only)
   const { status: otherUserStatus, lastSeenText } = useUserStatus(
     !isGroupChat ? otherUserId : null
   )
 
-  // Reset selection when chatId changes
+  // Reset selection and clear cache when chatId changes
   useEffect(() => {
     setSelectionMode(false)
     setSelectedMessageIds(new Set())
+    setUserCache(new Map()) // Clear user cache for new chat
   }, [chatId])
+
+  // Lookup missing sender names from users collection
+  useEffect(() => {
+    const fetchMissingUsers = async () => {
+      // Find all unique sender IDs that need lookup (missing or empty senderName)
+      const senderIdsToFetch = new Set<string>()
+
+      messages.forEach(m => {
+        // Skip system messages
+        if (m.senderId === 'system') return
+
+        // Check if senderName is missing or empty and not already in cache
+        if ((!m.senderName || m.senderName.trim() === '') && !userCache.has(m.senderId)) {
+          senderIdsToFetch.add(m.senderId)
+        }
+      })
+
+      // Fetch user data for missing senders
+      if (senderIdsToFetch.size > 0) {
+        const newCache = new Map(userCache)
+
+        // Fetch all users in parallel
+        const fetchPromises = Array.from(senderIdsToFetch).map(async (userId) => {
+          try {
+            const result = await userRepository.getUserById(userId)
+            if (result.status === 'success' && result.data.displayName) {
+              return { userId, name: result.data.displayName }
+            } else {
+              return { userId, name: 'Deleted User' }
+            }
+          } catch (error) {
+            console.error(`Error fetching user ${userId}:`, error)
+            return { userId, name: 'Deleted User' }
+          }
+        })
+
+        // Wait for all fetches to complete
+        const results = await Promise.all(fetchPromises)
+
+        // Update cache with all results at once
+        results.forEach(({ userId, name }) => {
+          newCache.set(userId, name)
+        })
+
+        setUserCache(newCache)
+      }
+    }
+
+    if (messages.length > 0) {
+      fetchMissingUsers()
+    }
+  }, [messages])
 
   // Handle ESC key to cancel selection
   useEffect(() => {
@@ -185,7 +241,7 @@ export function ChatRoom({
                 console.log('[ChatRoom] Member has no displayName:', r.data.userId)
                 return {
                   ...r.data,
-                  displayName: 'Deleted User',
+                  displayName: 'Deleted User dong',
                   email: r.data.email || 'deleted@user.com'
                 }
               }
@@ -195,7 +251,7 @@ export function ChatRoom({
               console.log('[ChatRoom] Member not found:', groupResult.data.participants[index])
               return {
                 userId: groupResult.data.participants[index],
-                displayName: 'Deleted User',
+                displayName: 'Deleted User asep',
                 email: 'deleted@user.com',
                 status: UserStatus.OFFLINE,
                 isActive: false
@@ -847,10 +903,19 @@ export function ChatRoom({
                   // Map message type to ChatMessage type format
                   const messageType = m.type === 'DOCUMENT' ? 'doc' : m.type.toLowerCase()
 
-                  // Handle deleted user - fallback senderName
+                  // Handle missing senderName - lookup from users collection or use cached value
+                  // If senderName is not available and not in cache yet, skip rendering until cache is ready
+                  if (!m.senderName || m.senderName.trim() === '') {
+                    const cachedName = userCache.get(m.senderId)
+                    if (!cachedName) {
+                      // Still fetching, don't render this message yet to avoid flicker
+                      return null
+                    }
+                  }
+
                   const senderName = m.senderName && m.senderName.trim() !== ''
                     ? m.senderName
-                    : 'Deleted User'
+                    : userCache.get(m.senderId) || 'Deleted User'
 
                   return (
                     <div key={m.messageId} data-message-id={m.messageId}>

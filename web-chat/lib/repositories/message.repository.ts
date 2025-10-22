@@ -199,6 +199,22 @@ export class MessageRepository {
 
       const timestamp = Timestamp.now();
 
+      // Ensure senderName is populated - lookup from users collection if empty
+      let finalSenderName = message.senderName;
+      if (!finalSenderName || finalSenderName.trim() === '') {
+        try {
+          const userDoc = await getDoc(doc(db(), 'users', message.senderId));
+          if (userDoc.exists()) {
+            finalSenderName = userDoc.get('displayName') || 'Unknown User';
+          } else {
+            finalSenderName = 'Unknown User';
+          }
+        } catch (error) {
+          console.error('Error fetching sender name:', error);
+          finalSenderName = 'Unknown User';
+        }
+      }
+
       // 1. Add message to messages subcollection
       const messagesRef = collection(
         db(),
@@ -210,6 +226,7 @@ export class MessageRepository {
       // Remove undefined fields to avoid Firestore errors
       const messageWithTimestamp: any = {
         ...message,
+        senderName: finalSenderName, // Use the populated senderName
         timestamp,
         createdAt: timestamp,
       };
@@ -228,7 +245,7 @@ export class MessageRepository {
       await updateDoc(chatRef, {
         'lastMessage.text': message.text,
         'lastMessage.senderId': message.senderId,
-        'lastMessage.senderName': message.senderName,
+        'lastMessage.senderName': finalSenderName, // Use the populated senderName
         'lastMessage.timestamp': timestamp,
         'lastMessage.type': message.type,
         updatedAt: timestamp,
