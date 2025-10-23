@@ -54,11 +54,32 @@ export function ReplyPreviewBar({ replyingTo, onCancel }: ReplyPreviewBarProps) 
 
       {/* Thumbnail for media messages */}
       {replyingTo.mediaUrl && replyingTo.type !== MessageType.DOCUMENT && (
-        <img
-          src={replyingTo.mediaUrl}
-          alt="Preview"
-          className="w-12 h-12 rounded object-cover shrink-0"
-        />
+        <>
+          {replyingTo.type === MessageType.VIDEO ? (
+            // For video, show thumbnail or first frame
+            replyingTo.mediaMetadata?.thumbnailUrl ? (
+              <img
+                src={replyingTo.mediaMetadata.thumbnailUrl}
+                alt="Video preview"
+                className="w-12 h-12 rounded object-cover shrink-0"
+              />
+            ) : (
+              <video
+                src={replyingTo.mediaUrl}
+                className="w-12 h-12 rounded object-cover shrink-0"
+                preload="metadata"
+                muted
+              />
+            )
+          ) : (
+            // For images
+            <img
+              src={replyingTo.mediaUrl}
+              alt="Preview"
+              className="w-12 h-12 rounded object-cover shrink-0"
+            />
+          )}
+        </>
       )}
 
       {/* Cancel button */}

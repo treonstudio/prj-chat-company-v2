@@ -376,7 +376,10 @@ export function ChatMessage({
               onClick={() => onReplyClick?.(data.replyTo!.messageId)}
               className={cn(
                 "flex items-start gap-2 p-2 rounded-lg mb-2 cursor-pointer",
-                "bg-deeper-gray transition-colors border-l-[3px] border-primary max-w-[620px] w-full"
+                "transition-colors border-l-[3px] max-w-[620px] w-full",
+                isMe
+                  ? "bg-white/40 border-white/60"
+                  : "bg-deeper-gray border-primary"
               )}
             >
               {/* Vertical indicator bar */}
@@ -390,7 +393,12 @@ export function ChatMessage({
 
                     // User is deleted only if senderName is "Deleted User" AND no cached name
                     const isReplyUserDeleted = replyToName === "Deleted User" && !cachedName
-                    return isReplyUserDeleted ? "text-red-500" : "text-primary"
+
+                    if (isReplyUserDeleted) {
+                      return "text-red-500"
+                    }
+                    // Better contrast for isMe bubble (green background)
+                    return isMe ? "text-white/90" : "text-primary"
                   })()
                 )}>
                   {(() => {
@@ -406,7 +414,10 @@ export function ChatMessage({
                     return replyToName
                   })()}
                 </div>
-                <div className="text-xs opacity-70 italic truncate flex items-center gap-1">
+                <div className={cn(
+                  "text-xs italic truncate flex items-center gap-1",
+                  isMe ? "opacity-80 text-white/80" : "opacity-70"
+                )}>
                   {data.replyTo.type === 'IMAGE' && <ImageIcon className="h-3 w-3" />}
                   {data.replyTo.type === 'VIDEO' && <Video className="h-3 w-3" />}
                   {data.replyTo.type === 'DOCUMENT' && <FileText className="h-3 w-3" />}
@@ -415,11 +426,24 @@ export function ChatMessage({
               </div>
               {/* Media thumbnail */}
               {data.replyTo.mediaUrl && data.replyTo.type !== 'DOCUMENT' && (
-                <img
-                  src={data.replyTo.mediaUrl}
-                  alt="Reply preview"
-                  className="w-12 h-12 rounded object-cover shrink-0"
-                />
+                <>
+                  {data.replyTo.type === 'VIDEO' ? (
+                    // For video, show thumbnail or first frame
+                    <video
+                      src={data.replyTo.mediaUrl}
+                      className="w-12 h-12 rounded object-cover shrink-0"
+                      preload="metadata"
+                      muted
+                    />
+                  ) : (
+                    // For images
+                    <img
+                      src={data.replyTo.mediaUrl}
+                      alt="Reply preview"
+                      className="w-12 h-12 rounded object-cover shrink-0"
+                    />
+                  )}
+                </>
               )}
             </div>
           )}

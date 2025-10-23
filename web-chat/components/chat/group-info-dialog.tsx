@@ -468,7 +468,7 @@ export function GroupInfoDialog({
                       setShowImageViewer(true)
                     }
                   }}
-                  className="absolute inset-0 w-full h-full"
+                  className="absolute inset-0 w-full h-full flex items-center justify-center"
                   disabled={!groupAvatar}
                 >
                   {groupAvatar ? (

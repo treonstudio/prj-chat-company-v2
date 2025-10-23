@@ -85,6 +85,13 @@ export function MessageComposer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]); // Only run when chatId changes
 
+  // Auto-focus input when replying
+  useEffect(() => {
+    if (isReplying && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [isReplying]);
+
   const handleMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
 

@@ -288,9 +288,9 @@ export function Sidebar({
                     <div className="flex items-start gap-3">
                       <Avatar className="h-10 w-10 shrink-0">
                         <AvatarImage src={avatar || "/placeholder-user.jpg"} alt="" />
-                        <AvatarFallback aria-hidden className={isGroup ? "bg-muted border border-border" : ""}>
+                        <AvatarFallback aria-hidden className={isGroup ? "bg-muted border border-border flex items-center justify-center" : ""}>
                           {isGroup ? (
-                            <Users className="h-5 w-5 text-muted-foreground fill-muted-foreground" />
+                            <Users className="h-5 w-5 text-muted-foreground" />
                           ) : (
                             name?.slice(0, 2).toUpperCase()
                           )}

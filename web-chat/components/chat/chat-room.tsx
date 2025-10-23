@@ -204,6 +204,7 @@ export function ChatRoom({
   // Load room title and group members
   useEffect(() => {
     let unsubscribeDirectUser: (() => void) | null = null
+    let unsubscribeGroupMembers: (() => void)[] = []
 
     async function loadRoomInfo() {
       console.log('[ChatRoom] Loading room info:', { chatId, isGroupChat })
@@ -235,7 +236,7 @@ export function ChatRoom({
             setLeftAt(null)
           }
 
-          // Fetch all group members
+          // Fetch all group members initially
           const memberPromises = groupResult.data.participants.map(userId =>
             userRepository.getUserById(userId)
           )
@@ -268,6 +269,55 @@ export function ChatRoom({
           })
           console.log('[ChatRoom] All members loaded:', members)
           setGroupMembers(members)
+
+          // Setup real-time listeners for each group member
+          console.log('[ChatRoom] Setting up real-time listeners for group members')
+          groupResult.data.participants.forEach((userId) => {
+            const unsubscribe = userRepository.listenToUser(
+              userId,
+              (userData: User) => {
+                console.log('[ChatRoom] Group member data updated:', {
+                  userId: userData.userId,
+                  displayName: userData.displayName
+                })
+                // Update this specific member in the groupMembers array
+                setGroupMembers(prevMembers => {
+                  const updatedMembers = prevMembers.map(member => {
+                    if (member.userId === userId) {
+                      // Handle deleted user or missing displayName
+                      const displayName = userData.displayName && userData.displayName.trim() !== ''
+                        ? userData.displayName
+                        : 'Deleted User'
+                      return {
+                        ...userData,
+                        displayName,
+                        email: userData.email || 'deleted@user.com'
+                      }
+                    }
+                    return member
+                  })
+                  return updatedMembers
+                })
+              },
+              (error: string) => {
+                console.error('[ChatRoom] Error listening to group member:', error)
+                // Mark user as deleted on error
+                setGroupMembers(prevMembers => {
+                  return prevMembers.map(member => {
+                    if (member.userId === userId) {
+                      return {
+                        ...member,
+                        displayName: 'Deleted User',
+                        email: 'deleted@user.com'
+                      }
+                    }
+                    return member
+                  })
+                })
+              }
+            )
+            unsubscribeGroupMembers.push(unsubscribe)
+          })
         }
         // Reset for group chats
         setIsDeletedUser(false)
@@ -318,6 +368,12 @@ export function ChatRoom({
       if (unsubscribeDirectUser) {
         unsubscribeDirectUser()
       }
+      // Cleanup all group member listeners
+      unsubscribeGroupMembers.forEach(unsubscribe => {
+        if (unsubscribe) {
+          unsubscribe()
+        }
+      })
     }
   }, [chatId, currentUserId, isGroupChat])
 
@@ -735,9 +791,9 @@ export function ChatRoom({
         >
           <Avatar className="h-10 w-10 shrink-0">
             <AvatarImage src={roomAvatar || "/placeholder-user.jpg"} alt="" />
-            <AvatarFallback className={isGroupChat ? "bg-muted border border-border" : ""}>
+            <AvatarFallback className={isGroupChat ? "bg-muted border border-border flex items-center justify-center" : ""}>
               {isGroupChat ? (
-                <Users className="h-5 w-5 text-muted-foreground fill-muted-foreground" />
+                <Users className="h-5 w-5 text-muted-foreground" />
               ) : (
                 roomTitle.slice(0, 2).toUpperCase()
               )}
