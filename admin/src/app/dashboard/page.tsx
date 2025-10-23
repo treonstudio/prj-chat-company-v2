@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Trash2, Eye, EyeOff, Users, Phone, Key, UserPlus, Upload, X as XIcon, ZoomIn, ZoomOut } from "lucide-react"
+import { Trash2, Eye, EyeOff, Users, Key, UserPlus, Upload, X as XIcon, ZoomIn, ZoomOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -40,7 +40,6 @@ import updateUser from "@/firebase/firestore/updateUser"
 import deleteUser from "@/firebase/firestore/deleteUser"
 import updateUserPassword from "@/firebase/firestore/updateUserPassword"
 import { DocumentSnapshot } from "firebase/firestore"
-import getCalls from "@/firebase/firestore/getCalls"
 import getUserData from "@/firebase/firestore/getUserData"
 
 interface User {
@@ -86,11 +85,6 @@ export default function DashboardPage() {
   const [pageSize] = useState(10)
   const [totalPages, setTotalPages] = useState(0)
   const [pageHistory, setPageHistory] = useState<Map<number, DocumentSnapshot | null>>(new Map([[0, null]])) // Track lastDoc for each page (0-indexed)
-
-  // Calls state
-  const [totalCalls, setTotalCalls] = useState(0)
-  const [totalCallDuration, setTotalCallDuration] = useState(0)
-  const [callsLoading, setCallsLoading] = useState(true)
 
   // Change password state
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
@@ -151,28 +145,6 @@ export default function DashboardPage() {
       fetchUsersCount()
     }
   }, [user, pageSize])
-
-  // Fetch calls data
-  useEffect(() => {
-    const fetchCalls = async () => {
-      setCallsLoading(true)
-      const { result, error } = await getCalls()
-
-      if (!error && result) {
-        setTotalCalls(result.totalCalls)
-        setTotalCallDuration(result.totalDuration)
-      } else {
-        console.error("Error fetching calls:", error)
-        toast.error("Gagal memuat data calls")
-      }
-
-      setCallsLoading(false)
-    }
-
-    if (user) {
-      fetchCalls()
-    }
-  }, [user])
 
   // Fetch users data
   useEffect(() => {
@@ -1035,42 +1007,6 @@ export default function DashboardPage() {
               </DialogContent>
             </Dialog>
           </div>
-
-          {/* Stats Cards */}
-          <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-2">
-            <Card className="border-0 shadow-sm">
-              <CardContent className="p-4 md:p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Total User</p>
-                    <p className="mt-2 text-3xl font-semibold text-emerald-400">{totalUsers}</p>
-                  </div>
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-emerald-300 bg-emerald-50">
-                    <Users className="h-8 w-8 text-emerald-400" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-0 shadow-sm">
-              <CardContent className="p-4 md:p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Total Calls</p>
-                    {callsLoading ? (
-                      <div className="mt-2 h-8 w-16 animate-pulse bg-gray-200 rounded"></div>
-                    ) : (
-                      <p className="mt-2 text-3xl font-semibold text-emerald-400">{totalCalls}</p>
-                    )}
-                  </div>
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-emerald-300 bg-emerald-50">
-                    <Phone className="h-8 w-8 text-emerald-400" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
           {/* Recent Join Table */}
           <Card className="border-0 shadow-sm">
             <CardContent className="p-4 md:p-6">
