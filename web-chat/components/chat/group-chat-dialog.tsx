@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { UserRepository } from "@/lib/repositories/user.repository"
 import { ChatRepository } from "@/lib/repositories/chat.repository"
+import { StorageRepository } from "@/lib/repositories/storage.repository"
 import { User } from "@/types/models"
 import { Search, Loader2, Check, Users, X, ArrowLeft, ArrowRight, ZoomIn, ZoomOut } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -19,9 +20,11 @@ import type { Area } from "react-easy-crop"
 import { DialogTitle } from "@/components/ui/dialog"
 import { SheetTitle } from "@/components/ui/sheet"
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
+import { useUsageControls } from "@/lib/contexts/usage-controls.context"
 
 const userRepository = new UserRepository()
 const chatRepository = new ChatRepository()
+const storageRepository = new StorageRepository()
 
 interface GroupChatDialogProps {
   open: boolean
@@ -48,10 +51,14 @@ export function GroupChatDialog({
   // Image cropper states
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [croppedImage, setCroppedImage] = useState<string | null>(null)
+  const [croppedImageFile, setCroppedImageFile] = useState<File | null>(null)
   const [showCropper, setShowCropper] = useState(false)
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
+
+  // Usage controls
+  const { usageControls } = useUsageControls()
 
   // Max character limits
   const MAX_GROUP_NAME_LENGTH = 100
@@ -71,6 +78,7 @@ export function GroupChatDialog({
       setError(null)
       setSelectedImage(null)
       setCroppedImage(null)
+      setCroppedImageFile(null)
       setShowCropper(false)
       setCrop({ x: 0, y: 0 })
       setZoom(1)
@@ -156,6 +164,13 @@ export function GroupChatDialog({
       return
     }
 
+    // Validate file size using dynamic limit from Firestore
+    const maxSizeInBytes = usageControls.maxFileSizeUploadedInMB * 1024 * 1024
+    if (file.size > maxSizeInBytes) {
+      toast.error(`Ukuran gambar tidak boleh lebih dari ${usageControls.maxFileSizeUploadedInMB}MB`)
+      return
+    }
+
     const reader = new FileReader()
     reader.onload = () => {
       setSelectedImage(reader.result as string)
@@ -205,8 +220,15 @@ export function GroupChatDialog({
 
       canvas.toBlob((blob) => {
         if (!blob) return
+
+        // Create URL for preview
         const url = URL.createObjectURL(blob)
         setCroppedImage(url)
+
+        // Create File for upload
+        const file = new File([blob], 'group-avatar.jpg', { type: 'image/jpeg' })
+        setCroppedImageFile(file)
+
         setShowCropper(false)
       }, 'image/jpeg', 0.95)
     } catch (error) {
@@ -253,26 +275,50 @@ export function GroupChatDialog({
     setCreating(true)
     setError(null)
 
-    const memberIds = selectedUsers.map((u) => u.userId)
+    try {
+      const memberIds = selectedUsers.map((u) => u.userId)
 
-    // Use "New Group" as default name if no name provided
-    const finalGroupName = groupName.trim() || "New Group"
+      // Use "New Group" as default name if no name provided
+      const finalGroupName = groupName.trim() || "New Group"
 
-    const result = await chatRepository.createGroupChat(
-      finalGroupName,
-      currentUserId,
-      memberIds
-    )
+      // Upload group avatar if exists
+      let avatarUrl: string | undefined = undefined
+      if (croppedImageFile) {
+        // Generate temporary chatId for storage path
+        const tempChatId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        const uploadResult = await storageRepository.uploadGroupAvatar(tempChatId, croppedImageFile)
 
-    setCreating(false)
+        if (uploadResult.status === 'success') {
+          avatarUrl = uploadResult.data
+        } else {
+          toast.error('Gagal mengupload foto grup')
+          setCreating(false)
+          return
+        }
+      }
 
-    if (result.status === 'success') {
-      toast.success('Grup berhasil dibuat')
-      onGroupCreated(result.data.chatId, true)
-      onOpenChange(false)
-    } else if (result.status === 'error') {
-      setError(result.message || "Gagal membuat grup")
-      toast.error(result.message || "Gagal membuat grup")
+      const result = await chatRepository.createGroupChat(
+        finalGroupName,
+        currentUserId,
+        memberIds,
+        avatarUrl
+      )
+
+      setCreating(false)
+
+      if (result.status === 'success') {
+        toast.success('Grup berhasil dibuat')
+        onGroupCreated(result.data.chatId, true)
+        onOpenChange(false)
+      } else if (result.status === 'error') {
+        setError(result.message || "Gagal membuat grup")
+        toast.error(result.message || "Gagal membuat grup")
+      }
+    } catch (error) {
+      console.error('Error creating group:', error)
+      setError('Terjadi kesalahan saat membuat grup')
+      toast.error('Terjadi kesalahan saat membuat grup')
+      setCreating(false)
     }
   }
 

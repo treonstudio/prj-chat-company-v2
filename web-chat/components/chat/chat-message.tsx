@@ -329,7 +329,15 @@ export function ChatMessage({
 
           {/* Sender name inside bubble only for group chat and other users */}
           {isGroupChat && !isMe ? (() => {
-            const isDeleted = isDeletedUser || data.senderName === "Deleted User" || !data.senderName?.trim()
+            // Try to get displayName from userCache first
+            const cachedDisplayName = userCache?.get(data.senderId)
+
+            // Determine if user is deleted
+            // User is deleted if:
+            // 1. Explicitly marked as deleted (isDeletedUser prop)
+            // 2. OR senderName is "Deleted User" AND no cached name available
+            const isDeleted = isDeletedUser || (data.senderName === "Deleted User" && !cachedDisplayName)
+
             let displayName = "Deleted User"
 
             if (isDeleted) {
@@ -338,7 +346,8 @@ export function ChatMessage({
                 displayName = `${data.senderName} (Deleted User)`
               }
             } else {
-              displayName = data.senderName
+              // Use cached name if available, otherwise use senderName
+              displayName = cachedDisplayName || data.senderName || "Unknown User"
             }
 
             return (
@@ -374,9 +383,15 @@ export function ChatMessage({
               <div className="flex-1 min-w-0">
                 <div className={cn(
                   "text-xs font-semibold mb-0.5",
-                  data.replyTo.senderName === "Deleted User" || !data.replyTo.senderName?.trim()
-                    ? "text-red-500"
-                    : "text-primary"
+                  (() => {
+                    // Check if user is actually deleted by checking both senderName and cache
+                    const replyToName = data.replyTo!.senderName
+                    const cachedName = userCache?.get(data.replyTo!.senderId)
+
+                    // User is deleted only if senderName is "Deleted User" AND no cached name
+                    const isReplyUserDeleted = replyToName === "Deleted User" && !cachedName
+                    return isReplyUserDeleted ? "text-red-500" : "text-primary"
+                  })()
                 )}>
                   {(() => {
                     const replyToName = data.replyTo!.senderName

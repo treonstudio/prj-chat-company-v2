@@ -4,6 +4,7 @@ import { Resource } from '@/types/resource';
 
 export class StorageRepository {
   private readonly PROFILE_IMAGES_PATH = 'profile_images';
+  private readonly GROUP_AVATARS_PATH = 'group_avatars';
 
   /**
    * Upload avatar image to Firebase Storage
@@ -45,6 +46,49 @@ export class StorageRepository {
       return Resource.success(downloadURL);
     } catch (error: any) {
       return Resource.error(error.message || 'Failed to upload avatar');
+    }
+  }
+
+  /**
+   * Upload group avatar image to Firebase Storage
+   * @param chatId - The group chat ID
+   * @param file - The image file to upload
+   * @param maxSizeInMB - Maximum file size in MB (optional, for extra validation)
+   * @returns Resource with the download URL
+   */
+  async uploadGroupAvatar(chatId: string, file: File, maxSizeInMB?: number): Promise<Resource<string>> {
+    try {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        return Resource.error('Please select a valid image file');
+      }
+
+      // Validate file size if maxSizeInMB is provided
+      if (maxSizeInMB) {
+        const maxSize = maxSizeInMB * 1024 * 1024;
+        if (file.size > maxSize) {
+          return Resource.error(`Image size must be less than ${maxSizeInMB}MB`);
+        }
+      }
+
+      // Create a unique filename with timestamp
+      const timestamp = Date.now();
+      const extension = file.name.split('.').pop();
+      const filename = `${timestamp}.${extension}`;
+      const filePath = `${this.GROUP_AVATARS_PATH}/${chatId}/${filename}`;
+
+      // Create storage reference
+      const storageRef = ref(storage(), filePath);
+
+      // Upload file
+      await uploadBytes(storageRef, file);
+
+      // Get download URL
+      const downloadURL = await getDownloadURL(storageRef);
+
+      return Resource.success(downloadURL);
+    } catch (error: any) {
+      return Resource.error(error.message || 'Failed to upload group avatar');
     }
   }
 

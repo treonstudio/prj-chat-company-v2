@@ -10,9 +10,12 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
 import { User } from '@/types/models'
-import { UserMinus, UserPlus, Camera, Users as UsersIcon, Loader2, Pencil, Search, X, LogOut, ChevronDown, UserCog } from 'lucide-react'
+import { UserMinus, UserPlus, Camera, Users as UsersIcon, Loader2, Pencil, Search, X, LogOut, ChevronDown, UserCog, ZoomIn, ZoomOut } from 'lucide-react'
 import { ChatRepository } from '@/lib/repositories/chat.repository'
 import { toast } from 'sonner'
+import Cropper from 'react-easy-crop'
+import type { Area } from 'react-easy-crop'
+import { useCallback } from 'react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -57,6 +60,7 @@ interface GroupInfoDialogProps {
   onNameUpdate?: (newName: string) => void
   onLeaveGroup?: () => void
   onAdminsUpdate?: (admins: string[]) => void
+  onChatSelect?: (chatId: string, isGroupChat: boolean) => void
 }
 
 export function GroupInfoDialog({
@@ -73,6 +77,7 @@ export function GroupInfoDialog({
   onNameUpdate,
   onLeaveGroup,
   onAdminsUpdate,
+  onChatSelect,
 }: GroupInfoDialogProps) {
   const [showAddMemberDialog, setShowAddMemberDialog] = useState(false)
   const [availableUsers, setAvailableUsers] = useState<User[]>([])
@@ -93,6 +98,13 @@ export function GroupInfoDialog({
   const [showImageViewer, setShowImageViewer] = useState(false)
   const [showUserProfile, setShowUserProfile] = useState(false)
   const [selectedUserForProfile, setSelectedUserForProfile] = useState<User | null>(null)
+
+  // Image cropper states
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [showCropper, setShowCropper] = useState(false)
+  const [crop, setCrop] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
 
   const isCurrentUserAdmin = groupAdmins.includes(currentUserId)
 
@@ -309,7 +321,7 @@ export function GroupInfoDialog({
     }
   }
 
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !isCurrentUserAdmin) return
 
@@ -318,36 +330,110 @@ export function GroupInfoDialog({
       return
     }
 
-    setUploadingAvatar(true)
+    // Read file and show cropper
+    const reader = new FileReader()
+    reader.onload = () => {
+      setSelectedImage(reader.result as string)
+      setShowCropper(true)
+      setCrop({ x: 0, y: 0 })
+      setZoom(1)
+    }
+    reader.readAsDataURL(file)
+
+    // Reset input
+    e.target.value = ''
+  }
+
+  const onCropComplete = useCallback((croppedArea: Area, croppedAreaPixels: Area) => {
+    setCroppedAreaPixels(croppedAreaPixels)
+  }, [])
+
+  const createCroppedImage = async () => {
+    if (!selectedImage || !croppedAreaPixels) return
 
     try {
-      // Upload to Firebase Storage
-      const uploadResult = await uploadGroupAvatar(chatId, file)
+      const image = new Image()
+      image.src = selectedImage
 
-      if (uploadResult.status === 'success') {
-        const avatarUrl = uploadResult.data
+      await new Promise((resolve) => {
+        image.onload = resolve
+      })
 
-        // Update group avatar in Firestore
-        const updateResult = await chatRepository.updateGroupAvatar(chatId, avatarUrl)
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
 
-        if (updateResult.status === 'success') {
-          onAvatarUpdate(avatarUrl)
-          toast.success('Foto grup berhasil diubah')
-        } else if (updateResult.status === 'error') {
-          toast.error(`Gagal mengubah foto grup: ${updateResult.message}`)
+      canvas.width = croppedAreaPixels.width
+      canvas.height = croppedAreaPixels.height
+
+      ctx.drawImage(
+        image,
+        croppedAreaPixels.x,
+        croppedAreaPixels.y,
+        croppedAreaPixels.width,
+        croppedAreaPixels.height,
+        0,
+        0,
+        croppedAreaPixels.width,
+        croppedAreaPixels.height
+      )
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) return
+
+        setShowCropper(false)
+        setUploadingAvatar(true)
+
+        try {
+          // Create File from blob
+          const file = new File([blob], 'group-avatar.jpg', { type: 'image/jpeg' })
+
+          // Upload to Firebase Storage
+          const uploadResult = await uploadGroupAvatar(chatId, file)
+
+          if (uploadResult.status === 'success') {
+            const avatarUrl = uploadResult.data
+
+            // Update group avatar in Firestore
+            const updateResult = await chatRepository.updateGroupAvatar(chatId, avatarUrl)
+
+            if (updateResult.status === 'success') {
+              onAvatarUpdate(avatarUrl)
+              toast.success('Foto grup berhasil diubah')
+            } else if (updateResult.status === 'error') {
+              toast.error(`Gagal mengubah foto grup: ${updateResult.message}`)
+            }
+          } else if (uploadResult.status === 'error') {
+            toast.error(`Gagal mengunggah gambar: ${uploadResult.message}`)
+          }
+        } catch (error: any) {
+          toast.error('Gagal mengubah foto grup')
+          console.error('Avatar update error:', error)
+        } finally {
+          setUploadingAvatar(false)
         }
-      } else if (uploadResult.status === 'error') {
-        toast.error(`Gagal mengunggah gambar: ${uploadResult.message}`)
-      }
-    } catch (error: any) {
-      toast.error('Gagal mengubah foto grup')
-      console.error('Avatar update error:', error)
-    } finally {
-      setUploadingAvatar(false)
-      // Reset file input
-      if (e.target) {
-        e.target.value = ''
-      }
+      }, 'image/jpeg', 0.95)
+    } catch (error) {
+      console.error('Error cropping image:', error)
+      toast.error('Gagal memotong gambar')
+    }
+  }
+
+  // Handle send message to user from profile dialog
+  const handleSendMessageToUser = async () => {
+    if (!selectedUserForProfile || !onChatSelect) return
+
+    setShowUserProfile(false)
+
+    // Create or get direct chat with selected user
+    const result = await chatRepository.getOrCreateDirectChat(currentUserId, selectedUserForProfile.userId)
+    if (result.status === 'success') {
+      // Close group info dialog
+      onOpenChange(false)
+      // Switch to the direct chat
+      onChatSelect(result.data.chatId, false)
+    } else {
+      toast.error('Gagal membuat chat')
     }
   }
 
@@ -551,14 +637,18 @@ export function GroupInfoDialog({
                               <DropdownMenuContent align="end" className="w-48">
                                 {isAdmin ? (
                                   <DropdownMenuItem
-                                    onClick={() => handleDemoteFromAdmin(member.userId, member.displayName)}
+                                    onClick={(e) => {
+                                      e.stopPropagation() // Prevent opening user profile
+                                      handleDemoteFromAdmin(member.userId, member.displayName)
+                                    }}
                                   >
                                     <UserCog className="h-4 w-4 mr-2" />
                                     <span>Hapus dari admin</span>
                                   </DropdownMenuItem>
                                 ) : (
                                   <DropdownMenuItem
-                                    onClick={() => {
+                                    onClick={(e) => {
+                                      e.stopPropagation() // Prevent opening user profile
                                       if (canPromoteToAdmin) {
                                         handlePromoteToAdmin(member.userId, member.displayName)
                                       }
@@ -575,7 +665,10 @@ export function GroupInfoDialog({
                                   </DropdownMenuItem>
                                 )}
                                 <DropdownMenuItem
-                                  onClick={() => handleKickMember(member.userId, member.displayName)}
+                                  onClick={(e) => {
+                                    e.stopPropagation() // Prevent opening user profile
+                                    handleKickMember(member.userId, member.displayName)
+                                  }}
                                   className="text-destructive focus:text-destructive focus:bg-destructive/10"
                                 >
                                   <UserMinus className="h-4 w-4 mr-2" />
@@ -932,7 +1025,78 @@ export function GroupInfoDialog({
         open={showUserProfile}
         onOpenChange={setShowUserProfile}
         user={selectedUserForProfile}
+        onSendMessage={onChatSelect ? handleSendMessageToUser : undefined}
       />
+
+      {/* Image Cropper Dialog */}
+      <Dialog open={showCropper} onOpenChange={setShowCropper}>
+        <DialogContent className="max-w-2xl p-0">
+          <DialogTitle asChild>
+            <VisuallyHidden>Crop Image</VisuallyHidden>
+          </DialogTitle>
+          <div className="flex flex-col h-[600px]">
+            {/* Header */}
+            <div className="px-4 py-3 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Crop Image</h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowCropper(false)}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            {/* Cropper */}
+            <div className="relative flex-1 bg-black">
+              {selectedImage && (
+                <Cropper
+                  image={selectedImage}
+                  crop={crop}
+                  zoom={zoom}
+                  aspect={1}
+                  cropShape="round"
+                  showGrid={false}
+                  onCropChange={setCrop}
+                  onZoomChange={setZoom}
+                  onCropComplete={onCropComplete}
+                />
+              )}
+            </div>
+
+            {/* Controls */}
+            <div className="px-6 py-4 border-t space-y-4">
+              {/* Zoom Slider */}
+              <div className="flex items-center gap-3">
+                <ZoomOut className="h-5 w-5 text-muted-foreground" />
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.1}
+                  value={zoom}
+                  onChange={(e) => setZoom(parseFloat(e.target.value))}
+                  className="flex-1"
+                />
+                <ZoomIn className="h-5 w-5 text-muted-foreground" />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowCropper(false)}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={createCroppedImage}>
+                  Apply
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

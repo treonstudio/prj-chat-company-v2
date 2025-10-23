@@ -249,7 +249,7 @@ export function ChatRoom({
                 console.log('[ChatRoom] Member has no displayName:', r.data.userId)
                 return {
                   ...r.data,
-                  displayName: 'Deleted User dong',
+                  displayName: 'Deleted User',
                   email: r.data.email || 'deleted@user.com'
                 }
               }
@@ -259,7 +259,7 @@ export function ChatRoom({
               console.log('[ChatRoom] Member not found:', groupResult.data.participants[index])
               return {
                 userId: groupResult.data.participants[index],
-                displayName: 'Deleted User asep',
+                displayName: 'Deleted User',
                 email: 'deleted@user.com',
                 status: UserStatus.OFFLINE,
                 isActive: false
@@ -1069,6 +1069,7 @@ export function ChatRoom({
           onAvatarUpdate={handleAvatarUpdate}
           onNameUpdate={handleNameUpdate}
           onAdminsUpdate={handleAdminsUpdate}
+          onChatSelect={onChatSelect}
           onLeaveGroup={() => {
             setShowGroupInfoDialog(false)
             onLeaveGroup?.()

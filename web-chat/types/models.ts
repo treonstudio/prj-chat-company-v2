@@ -115,6 +115,7 @@ export interface GroupChat {
   name: string;
   avatar?: string;
   avatarUrl?: string; // Alias for backward compatibility
+  imageURL?: string; // Primary field for group avatar (consistent with User model)
   participants: string[];
   participantsMap?: Record<string, boolean>; // For efficient queries
   admins?: string[];

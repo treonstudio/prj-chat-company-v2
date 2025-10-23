@@ -1,6 +1,6 @@
-import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, orderBy, limit, onSnapshot, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
-import { User } from '@/types/models';
+import { User, UserChats } from '@/types/models';
 import { Resource } from '@/types/resource';
 
 export class UserRepository {
@@ -118,29 +118,113 @@ export class UserRepository {
   }
 
   /**
-   * Update user image URL
+   * Update user image URL and propagate to all related chats
    */
   async updateAvatar(userId: string, imageUrl: string): Promise<Resource<void>> {
     try {
-      await updateDoc(doc(db(), this.COLLECTION, userId), {
+      const batch = writeBatch(db());
+
+      // 1. Update user document
+      const userRef = doc(db(), this.COLLECTION, userId);
+      batch.update(userRef, {
         imageURL: imageUrl // Use imageURL (capital URL) to match Firebase field naming
       });
+
+      // 2. Update avatar in all userChats where this user appears
+      // Get all users' userChats documents to find direct chats with this user
+      const userChatsRef = collection(db(), 'userChats');
+      const userChatsSnapshot = await getDocs(userChatsRef);
+
+      userChatsSnapshot.forEach((userChatsDoc) => {
+        const userChatsData = userChatsDoc.data() as UserChats;
+        const otherUserId = userChatsDoc.id;
+
+        // Skip the user's own userChats document (we'll handle it separately)
+        if (otherUserId === userId) return;
+
+        // Check if any chat in this user's chat list involves our user
+        let needsUpdate = false;
+        const updatedChats = userChatsData.chats.map((chat) => {
+          // For direct chats, check if otherUserId matches
+          if (chat.chatType === 'DIRECT' && chat.otherUserId === userId) {
+            needsUpdate = true;
+            return {
+              ...chat,
+              otherUserAvatar: imageUrl
+            };
+          }
+          return chat;
+        });
+
+        // If this user's chat list needs updating, add to batch
+        if (needsUpdate) {
+          const otherUserChatsRef = doc(db(), 'userChats', otherUserId);
+          batch.update(otherUserChatsRef, {
+            chats: updatedChats
+          });
+        }
+      });
+
+      await batch.commit();
       return Resource.success(undefined);
     } catch (error: any) {
+      console.error('Failed to update avatar:', error);
       return Resource.error(error.message || 'Failed to update avatar');
     }
   }
 
   /**
-   * Update user display name
+   * Update user display name and propagate to all related chats
    */
   async updateDisplayName(userId: string, displayName: string): Promise<Resource<void>> {
     try {
-      await updateDoc(doc(db(), this.COLLECTION, userId), {
+      const batch = writeBatch(db());
+
+      // 1. Update user document
+      const userRef = doc(db(), this.COLLECTION, userId);
+      batch.update(userRef, {
         displayName: displayName
       });
+
+      // 2. Update display name in all userChats where this user appears
+      // Get all users' userChats documents to find direct chats with this user
+      const userChatsRef = collection(db(), 'userChats');
+      const userChatsSnapshot = await getDocs(userChatsRef);
+
+      userChatsSnapshot.forEach((userChatsDoc) => {
+        const userChatsData = userChatsDoc.data() as UserChats;
+        const otherUserId = userChatsDoc.id;
+
+        // Skip the user's own userChats document (we'll handle it separately)
+        if (otherUserId === userId) return;
+
+        // Check if any chat in this user's chat list involves our user
+        let needsUpdate = false;
+        const updatedChats = userChatsData.chats.map((chat) => {
+          // For direct chats, check if otherUserId matches
+          if (chat.chatType === 'DIRECT' && chat.otherUserId === userId) {
+            needsUpdate = true;
+            return {
+              ...chat,
+              otherUserName: displayName
+            };
+          }
+          return chat;
+        });
+
+        // If this user's chat list needs updating, add to batch
+        if (needsUpdate) {
+          const otherUserChatsRef = doc(db(), 'userChats', otherUserId);
+          batch.update(otherUserChatsRef, {
+            chats: updatedChats
+          });
+        }
+      });
+
+      await batch.commit();
       return Resource.success(undefined);
     } catch (error: any) {
+      console.error('Failed to update display name:', error);
       return Resource.error(error.message || 'Failed to update display name');
     }
   }

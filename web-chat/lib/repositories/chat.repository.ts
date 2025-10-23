@@ -99,11 +99,22 @@ export class ChatRepository {
         usersJoinedAt[userId] = now;
       });
 
+      // Initialize participantsMap for all founding members
+      const participantsMap: Record<string, boolean> = {};
+      participants.forEach(userId => {
+        participantsMap[userId] = true;
+      });
+
       const newGroupChat: GroupChat = {
         chatId,
         name: groupName,
-        ...(imageUrl && { avatarUrl: imageUrl }),
+        ...(imageUrl && {
+          imageURL: imageUrl,  // Primary field for consistency with User model
+          avatarUrl: imageUrl, // Keep for backward compatibility
+          avatar: imageUrl,    // Keep for backward compatibility
+        }),
         participants,
+        participantsMap, // Track participants in map format
         admins: [creatorId], // Creator is automatically admin
         usersJoinedAt, // Track join dates for message filtering on rejoin
         createdAt: now,
@@ -704,9 +715,14 @@ export class ChatRepository {
       const usersJoinedAt = groupChat.usersJoinedAt || {};
       usersJoinedAt[newMemberId] = now;  // CRITICAL: This overwrites previous timestamp for rejoin scenarios
 
+      // Add user to participantsMap
+      const participantsMap = groupChat.participantsMap || {};
+      participantsMap[newMemberId] = true;
+
       // Add user to group participants
       batch.update(groupChatRef, {
         participants: arrayUnion(newMemberId),
+        participantsMap: participantsMap,  // Track participants in map format
         leftMembers: leftMembers,
         usersJoinedAt: usersJoinedAt,  // Track join date for message filtering
         updatedAt: now,
@@ -862,7 +878,9 @@ export class ChatRepository {
 
       // Update group chat avatar
       batch.update(groupChatRef, {
-        avatar: avatarUrl,
+        imageURL: avatarUrl, // Primary field for consistency with User model
+        avatarUrl: avatarUrl, // Keep for backward compatibility
+        avatar: avatarUrl,     // Keep for backward compatibility
         updatedAt: Timestamp.now(),
       });
 
