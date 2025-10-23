@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils"
 import { sanitizeMessageText } from "@/lib/utils/text-sanitizer"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
+import Image from "next/image"
 import {
   Dialog,
   DialogContent,
@@ -437,9 +438,11 @@ export function ChatMessage({
                     />
                   ) : (
                     // For images
-                    <img
+                    <Image
                       src={data.replyTo.mediaUrl}
                       alt="Reply preview"
+                      width={48}
+                      height={48}
                       className="w-12 h-12 rounded object-cover shrink-0"
                     />
                   )}
@@ -595,26 +598,30 @@ export function ChatMessage({
                   </svg>
                 </div>
               )}
-              <img
-                src={data.content || "/placeholder.svg?height=320&width=480&query=pastel%20green%20chat%20image"}
-                alt="Shared image"
-                className={cn(
-                  "cursor-pointer hover:opacity-90 transition-opacity",
-                  !imageLoaded && "opacity-0"
-                )}
+              <div
+                className="cursor-pointer hover:opacity-90 transition-opacity"
                 style={{
                   maxWidth: '330px',
                   maxHeight: '330px',
                   minWidth: '200px',
-                  width: 'auto',
-                  height: 'auto',
-                  objectFit: 'contain',
-                  display: 'block'
+                  minHeight: '200px',
+                  position: 'relative',
                 }}
-                loading="lazy"
-                onLoad={() => setImageLoaded(true)}
                 onClick={() => setShowImagePreview(true)}
-              />
+              >
+                <Image
+                  src={data.content || "/placeholder.svg?height=320&width=480&query=pastel%20green%20chat%20image"}
+                  alt="Shared image"
+                  fill
+                  sizes="(max-width: 330px) 100vw, 330px"
+                  className={cn(
+                    "object-contain rounded-md",
+                    !imageLoaded && "opacity-0"
+                  )}
+                  loading="lazy"
+                  onLoad={() => setImageLoaded(true)}
+                />
+              </div>
               {/* Download button - appears on hover */}
               {imageLoaded && (
                 <button
@@ -859,11 +866,14 @@ export function ChatMessage({
                 </button>
               </div>
             </DialogHeader>
-            <div className="relative w-full h-full flex items-center justify-center bg-black">
-              <img
+            <div className="relative w-full h-[80vh] flex items-center justify-center bg-black">
+              <Image
                 src={data.content}
                 alt="Preview"
-                className="max-w-full max-h-[80vh] object-contain"
+                fill
+                sizes="100vw"
+                className="object-contain"
+                priority
               />
             </div>
           </DialogContent>

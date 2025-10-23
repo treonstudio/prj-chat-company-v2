@@ -85,10 +85,33 @@ export function MessageComposer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]); // Only run when chatId changes
 
-  // Auto-focus input when replying
+  // Auto-focus input when replying with retry mechanism
   useEffect(() => {
     if (isReplying && textareaRef.current) {
-      textareaRef.current.focus();
+      let attempts = 0;
+      const maxAttempts = 10;
+
+      const attemptFocus = () => {
+        if (textareaRef.current && document.activeElement !== textareaRef.current && attempts < maxAttempts) {
+          attempts++;
+          textareaRef.current.focus({ preventScroll: true });
+
+          // Scroll into view on first attempt
+          if (attempts === 1) {
+            textareaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+
+          // Retry if focus was stolen
+          setTimeout(attemptFocus, 50);
+        }
+      };
+
+      // Start attempting to focus
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          attemptFocus();
+        });
+      });
     }
   }, [isReplying]);
 

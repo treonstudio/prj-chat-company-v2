@@ -4,6 +4,7 @@ import { X, Image as ImageIcon, Video, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Message, MessageType } from '@/types/models'
 import { cn } from '@/lib/utils'
+import Image from 'next/image'
 
 interface ReplyPreviewBarProps {
   replyingTo: Message
@@ -58,9 +59,11 @@ export function ReplyPreviewBar({ replyingTo, onCancel }: ReplyPreviewBarProps) 
           {replyingTo.type === MessageType.VIDEO ? (
             // For video, show thumbnail or first frame
             replyingTo.mediaMetadata?.thumbnailUrl ? (
-              <img
+              <Image
                 src={replyingTo.mediaMetadata.thumbnailUrl}
                 alt="Video preview"
+                width={48}
+                height={48}
                 className="w-12 h-12 rounded object-cover shrink-0"
               />
             ) : (
@@ -73,9 +76,11 @@ export function ReplyPreviewBar({ replyingTo, onCancel }: ReplyPreviewBarProps) 
             )
           ) : (
             // For images
-            <img
+            <Image
               src={replyingTo.mediaUrl}
               alt="Preview"
+              width={48}
+              height={48}
               className="w-12 h-12 rounded object-cover shrink-0"
             />
           )}
@@ -89,6 +94,8 @@ export function ReplyPreviewBar({ replyingTo, onCancel }: ReplyPreviewBarProps) 
         onClick={onCancel}
         className="shrink-0 h-8 w-8 -mt-1"
         aria-label="Cancel reply"
+        autoFocus={false}
+        tabIndex={-1}
       >
         <X className="h-5 w-5" />
       </Button>
