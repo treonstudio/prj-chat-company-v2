@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Download, X, Forward, ChevronDown, Reply, Copy, Trash2, Star, Pencil, Ban, Check, Image as ImageIcon, Video, FileText } from "lucide-react"
+import { Download, X, Forward, ChevronDown, Reply, Copy, Trash2, Star, Pencil, Ban, Check, Image as ImageIcon, Video, FileText, Phone, PhoneCall, PhoneMissed, PhoneOff, PhoneIncoming, PhoneOutgoing } from "lucide-react"
 import download from "downloadjs"
 import { MessageStatusIcon } from "./message-status-icon"
 import { MessageStatus } from "@/types/models"
@@ -57,8 +57,17 @@ type DocMsg = Base & {
   fileSize?: string
   mimeType?: string
 }
+type CallMsg = Base & {
+  type: "voice_call" | "video_call"
+  callMetadata: {
+    callId: string
+    duration: number
+    callType: "voice" | "video"
+    status: "completed" | "missed" | "declined" | "cancelled"
+  }
+}
 
-export type ChatMessageUnion = TextMsg | ImageMsg | VideoMsg | DocMsg
+export type ChatMessageUnion = TextMsg | ImageMsg | VideoMsg | DocMsg | CallMsg
 
 export function ChatMessage({
   data,
@@ -358,7 +367,7 @@ export function ChatMessage({
               onClick={() => onReplyClick?.(data.replyTo!.messageId)}
               className={cn(
                 "flex items-start gap-2 p-2 rounded-lg mb-2 cursor-pointer",
-                "bg-black/15 hover:bg-black/20 transition-colors border-l-[3px] border-primary max-w-[620px]"
+                "bg-deeper-gray transition-colors border-l-[3px] border-primary max-w-[620px] w-full"
               )}
             >
               {/* Vertical indicator bar */}
@@ -448,6 +457,83 @@ export function ChatMessage({
                 </div>
               )}
             </>
+          )}
+
+          {(data.type === "voice_call" || data.type === "video_call") && (data as CallMsg).callMetadata && (
+            <div className="flex items-center gap-3 py-1">
+              {/* Call Icon */}
+              <div className="shrink-0">
+                {(() => {
+                  const callData = (data as CallMsg).callMetadata
+                  if (!callData) return <Phone className="h-5 w-5" />
+
+                  const status = callData.status
+                  const callType = callData.callType
+                  const iconSize = "h-5 w-5"
+
+                  if (status === "missed") {
+                    return <PhoneMissed className={`${iconSize} text-red-500`} />
+                  } else if (status === "declined") {
+                    return <PhoneOff className={`${iconSize} text-red-500`} />
+                  } else if (status === "cancelled") {
+                    return <PhoneOff className={`${iconSize} text-muted-foreground`} />
+                  } else if (status === "completed") {
+                    if (callType === "video") {
+                      return <Video className={`${iconSize} text-primary`} />
+                    } else if (isMe) {
+                      return <PhoneOutgoing className={`${iconSize} text-primary`} />
+                    } else {
+                      return <PhoneIncoming className={`${iconSize} text-primary`} />
+                    }
+                  }
+                  return <Phone className={`${iconSize}`} />
+                })()}
+              </div>
+
+              {/* Call Status Text */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={cn(
+                    "text-sm",
+                    (data as CallMsg).callMetadata?.status === "missed" || (data as CallMsg).callMetadata?.status === "declined"
+                      ? "text-red-500"
+                      : (data as CallMsg).callMetadata?.status === "cancelled"
+                      ? "text-muted-foreground"
+                      : ""
+                  )}>
+                    {(() => {
+                      const callData = (data as CallMsg).callMetadata
+                      if (!callData) return "Panggilan"
+
+                      const status = callData.status
+
+                      if (status === "missed") return "Panggilan tidak terjawab"
+                      if (status === "declined") return "Panggilan ditolak"
+                      if (status === "cancelled") return "Panggilan dibatalkan"
+                      if (status === "completed") {
+                        return isMe ? "Panggilan keluar" : "Panggilan masuk"
+                      }
+                      return "Panggilan"
+                    })()}
+                  </span>
+
+                  {/* Duration for completed calls */}
+                  {(data as CallMsg).callMetadata?.status === "completed" && (
+                    <span className="text-sm text-muted-foreground">
+                      {(() => {
+                        const callData = (data as CallMsg).callMetadata
+                        if (!callData) return ""
+
+                        const duration = callData.duration
+                        const minutes = Math.floor(duration / 60)
+                        const seconds = duration % 60
+                        return `${minutes}:${seconds.toString().padStart(2, '0')}`
+                      })()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
 
           {data.type === "image" && (

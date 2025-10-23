@@ -167,3 +167,7 @@
     writing-mode: horizontal-tb;
   }
 }
+
+.bg-deeper-gray {
+  background-color: rgba(194, 189, 184, .15);
+}

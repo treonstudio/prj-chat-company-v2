@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils'
 import { DialogTitle } from '@/components/ui/dialog'
 import { SheetTitle } from '@/components/ui/sheet'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
+import { UserProfileDialog } from './user-profile-dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -90,6 +91,8 @@ export function GroupInfoDialog({
   const [leaving, setLeaving] = useState(false)
   const [hoveredMemberId, setHoveredMemberId] = useState<string | null>(null)
   const [showImageViewer, setShowImageViewer] = useState(false)
+  const [showUserProfile, setShowUserProfile] = useState(false)
+  const [selectedUserForProfile, setSelectedUserForProfile] = useState<User | null>(null)
 
   const isCurrentUserAdmin = groupAdmins.includes(currentUserId)
 
@@ -465,7 +468,19 @@ export function GroupInfoDialog({
                 </div>
 
                 <div className="space-y-1">
-                  {groupMembers.map((member) => {
+                  {[...groupMembers]
+                    .sort((a, b) => {
+                      const aIsAdmin = groupAdmins.includes(a.userId)
+                      const bIsAdmin = groupAdmins.includes(b.userId)
+
+                      // Sort admins first
+                      if (aIsAdmin && !bIsAdmin) return -1
+                      if (!aIsAdmin && bIsAdmin) return 1
+
+                      // Then sort alphabetically by display name
+                      return a.displayName.localeCompare(b.displayName)
+                    })
+                    .map((member) => {
                     const isAdmin = groupAdmins.includes(member.userId)
                     const canManage = isCurrentUserAdmin && member.userId !== currentUserId
                     const isCurrentUser = member.userId === currentUserId
@@ -475,9 +490,18 @@ export function GroupInfoDialog({
                     return (
                       <div
                         key={member.userId}
-                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors group"
+                        className={cn(
+                          "flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors group",
+                          !isCurrentUser && "cursor-pointer"
+                        )}
                         onMouseEnter={() => setHoveredMemberId(member.userId)}
                         onMouseLeave={() => setHoveredMemberId(null)}
+                        onClick={() => {
+                          if (!isCurrentUser) {
+                            setSelectedUserForProfile(member)
+                            setShowUserProfile(true)
+                          }
+                        }}
                       >
                         <Avatar className="h-12 w-12 shrink-0">
                           <AvatarImage src={member.imageURL || member.imageUrl} alt="" />
@@ -516,6 +540,9 @@ export function GroupInfoDialog({
                                     "h-8 w-8 transition-opacity",
                                     isHovered ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                                   )}
+                                  onClick={(e) => {
+                                    e.stopPropagation() // Prevent opening user profile when clicking dropdown
+                                  }}
                                   aria-label={`Manage ${member.displayName}`}
                                 >
                                   <ChevronDown className="h-4 w-4" />
@@ -899,6 +926,13 @@ export function GroupInfoDialog({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* User Profile Dialog */}
+      <UserProfileDialog
+        open={showUserProfile}
+        onOpenChange={setShowUserProfile}
+        user={selectedUserForProfile}
+      />
     </>
   )
 }

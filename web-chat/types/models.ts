@@ -28,6 +28,8 @@ export enum MessageType {
   IMAGE = 'IMAGE',
   VIDEO = 'VIDEO',
   DOCUMENT = 'DOCUMENT',
+  VOICE_CALL = 'VOICE_CALL',
+  VIDEO_CALL = 'VIDEO_CALL',
 }
 
 export enum MessageStatus {
@@ -54,6 +56,13 @@ export interface ReplyTo {
   mediaUrl?: string | null;
 }
 
+export interface CallMetadata {
+  callId: string;
+  duration: number; // Duration in seconds
+  callType: 'voice' | 'video';
+  status: 'completed' | 'missed' | 'declined' | 'cancelled';
+}
+
 export interface Message {
   messageId: string;
   senderId: string;
@@ -63,6 +72,7 @@ export interface Message {
   type: MessageType;
   mediaUrl?: string;
   mediaMetadata?: MediaMetadata;
+  callMetadata?: CallMetadata; // For call history messages
   readBy: Record<string, Timestamp>;
   deliveredTo?: Record<string, Timestamp>;
   timestamp?: Timestamp;

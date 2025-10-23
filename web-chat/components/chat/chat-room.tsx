@@ -14,7 +14,7 @@ import { useState } from "react"
 import { ChatType, User, UserStatus, Message } from "@/types/models"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { LogOut, Loader2, Users, Trash2, X, MoreVertical, Info } from "lucide-react"
+import { LogOut, Loader2, Users, Trash2, X, MoreVertical, Info, Eraser } from "lucide-react"
 import { doc, onSnapshot } from "firebase/firestore"
 import { db } from "@/lib/firebase/config"
 import {
@@ -400,10 +400,13 @@ export function ChatRoom({
   }, [messages.length, loading, currentUserId, markAsRead])
 
   // Auto-scroll to bottom when new messages arrive
+  const prevMessagesLengthRef = useRef(messages.length)
   useEffect(() => {
-    if (scrollRef.current) {
+    // Only scroll if new messages were added (length increased)
+    if (messages.length > prevMessagesLengthRef.current && scrollRef.current) {
       scrollRef.current.scrollIntoView({ behavior: 'smooth' })
     }
+    prevMessagesLengthRef.current = messages.length
   }, [messages])
 
   // Format member names for display
@@ -454,7 +457,7 @@ export function ChatRoom({
     setDeletingHistory(false)
 
     if (result.status === 'success') {
-      toast.success('Riwayat chat berhasil dihapus')
+      toast.success('Chat berhasil dibersihkan')
       setShowDeleteHistoryDialog(false)
       if (onCloseChat) {
         onCloseChat()
@@ -798,8 +801,8 @@ export function ChatRoom({
                   onClick={() => setShowDeleteHistoryDialog(true)}
                   className="flex items-center gap-2"
                 >
-                  <Trash2 className="h-4 w-4" />
-                  <span>Hapus riwayat chat</span>
+                  <Eraser className="h-4 w-4" />
+                  <span>Bersihkan chat</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => setShowDeleteChatDialog(true)}
@@ -839,8 +842,8 @@ export function ChatRoom({
                   onClick={() => setShowDeleteHistoryDialog(true)}
                   className="flex items-center gap-2"
                 >
-                  <Trash2 className="h-4 w-4" />
-                  <span>Hapus riwayat chat</span>
+                  <Eraser className="h-4 w-4" />
+                  <span>Bersihkan chat</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => setShowDeleteChatDialog(true)}
@@ -909,7 +912,10 @@ export function ChatRoom({
                   const editedTimeStr = editedAt ? format(editedAt, 'HH:mm') : undefined
 
                   // Map message type to ChatMessage type format
-                  const messageType = m.type === 'DOCUMENT' ? 'doc' : m.type.toLowerCase()
+                  const messageType = m.type === 'DOCUMENT' ? 'doc'
+                    : m.type === 'VOICE_CALL' ? 'voice_call'
+                    : m.type === 'VIDEO_CALL' ? 'video_call'
+                    : m.type.toLowerCase()
 
                   // Handle missing senderName - lookup from users collection or use cached value
                   // If senderName is not available and not in cache yet, skip rendering until cache is ready
@@ -935,6 +941,7 @@ export function ChatRoom({
                           fileName: m.mediaMetadata?.fileName,
                           fileSize: m.mediaMetadata?.fileSize ? `${(m.mediaMetadata.fileSize / 1024 / 1024).toFixed(2)} MB` : undefined,
                           mimeType: m.mediaMetadata?.mimeType,
+                          callMetadata: m.callMetadata,
                           senderId: m.senderId,
                           senderName: senderName,
                           senderAvatar: m.senderAvatar,
@@ -980,15 +987,7 @@ export function ChatRoom({
         <div className="h-16" />
       </ScrollArea>
       <Separator />
-      <div className="absolute bottom-[0.5rem] left-0 right-0 w-full">
-        {/* Reply preview bar */}
-        {replyingTo && !selectionMode && (
-          <ReplyPreviewBar
-            replyingTo={replyingTo}
-            onCancel={handleCancelReply}
-          />
-        )}
-
+      <div className="w-full absolute left-0 right-0 w-full bottom-0">
         {selectionMode ? (
           /* Selection toolbar */
           <div className="flex items-center justify-between border-t px-4 py-3 bg-background shadow-sm">
@@ -1020,26 +1019,38 @@ export function ChatRoom({
             </p>
           </div>
         ) : (
-          <MessageComposer
-            chatId={chatId}
-            onSendText={(text) => {
-              const replyToData = replyingTo ? {
-                messageId: replyingTo.messageId,
-                senderId: replyingTo.senderId,
-                senderName: replyingTo.senderName,
-                text: replyingTo.text.substring(0, 100), // Truncate to 100 chars
-                type: replyingTo.type,
-                mediaUrl: replyingTo.mediaUrl || null
-              } : null
-              sendTextMessage(currentUserId, currentUserName, text, currentUserAvatar, replyToData)
-              setReplyingTo(null) // Clear reply state after sending
-            }}
-            onSendImage={(file, shouldCompress) => sendImage(currentUserId, currentUserName, file, shouldCompress, currentUserAvatar)}
-            onSendVideo={(file) => sendVideo(currentUserId, currentUserName, file, currentUserAvatar)}
-            onSendDocument={(file) => sendDocument(currentUserId, currentUserName, file, currentUserAvatar)}
-            disabled={false}
-            uploading={uploading}
-          />
+          <div className="flex flex-col">
+            {/* Reply preview bar - mepet dengan message composer */}
+            {replyingTo && (
+              <div className="px-4">
+                <ReplyPreviewBar
+                  replyingTo={replyingTo}
+                  onCancel={handleCancelReply}
+                />
+              </div>
+            )}
+            <MessageComposer
+              isReplying={replyingTo !== null}
+              chatId={chatId}
+              onSendText={(text) => {
+                const replyToData = replyingTo ? {
+                  messageId: replyingTo.messageId,
+                  senderId: replyingTo.senderId,
+                  senderName: replyingTo.senderName,
+                  text: replyingTo.text.substring(0, 100), // Truncate to 100 chars
+                  type: replyingTo.type,
+                  mediaUrl: replyingTo.mediaUrl || null
+                } : null
+                sendTextMessage(currentUserId, currentUserName, text, currentUserAvatar, replyToData)
+                setReplyingTo(null) // Clear reply state after sending
+              }}
+              onSendImage={(file, shouldCompress) => sendImage(currentUserId, currentUserName, file, shouldCompress, currentUserAvatar)}
+              onSendVideo={(file) => sendVideo(currentUserId, currentUserName, file, currentUserAvatar)}
+              onSendDocument={(file) => sendDocument(currentUserId, currentUserName, file, currentUserAvatar)}
+              disabled={false}
+              uploading={uploading}
+            />
+          </div>
         )}
       </div>
 
@@ -1172,7 +1183,7 @@ export function ChatRoom({
       <AlertDialog open={showDeleteHistoryDialog} onOpenChange={setShowDeleteHistoryDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Hapus Riwayat Chat?</AlertDialogTitle>
+            <AlertDialogTitle>Bersihkan Chat?</AlertDialogTitle>
             <AlertDialogDescription>
               Semua pesan dalam chat ini akan dihapus dari perangkat Anda. Chat akan hilang dari daftar, namun akan muncul kembali jika ada pesan baru. User lain tetap dapat melihat semua pesan.
             </AlertDialogDescription>
@@ -1201,10 +1212,10 @@ export function ChatRoom({
               {deletingHistory ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Menghapus...
+                  Membersihkan...
                 </>
               ) : (
-                "Hapus Riwayat"
+                "Bersihkan"
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

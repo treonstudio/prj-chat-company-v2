@@ -13,6 +13,7 @@ import { useFeatureFlags } from '@/lib/contexts/feature-flags.context';
 import { useUsageControls } from '@/lib/contexts/usage-controls.context';
 import { toast } from 'sonner';
 import { useDraftMessage } from '@/lib/hooks/use-draft-message';
+import { cn } from '@/lib/utils';
 
 interface MessageComposerProps {
   chatId: string;
@@ -22,6 +23,7 @@ interface MessageComposerProps {
   onSendDocument: (file: File) => void;
   disabled?: boolean;
   uploading?: boolean;
+  isReplying?: boolean;
 }
 
 export function MessageComposer({
@@ -32,6 +34,7 @@ export function MessageComposer({
   onSendDocument,
   disabled = false,
   uploading = false,
+  isReplying = false,
 }: MessageComposerProps) {
   const { draft, saveDraft, clearDraft } = useDraftMessage(chatId);
   const [message, setMessage] = useState('');
@@ -245,9 +248,9 @@ export function MessageComposer({
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-2 px-4 py-3">
+      <form onSubmit={handleSubmit} className={cn("flex flex-col gap-2 px-4 py-3", isReplying ? "pt-0" : "")}>
         {/* WhatsApp-style floating rounded input container */}
-        <div className="flex items-center gap-2 bg-white rounded-full px-2 py-1.5 shadow-md">
+        <div className={cn("flex items-center gap-2 bg-white px-2 py-1.5 shadow-md", isReplying ? "rounded-none rounded-b-[1.6rem]" : "rounded-full")}>
           {/* Attachment menu - only show if allowSendMedia is true */}
           {featureFlags.allowSendMedia && (
             <DropdownMenu>
