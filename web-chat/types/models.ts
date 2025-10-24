@@ -124,6 +124,7 @@ export interface GroupChat {
   usersJoinedAt?: Record<string, Timestamp>; // Track when users joined (for message filtering on rejoin)
   lastMessage?: LastMessage;
   createdAt?: Timestamp;
+  createdBy?: string; // User ID of the creator
   updatedAt?: Timestamp;
 }
 

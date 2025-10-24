@@ -118,6 +118,7 @@ export class ChatRepository {
         admins: [creatorId], // Creator is automatically admin
         usersJoinedAt, // Track join dates for message filtering on rejoin
         createdAt: now,
+        createdBy: creatorId, // Track who created the group
         updatedAt: now,
       };
 

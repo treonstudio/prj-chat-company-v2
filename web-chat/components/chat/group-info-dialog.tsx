@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Dialog, DialogContent, DialogHeader, DialogFooter } from '@/components/ui/dialog'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -13,6 +13,7 @@ import { User } from '@/types/models'
 import { UserMinus, UserPlus, Camera, Users as UsersIcon, Loader2, Pencil, Search, X, LogOut, ChevronDown, UserCog, ZoomIn, ZoomOut } from 'lucide-react'
 import { ChatRepository } from '@/lib/repositories/chat.repository'
 import { toast } from 'sonner'
+import { format } from 'date-fns'
 import Cropper from 'react-easy-crop'
 import type { Area } from 'react-easy-crop'
 import { useCallback } from 'react'
@@ -106,7 +107,58 @@ export function GroupInfoDialog({
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
 
+  // Group metadata states
+  const [createdAt, setCreatedAt] = useState<Date | null>(null)
+  const [createdBy, setCreatedBy] = useState<string | null>(null)
+  const [creatorName, setCreatorName] = useState<string | null>(null)
+
   const isCurrentUserAdmin = groupAdmins.includes(currentUserId)
+
+  // Helper function to convert timestamp to Date
+  const timestampToDate = (timestamp: any): Date | null => {
+    if (!timestamp) return null;
+    if (typeof timestamp.toDate === 'function') {
+      return timestamp.toDate();
+    }
+    if (timestamp.seconds !== undefined) {
+      return new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
+    }
+    return null;
+  }
+
+  // Fetch group metadata (createdAt, createdBy)
+  useEffect(() => {
+    const fetchGroupMetadata = async () => {
+      if (!open || !chatId) return;
+
+      try {
+        const result = await chatRepository.getGroupChat(chatId);
+        if (result.status === 'success') {
+          const groupData = result.data;
+
+          // Set createdAt
+          if (groupData.createdAt) {
+            setCreatedAt(timestampToDate(groupData.createdAt));
+          }
+
+          // Set createdBy and fetch creator name
+          if (groupData.createdBy) {
+            setCreatedBy(groupData.createdBy);
+
+            // Fetch creator user data
+            const creatorResult = await userRepository.getUserById(groupData.createdBy);
+            if (creatorResult.status === 'success') {
+              setCreatorName(creatorResult.data.displayName);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching group metadata:', error);
+      }
+    };
+
+    fetchGroupMetadata();
+  }, [open, chatId]);
 
   const handleKickMember = async (userId: string, userName: string) => {
     if (!isCurrentUserAdmin) {
@@ -527,6 +579,20 @@ export function GroupInfoDialog({
                 <p className="text-sm text-muted-foreground">
                   Group · {groupMembers.length} {groupMembers.length === 1 ? 'member' : 'members'}
                 </p>
+
+                {/* Created At and Created By */}
+                {createdAt && (
+                  <div className="mt-4 space-y-1.5 text-sm">
+                    <p className="text-muted-foreground">
+                      <span className="font-medium text-foreground">createdAt:</span> {format(createdAt, 'MMMM d, yyyy \'at\' h:mm:ss a \'UTC\'XXX')}
+                    </p>
+                    {createdBy && (
+                      <p className="text-muted-foreground">
+                        <span className="font-medium text-foreground">createdBy:</span> {creatorName || createdBy}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <Separator />
