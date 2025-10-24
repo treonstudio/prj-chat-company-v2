@@ -5,8 +5,26 @@ import { MessageRepository } from '@/lib/repositories/message.repository';
 import { Message, MessageType, MessageStatus, ReplyTo } from '@/types/models';
 import { Timestamp, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
+import { useMessageCache } from '@/lib/stores/message-cache.store';
 
 const messageRepository = new MessageRepository();
+
+// Helper function to safely get milliseconds from timestamp (handles both Firestore Timestamp and plain objects from cache)
+function getTimestampMillis(timestamp: any): number {
+  if (!timestamp) return 0;
+
+  // If it's a Firestore Timestamp object with toMillis method
+  if (typeof timestamp.toMillis === 'function') {
+    return timestamp.toMillis();
+  }
+
+  // If it's a plain object from cache with seconds property
+  if (timestamp.seconds !== undefined) {
+    return timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000;
+  }
+
+  return 0;
+}
 
 export function useMessages(chatId: string | null, isGroupChat: boolean, currentUserId?: string) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -18,6 +36,16 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
   const [uploadingMessage, setUploadingMessage] = useState<Message | null>(null);
   const [userJoinedAt, setUserJoinedAt] = useState<Timestamp | null>(null);
   const [deleteHistoryTimestamp, setDeleteHistoryTimestamp] = useState<Timestamp | null>(null);
+
+  // Zustand cache store
+  const {
+    getMessages: getCachedMessages,
+    setMessages: setCachedMessages,
+    addMessage: addCachedMessage,
+    updateMessage: updateCachedMessage,
+    deleteMessage: deleteCachedMessage,
+    clearChatHistory: clearCachedHistory
+  } = useMessageCache();
 
   useEffect(() => {
     // Reset uploading state when chatId changes
@@ -32,7 +60,15 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
       return;
     }
 
-    setLoading(true);
+    // INSTANT LOAD: Check cache first (WhatsApp-like experience)
+    const cachedMessages = getCachedMessages(chatId);
+    if (cachedMessages && cachedMessages.length > 0) {
+      console.log(`[Cache] Loading ${cachedMessages.length} messages from cache for ${chatId}`);
+      setMessages(cachedMessages);
+      setLoading(false); // Show cached data immediately, no loading state!
+    } else {
+      setLoading(true); // Only show loading if no cache
+    }
 
     // CRITICAL: Load group join date and deleteHistory BEFORE subscribing to messages
     // This prevents race conditions where messages load before we know the filter timestamp
@@ -80,7 +116,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
           if (deleteHistoryTs) {
             filteredMessages = filteredMessages.filter(msg => {
               if (!msg.timestamp) return true;
-              return msg.timestamp.toMillis() > deleteHistoryTs.toMillis();
+              return getTimestampMillis(msg.timestamp) > getTimestampMillis(deleteHistoryTs);
             });
           }
 
@@ -88,11 +124,15 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
           if (isGroupChat && joinedAtTimestamp) {
             filteredMessages = filteredMessages.filter(msg => {
               if (!msg.timestamp) return true;
-              return msg.timestamp.toMillis() >= joinedAtTimestamp.toMillis();
+              return getTimestampMillis(msg.timestamp) >= getTimestampMillis(joinedAtTimestamp);
             });
           }
 
           setMessages(filteredMessages);
+
+          // SYNC TO CACHE: Keep cache updated for instant loading next time
+          setCachedMessages(chatId, filteredMessages);
+
           setLoading(false);
           setError(null);
 
@@ -112,7 +152,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
                 }
 
                 const timeDiff = Math.abs(
-                  (msg.timestamp?.toMillis() || 0) - (optMsg.timestamp?.toMillis() || 0)
+                  getTimestampMillis(msg.timestamp) - getTimestampMillis(optMsg.timestamp)
                 );
 
                 // Match by content and time
@@ -428,9 +468,12 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
 
       if (result.status === 'error') {
         setError(result.message);
+      } else {
+        // Update cache to remove deleted message
+        deleteCachedMessage(chatId, messageId);
       }
     },
-    [chatId, isGroupChat]
+    [chatId, isGroupChat, deleteCachedMessage]
   );
 
   const editMessage = useCallback(
@@ -441,9 +484,12 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
 
       if (result.status === 'error') {
         setError(result.message);
+      } else {
+        // Update cache with edited message text
+        updateCachedMessage(chatId, messageId, { text: newText, isEdited: true });
       }
     },
-    [chatId, isGroupChat]
+    [chatId, isGroupChat, updateCachedMessage]
   );
 
   // Combine real messages and optimistic messages, sorted by timestamp
@@ -462,7 +508,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
       // Double-check it doesn't duplicate a real message by content
       const isDuplicate = Array.from(messageMap.values()).some(realMsg => {
         const timeDiff = Math.abs(
-          (realMsg.timestamp?.toMillis() || 0) - (optMsg.timestamp?.toMillis() || 0)
+          getTimestampMillis(realMsg.timestamp) - getTimestampMillis(optMsg.timestamp)
         );
         return (
           !realMsg.messageId.startsWith('temp_') &&
@@ -482,8 +528,8 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
   // Convert to array and sort
   const allMessages = Array.from(messageMap.values()).sort((a, b) => {
     // Use timestamp, fallback to createdAt, then messageId for consistent ordering
-    const timeA = a.timestamp?.toMillis() || a.createdAt?.toMillis() || 0;
-    const timeB = b.timestamp?.toMillis() || b.createdAt?.toMillis() || 0;
+    const timeA = getTimestampMillis(a.timestamp) || getTimestampMillis(a.createdAt) || 0;
+    const timeB = getTimestampMillis(b.timestamp) || getTimestampMillis(b.createdAt) || 0;
 
     // If timestamps are equal, use messageId as tiebreaker
     if (timeA === timeB) {

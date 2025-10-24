@@ -166,10 +166,37 @@
     direction: ltr;
     writing-mode: horizontal-tb;
   }
+
+  /* Smooth scrolling for chat containers */
+  .smooth-scroll {
+    scroll-behavior: smooth;
+    overflow-anchor: none; /* We handle scroll anchoring manually for better control */
+  }
+
+  /* Disable smooth scroll for instant jump (when needed) */
+  .instant-scroll {
+    scroll-behavior: auto;
+  }
+
+  /* Optimize rendering performance for chat messages */
+  .chat-message-container {
+    contain: layout style paint;
+    content-visibility: auto;
+  }
+
+  /* Hint to browser for scroll optimization */
+  .scroll-optimized {
+    will-change: scroll-position;
+    transform: translateZ(0); /* Force GPU acceleration */
+  }
 }
 
 .bg-deeper-gray {
   background-color: rgba(194, 189, 184, .15);
+}
+
+.bg-deeper-green {
+  background-color: #467346;
 }
 
 /* Custom scrollbar styling for better contrast and usability */

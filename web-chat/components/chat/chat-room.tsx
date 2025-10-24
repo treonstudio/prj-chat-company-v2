@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useMemo, useCallback, useLayoutEffect } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { ChatMessage } from "./chat-message"
@@ -14,7 +14,7 @@ import { useState } from "react"
 import { ChatType, User, UserStatus, Message } from "@/types/models"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { LogOut, Loader2, Users, Trash2, X, MoreVertical, Info, Eraser } from "lucide-react"
+import { LogOut, Loader2, Users, Trash2, X, MoreVertical, Info, Eraser, CheckSquare, User as UserIcon } from "lucide-react"
 import { doc, onSnapshot } from "firebase/firestore"
 import { db } from "@/lib/firebase/config"
 import {
@@ -41,10 +41,34 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
 
 const userRepository = new UserRepository()
 const chatRepository = new ChatRepository()
 const messageRepository = new MessageRepository()
+
+// Helper function to safely convert timestamp to Date (handles both Firestore Timestamp and plain objects from cache)
+function timestampToDate(timestamp: any): Date | null {
+  if (!timestamp) return null;
+
+  // If it's a Firestore Timestamp object with toDate method
+  if (typeof timestamp.toDate === 'function') {
+    return timestamp.toDate();
+  }
+
+  // If it's a plain object from cache with seconds property
+  if (timestamp.seconds !== undefined) {
+    return new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
+  }
+
+  return null;
+}
 
 export function ChatRoom({
   chatId,
@@ -102,6 +126,13 @@ export function ChatRoom({
   const [showUserProfileDialog, setShowUserProfileDialog] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const loadMoreTriggerRef = useRef<HTMLDivElement>(null)
+  const isInitialLoad = useRef(true)
+  const isLoadingMore = useRef(false)
+  const hasScrolledToBottom = useRef(false) // Track if we've scrolled to bottom for this chatId
+  const [visibleMessageCount, setVisibleMessageCount] = useState(50) // Initially show 50 messages (increased)
+  const MESSAGES_PER_LOAD = 30 // Load more at once for smoother experience
 
   // Selection mode for delete
   const [selectionMode, setSelectionMode] = useState(false)
@@ -231,7 +262,7 @@ export function ChatRoom({
 
           // Get leftAt timestamp if user has left
           if (!isStillParticipant && groupResult.data.leftMembers?.[currentUserId]) {
-            setLeftAt(groupResult.data.leftMembers[currentUserId].toDate())
+            setLeftAt(timestampToDate(groupResult.data.leftMembers[currentUserId]))
           } else {
             setLeftAt(null)
           }
@@ -455,12 +486,157 @@ export function ChatRoom({
     }
   }, [messages.length, loading, currentUserId, markAsRead])
 
-  // Auto-scroll to bottom when new messages arrive
+  // Scroll to bottom with smooth behavior
+  const scrollToBottom = (instant = false) => {
+    const scrollContainer = scrollContainerRef.current?.querySelector('[data-radix-scroll-area-viewport]')
+
+    if (!scrollContainer) return
+
+    if (instant) {
+      // Force immediate scroll to bottom
+      scrollContainer.scrollTop = scrollContainer.scrollHeight
+    } else {
+      // Smooth scroll using scrollIntoView
+      if (scrollRef.current) {
+        scrollRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      } else {
+        // Fallback: direct scroll if ref not available
+        scrollContainer.scrollTop = scrollContainer.scrollHeight
+      }
+    }
+  }
+
+  // Reset visible message count and scroll flag when switching chatrooms
+  useEffect(() => {
+    setVisibleMessageCount(50) // Start with 50
+    isLoadingMore.current = false
+    hasScrolledToBottom.current = false // Reset scroll flag for new chat
+  }, [chatId])
+
+  // Adjust visible count on first load if we have fewer messages than 50
+  useEffect(() => {
+    if (!loading && messages.length > 0 && messages.length < 50) {
+      setVisibleMessageCount(messages.length)
+    }
+  }, [loading, messages.length])
+
+  // Memoize visible messages to avoid re-computing on every render (must be before scroll effects that use it)
+  const visibleMessages = useMemo(() => {
+    return [...messages].reverse().slice(-visibleMessageCount)
+  }, [messages, visibleMessageCount])
+
+  // Progressive loading with IntersectionObserver (more performant than scroll listener)
+  useEffect(() => {
+    const trigger = loadMoreTriggerRef.current
+    const scrollContainer = scrollContainerRef.current?.querySelector('[data-radix-scroll-area-viewport]')
+
+    if (!trigger || !scrollContainer) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries
+
+        // If trigger is visible and there are more messages to load and not currently loading
+        if (entry.isIntersecting && visibleMessageCount < messages.length && !isLoadingMore.current) {
+          isLoadingMore.current = true
+
+          // Save scroll position and height BEFORE state update
+          const previousScrollHeight = scrollContainer.scrollHeight
+          const previousScrollTop = scrollContainer.scrollTop
+
+          // Load more messages
+          setVisibleMessageCount(prev => {
+            const newCount = Math.min(prev + MESSAGES_PER_LOAD, messages.length)
+
+            // Use double RAF for better timing with React 18+ rendering
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                if (scrollContainer) {
+                  const newScrollHeight = scrollContainer.scrollHeight
+                  const heightDifference = newScrollHeight - previousScrollHeight
+
+                  // Instantly restore scroll position (no smooth scroll) to prevent jumping
+                  if (heightDifference > 0) {
+                    scrollContainer.scrollTop = previousScrollTop + heightDifference
+                  }
+
+                  // Allow next load after a short delay
+                  setTimeout(() => {
+                    isLoadingMore.current = false
+                  }, 100)
+                }
+              })
+            })
+
+            return newCount
+          })
+        }
+      },
+      {
+        root: scrollContainer,
+        rootMargin: '400px', // Start loading 400px before trigger is visible
+        threshold: 0.1
+      }
+    )
+
+    observer.observe(trigger)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [visibleMessageCount, messages.length, MESSAGES_PER_LOAD])
+
+  // Initial scroll to bottom when switching chatrooms - SIMPLE APPROACH
+  useEffect(() => {
+    // Only scroll if:
+    // 1. Not loading
+    // 2. We have messages
+    // 3. We haven't scrolled to bottom yet for this chat
+    if (!loading && messages.length > 0 && visibleMessages.length > 0 && !hasScrolledToBottom.current) {
+      const scrollContainer = scrollContainerRef.current?.querySelector('[data-radix-scroll-area-viewport]')
+
+      if (scrollContainer) {
+        // Mark as initial load
+        isInitialLoad.current = true
+
+        // Simple direct scroll after a short delay to ensure DOM is ready
+        const scrollToEnd = () => {
+          if (scrollContainer && scrollRef.current) {
+            // Use scrollIntoView for more reliable bottom positioning
+            scrollRef.current.scrollIntoView({ behavior: 'auto', block: 'end', inline: 'nearest' })
+          }
+        }
+
+        // Execute scroll multiple times with increasing delays
+        // This catches async content loading without being aggressive
+        const timeouts = [
+          setTimeout(scrollToEnd, 0),      // Immediate
+          setTimeout(scrollToEnd, 50),     // Quick
+          setTimeout(scrollToEnd, 100),    // Medium
+          setTimeout(scrollToEnd, 200),    // Slower
+        ]
+
+        // Mark as scrolled and not initial load after final scroll
+        const finalTimeout = setTimeout(() => {
+          hasScrolledToBottom.current = true // Prevent re-scrolling on this chat
+          isInitialLoad.current = false
+        }, 250)
+
+        return () => {
+          // Cleanup all timeouts
+          timeouts.forEach(clearTimeout)
+          clearTimeout(finalTimeout)
+        }
+      }
+    }
+  }, [chatId, loading, messages.length, visibleMessages.length]) // Trigger when data is ready
+
+  // Auto-scroll to bottom when new messages arrive (only for new messages, not initial load)
   const prevMessagesLengthRef = useRef(messages.length)
   useEffect(() => {
-    // Only scroll if new messages were added (length increased)
-    if (messages.length > prevMessagesLengthRef.current && scrollRef.current) {
-      scrollRef.current.scrollIntoView({ behavior: 'smooth' })
+    // Only scroll if new messages were added (length increased) and not initial load
+    if (!isInitialLoad.current && messages.length > prevMessagesLengthRef.current) {
+      scrollToBottom(false)
     }
     prevMessagesLengthRef.current = messages.length
   }, [messages])
@@ -913,16 +1089,28 @@ export function ChatRoom({
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
-      <ScrollArea className="flex-1 min-h-0" style={{ backgroundImage: 'url(/tile-pattern.png)', backgroundRepeat: 'repeat' }}>
-        {loading ? (
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <ScrollArea ref={scrollContainerRef} className="flex-1 min-h-0 smooth-scroll scroll-optimized" style={{ backgroundImage: 'url(/tile-pattern.png)', backgroundRepeat: 'repeat' }}>
+            {loading ? (
           <div className="mx-auto w-full space-y-3 p-4">
-            {/* Message skeleton loader */}
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className={`flex w-full ${i % 2 === 0 ? 'justify-end' : 'justify-start'}`}>
-                <div className={`flex flex-col gap-2 rounded-xl px-3 py-2 ${i % 2 === 0 ? 'max-w-[80%] ml-auto items-end' : 'max-w-[80%] mr-auto items-start'}`}>
-                  <div className="h-4 w-48 bg-muted rounded animate-pulse" />
-                  <div className="h-4 w-32 bg-muted rounded animate-pulse" />
-                  <div className="h-3 w-12 bg-muted rounded animate-pulse" />
+            {/* Enhanced Message skeleton loader with varied heights */}
+            {[
+              { lines: 2, widths: ['w-64', 'w-48'] },
+              { lines: 1, widths: ['w-32'] },
+              { lines: 3, widths: ['w-56', 'w-64', 'w-40'] },
+              { lines: 2, widths: ['w-48', 'w-36'] },
+              { lines: 1, widths: ['w-44'] },
+              { lines: 2, widths: ['w-52', 'w-60'] },
+              { lines: 3, widths: ['w-64', 'w-56', 'w-32'] },
+              { lines: 1, widths: ['w-40'] },
+            ].map((skeleton, i) => (
+              <div key={i} className={`flex w-full ${i % 2 === 0 ? 'justify-end' : 'justify-start'} animate-in fade-in duration-200`} style={{ animationDelay: `${i * 25}ms` }}>
+                <div className={`flex flex-col gap-2 rounded-xl px-4 py-2 ${i % 2 === 0 ? 'max-w-[80%] ml-auto items-end bg-primary/10' : 'max-w-[80%] mr-auto items-start bg-muted'}`}>
+                  {skeleton.widths.map((width, j) => (
+                    <div key={j} className={`h-4 ${width} bg-muted-foreground/20 rounded animate-pulse`} style={{ animationDuration: '1.5s' }} />
+                  ))}
+                  <div className="h-3 w-16 bg-muted-foreground/20 rounded animate-pulse mt-1" style={{ animationDuration: '1.5s' }} />
                 </div>
               </div>
             ))}
@@ -939,11 +1127,16 @@ export function ChatRoom({
               </div>
             ) : (
               <>
-                {[...messages].reverse().map((m) => {
+                {/* Invisible trigger for IntersectionObserver - positioned at top */}
+                {visibleMessageCount < messages.length && (
+                  <div ref={loadMoreTriggerRef} className="h-px" />
+                )}
+
+                {visibleMessages.map((m, index) => {
                   // Filter messages: if user left, only show messages before leftAt
                   if (leftAt && m.timestamp) {
-                    const messageTime = m.timestamp.toDate()
-                    if (messageTime > leftAt) {
+                    const messageTime = timestampToDate(m.timestamp)
+                    if (messageTime && messageTime > leftAt) {
                       // Skip messages after user left
                       return null
                     }
@@ -960,11 +1153,11 @@ export function ChatRoom({
                     )
                   }
 
-                  const timestamp = m.timestamp?.toDate()
+                  const timestamp = timestampToDate(m.timestamp)
                   const timeStr = timestamp ? format(timestamp, 'HH:mm') : ''
 
                   // Format edited timestamp if exists
-                  const editedAt = m.editedAt?.toDate()
+                  const editedAt = timestampToDate(m.editedAt)
                   const editedTimeStr = editedAt ? format(editedAt, 'HH:mm') : undefined
 
                   // Map message type to ChatMessage type format
@@ -988,7 +1181,11 @@ export function ChatRoom({
                     : userCache.get(m.senderId) || 'Deleted User'
 
                   return (
-                    <div key={m.messageId} data-message-id={m.messageId}>
+                    <div
+                      key={m.messageId}
+                      data-message-id={m.messageId}
+                      className="chat-message-container"
+                    >
                       <ChatMessage
                         data={{
                           id: m.messageId,
@@ -1041,7 +1238,107 @@ export function ChatRoom({
           </div>
         )}
         <div className="h-16" />
-      </ScrollArea>
+          </ScrollArea>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="w-56">
+          {isGroupChat ? (
+            <>
+              <ContextMenuItem
+                onClick={() => {
+                  setSelectionMode(false)
+                  setSelectedMessageIds(new Set())
+                  setShowGroupInfoDialog(true)
+                }}
+              >
+                <Info className="h-4 w-4" />
+                <span>Info grup</span>
+              </ContextMenuItem>
+              <ContextMenuItem
+                onClick={() => {
+                  setSelectionMode(true)
+                  setSelectedMessageIds(new Set())
+                }}
+              >
+                <CheckSquare className="h-4 w-4" />
+                <span>Pilih pesan</span>
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                onClick={() => {
+                  if (onCloseChat) {
+                    onCloseChat()
+                  }
+                }}
+              >
+                <X className="h-4 w-4" />
+                <span>Tutup chat</span>
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                onClick={() => setShowDeleteHistoryDialog(true)}
+              >
+                <Eraser className="h-4 w-4" />
+                <span>Bersihkan chat</span>
+              </ContextMenuItem>
+              <ContextMenuItem
+                onClick={() => setShowDeleteChatDialog(true)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Hapus chat</span>
+              </ContextMenuItem>
+            </>
+          ) : (
+            <>
+              <ContextMenuItem
+                onClick={() => {
+                  if (otherUserId && !isDeletedUser) {
+                    handleHeaderClick()
+                  }
+                }}
+                disabled={isDeletedUser}
+              >
+                <UserIcon className="h-4 w-4" />
+                <span>Info kontak</span>
+              </ContextMenuItem>
+              <ContextMenuItem
+                onClick={() => {
+                  setSelectionMode(true)
+                  setSelectedMessageIds(new Set())
+                }}
+              >
+                <CheckSquare className="h-4 w-4" />
+                <span>Pilih pesan</span>
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                onClick={() => {
+                  if (onCloseChat) {
+                    onCloseChat()
+                  }
+                }}
+              >
+                <X className="h-4 w-4" />
+                <span>Tutup chat</span>
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                onClick={() => setShowDeleteHistoryDialog(true)}
+              >
+                <Eraser className="h-4 w-4" />
+                <span>Bersihkan chat</span>
+              </ContextMenuItem>
+              <ContextMenuItem
+                onClick={() => setShowDeleteChatDialog(true)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Hapus chat</span>
+              </ContextMenuItem>
+            </>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
       <Separator />
       <div className="w-full absolute left-0 right-0 w-full bottom-0">
         {selectionMode ? (

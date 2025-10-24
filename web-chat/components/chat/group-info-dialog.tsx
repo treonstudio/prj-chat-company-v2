@@ -577,7 +577,7 @@ export function GroupInfoDialog({
                       <div
                         key={member.userId}
                         className={cn(
-                          "flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors group",
+                          "flex items-start gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors group ",
                           !isCurrentUser && "cursor-pointer"
                         )}
                         onMouseEnter={() => setHoveredMemberId(member.userId)}
@@ -595,7 +595,7 @@ export function GroupInfoDialog({
                             {member.displayName.slice(0, 2).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
-                        <div className="flex-1 min-w-0 max-w-[calc(100%-140px)]">
+                        <div className="flex-1 min-w-0 max-w-[calc(100%-140px)] pt-1">
                           <div className="flex items-baseline gap-1 mb-0.5">
                             <span className="text-sm font-medium">
                               {member.displayName.length > 35
@@ -610,7 +610,7 @@ export function GroupInfoDialog({
                         </div>
 
                         {/* Right side: Badge and Dropdown horizontal */}
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center flex-col justify-start pt-1">
                           {isAdmin && (
                             <Badge variant="secondary" className="text-xs px-2 py-0.5 font-normal">
                               Admin
@@ -998,6 +998,9 @@ export function GroupInfoDialog({
       {/* Image Viewer Dialog */}
       <Dialog open={showImageViewer} onOpenChange={setShowImageViewer}>
         <DialogContent className="max-w-4xl w-full p-0 bg-black/95 border-0">
+          <DialogTitle asChild>
+            <VisuallyHidden>View Group Avatar</VisuallyHidden>
+          </DialogTitle>
           <div className="relative w-full h-[80vh] flex items-center justify-center">
             {/* Close Button */}
             <button

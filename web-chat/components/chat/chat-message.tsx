@@ -377,9 +377,9 @@ export function ChatMessage({
               onClick={() => onReplyClick?.(data.replyTo!.messageId)}
               className={cn(
                 "flex items-start gap-2 p-2 rounded-lg mb-2 cursor-pointer",
-                "transition-colors border-l-[3px] max-w-[620px] w-full",
+                "transition-colors max-w-[620px] w-full",
                 isMe
-                  ? "bg-white/40 border-white/60"
+                  ? "bg-deeper-green border-white/60 border-l-[0px]"
                   : "bg-deeper-gray border-primary"
               )}
             >

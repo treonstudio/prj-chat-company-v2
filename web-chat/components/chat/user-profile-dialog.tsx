@@ -8,7 +8,7 @@ import { User } from '@/types/models'
 import { MessageSquare, X, ArrowLeft } from 'lucide-react'
 import { SheetTitle } from '@/components/ui/sheet'
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 
 interface UserProfileDialogProps {
@@ -101,6 +101,9 @@ export function UserProfileDialog({
     {/* Image Viewer Dialog */}
     <Dialog open={showImageViewer} onOpenChange={setShowImageViewer}>
       <DialogContent className="max-w-4xl w-full p-0 bg-black/95 border-0">
+        <DialogTitle asChild>
+          <VisuallyHidden>View Profile Picture</VisuallyHidden>
+        </DialogTitle>
         <div className="relative w-full h-[80vh] flex items-center justify-center">
           {/* Close Button */}
           <button
