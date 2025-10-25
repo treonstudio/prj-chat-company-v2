@@ -33,6 +33,7 @@ export enum MessageType {
 }
 
 export enum MessageStatus {
+  PENDING = 'PENDING', // Queued for offline, will auto-send when online
   SENDING = 'SENDING',
   SENT = 'SENT',
   DELIVERED = 'DELIVERED',

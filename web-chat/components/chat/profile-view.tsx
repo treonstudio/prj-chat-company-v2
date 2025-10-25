@@ -36,6 +36,7 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [saving, setSaving] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [showCropDialog, setShowCropDialog] = useState(false)
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [optimisticAvatar, setOptimisticAvatar] = useState<string | null>(null)
@@ -219,10 +220,16 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
 
   const handleCropComplete = async (croppedImageFile: File) => {
     setUploadingAvatar(true)
+    setUploadProgress(0)
 
     try {
-      // Upload to Chatku Asset Server
-      const uploadResult = await storageRepository.uploadAvatar(user.userId, croppedImageFile)
+      // Upload to Chatku Asset Server with progress tracking
+      const uploadResult = await storageRepository.uploadAvatar(
+        user.userId,
+        croppedImageFile,
+        undefined,
+        (progress) => setUploadProgress(progress)
+      )
 
       if (uploadResult.status === 'success') {
         // Immediately update the displayed avatar (optimistic update)
@@ -247,6 +254,7 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
       setOptimisticAvatar(null) // Reset optimistic update on error
     } finally {
       setUploadingAvatar(false)
+      setUploadProgress(0)
       // Clean up object URL
       if (selectedImage) {
         URL.revokeObjectURL(selectedImage)
@@ -278,7 +286,12 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
               <AvatarImage src={currentAvatarUrl} alt="" />
               <AvatarFallback className="text-4xl">
                 {uploadingAvatar ? (
-                  <Loader2 className="h-12 w-12 animate-spin" />
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="h-12 w-12 animate-spin" />
+                    {uploadProgress > 0 && (
+                      <span className="text-xs font-medium">{uploadProgress}%</span>
+                    )}
+                  </div>
                 ) : (
                   user.displayName?.slice(0, 2).toUpperCase()
                 )}
@@ -304,6 +317,13 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
               className="hidden"
             />
           </div>
+
+          {/* Upload progress text */}
+          {uploadingAvatar && uploadProgress > 0 && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Uploading... {uploadProgress}%
+            </p>
+          )}
         </div>
 
         {/* Username Section - Read Only */}

@@ -10,9 +10,10 @@ export class StorageRepository {
    * @param userId - The user ID (not used in new API, kept for backward compatibility)
    * @param file - The image file to upload
    * @param maxSizeInMB - Maximum file size in MB (optional, for extra validation)
+   * @param onProgress - Optional callback for upload progress (0-100)
    * @returns Resource with the download URL
    */
-  async uploadAvatar(userId: string, file: File, maxSizeInMB?: number): Promise<Resource<string>> {
+  async uploadAvatar(userId: string, file: File, maxSizeInMB?: number, onProgress?: (progress: number) => void): Promise<Resource<string>> {
     try {
       // Validate file
       const validationError = validateFile(file, {
@@ -24,8 +25,8 @@ export class StorageRepository {
         return Resource.error(validationError);
       }
 
-      // Upload to Chatku asset server
-      const uploadResult = await uploadFileToChatkuAPI(file);
+      // Upload to Chatku asset server with progress tracking
+      const uploadResult = await uploadFileToChatkuAPI(file, onProgress);
 
       if (uploadResult.status === 'success' && uploadResult.data) {
         return Resource.success(uploadResult.data);

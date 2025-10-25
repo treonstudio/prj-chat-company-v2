@@ -7,15 +7,16 @@ import { ChatMessage } from "./chat-message"
 import { MessageComposer } from "./message-composer"
 import { useMessages } from "@/lib/hooks/use-messages"
 import { useUserStatus } from "@/lib/hooks/use-user-status"
+import { useOnlineStatus } from "@/lib/hooks/use-online-status"
 import { UserRepository } from "@/lib/repositories/user.repository"
 import { ChatRepository } from "@/lib/repositories/chat.repository"
 import { format } from "date-fns"
 import { useState } from "react"
-import { ChatType, User, UserStatus, Message } from "@/types/models"
+import { ChatType, User, UserStatus, Message, MessageStatus } from "@/types/models"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { LogOut, Loader2, Users, Trash2, X, MoreVertical, Info, Eraser, CheckSquare, User as UserIcon } from "lucide-react"
-import { doc, onSnapshot } from "firebase/firestore"
+import { doc, onSnapshot, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase/config"
 import {
   AlertDialog,
@@ -108,6 +109,7 @@ export function ChatRoom({
     retryMessage,
     deleteMessage,
     editMessage,
+    cancelUpload,
   } = useMessages(chatId, isGroupChat, currentUserId)
 
   // CRITICAL: Use initialTitle/initialAvatar from props to prevent flicker
@@ -160,6 +162,64 @@ export function ChatRoom({
   const { status: otherUserStatus, lastSeenText } = useUserStatus(
     !isGroupChat ? otherUserId : null
   )
+
+  // Monitor online status for reconnect handling
+  const { isOnline } = useOnlineStatus()
+
+  // Helper function to compute actual message status based on readBy
+  const computeMessageStatus = useCallback((
+    message: Message,
+    isMe: boolean,
+    isGroupChat: boolean,
+    otherUserId: string | null,
+    groupMembers: User[]
+  ): MessageStatus | undefined => {
+    // Only compute for messages sent by current user
+    if (!isMe) return message.status
+
+    // If message has explicit PENDING, SENDING, or FAILED status, respect it
+    // Don't compute based on readBy for these statuses
+    if (message.status === MessageStatus.PENDING ||
+        message.status === MessageStatus.SENDING ||
+        message.status === MessageStatus.FAILED) {
+      return message.status
+    }
+
+    const readBy = message.readBy || {}
+    const readByUserIds = Object.keys(readBy)
+
+    if (isGroupChat) {
+      // Group chat: READ if all other participants have read it
+      const participantIds = groupMembers
+        .map(m => m.userId)
+        .filter(id => id !== message.senderId) // Exclude sender
+
+      if (participantIds.length === 0) {
+        // No other participants, consider as DELIVERED
+        return MessageStatus.DELIVERED
+      }
+
+      // Check if ALL participants have read it
+      const allRead = participantIds.every(id => readByUserIds.includes(id))
+
+      if (allRead) {
+        return MessageStatus.READ // Blue double check
+      } else if (readByUserIds.length > 0) {
+        return MessageStatus.DELIVERED // Gray double check (some read, not all)
+      } else {
+        return MessageStatus.SENT // Single check
+      }
+    } else {
+      // Direct chat: READ if other user has read it
+      if (otherUserId && readByUserIds.includes(otherUserId)) {
+        return MessageStatus.READ // Blue double check
+      } else if (readByUserIds.length > 0) {
+        return MessageStatus.DELIVERED // Gray double check
+      } else {
+        return MessageStatus.SENT // Single check
+      }
+    }
+  }, [])
 
   // Reset selection, clear cache and reply when chatId changes
   useEffect(() => {
@@ -539,6 +599,51 @@ export function ChatRoom({
 
     return () => unsubscribe()
   }, [chatId, currentUserId, isGroupChat, onLeaveGroup])
+
+  // Refetch group data when reconnecting to ensure role sync
+  // This handles the case where user role changed while offline
+  useEffect(() => {
+    if (!isGroupChat) return
+    if (!isOnline) return // Only trigger when back online
+
+    console.log('[ChatRoom] Network reconnected - syncing group data')
+
+    // Force re-fetch group data from Firestore
+    const groupRef = doc(db(), 'groupChats', chatId)
+    const syncGroupData = async () => {
+      try {
+        const snapshot = await getDoc(groupRef)
+        if (!snapshot.exists()) return
+
+        const groupData = snapshot.data()
+        const admins = groupData?.admins || []
+        const name = groupData?.name || ''
+        const avatar = groupData?.avatar || groupData?.avatarUrl || ''
+        const participantsMap = groupData?.participantsMap || {}
+
+        // Update all group state
+        startTransition(() => {
+          setGroupAdmins(admins)
+          if (name) setRoomTitle(name)
+          if (avatar) setRoomAvatar(avatar)
+
+          // Check if user is still participant
+          if (!participantsMap[currentUserId]) {
+            toast.info('Anda telah dikeluarkan dari grup ini')
+            onLeaveGroup?.()
+          }
+        })
+
+        console.log('[ChatRoom] Group data synced after reconnect:', { admins, name })
+      } catch (error) {
+        console.error('[ChatRoom] Failed to sync group data:', error)
+      }
+    }
+
+    // Small delay to ensure Firestore connection is stable
+    const timeoutId = setTimeout(syncGroupData, 1000)
+    return () => clearTimeout(timeoutId)
+  }, [isOnline, isGroupChat, chatId, currentUserId, onLeaveGroup])
 
   // Mark messages as read when viewing
   useEffect(() => {
@@ -1252,6 +1357,10 @@ export function ChatRoom({
                     ? m.senderName
                     : userCache.get(m.senderId) || 'Deleted User'
 
+                  // Compute actual message status based on readBy
+                  const isMe = m.senderId === currentUserId
+                  const computedStatus = computeMessageStatus(m, isMe, isGroupChat, otherUserId, groupMembers)
+
                   return (
                     <div
                       key={m.messageId}
@@ -1272,7 +1381,7 @@ export function ChatRoom({
                           senderAvatar: m.senderAvatar,
                           timestamp: timeStr,
                           editedAt: editedTimeStr,
-                          status: m.status,
+                          status: computedStatus,
                           error: m.error,
                           isDeleted: m.isDeleted,
                           isForwarded: m.isForwarded,
@@ -1299,6 +1408,7 @@ export function ChatRoom({
                         onLongPress={handleLongPress}
                         onReply={handleReply}
                         onReplyClick={handleReplyClick}
+                        onCancel={cancelUpload}
                       />
                     </div>
                   )

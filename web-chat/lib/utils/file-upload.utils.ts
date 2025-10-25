@@ -21,11 +21,15 @@ interface UploadResponse {
  * Upload file to Chatku asset server
  * @param file - The file to upload (image, video, or document)
  * @param onProgress - Optional callback for upload progress (0-100)
+ * @param abortSignal - Optional AbortSignal to cancel the upload
+ * @param timeoutMs - Timeout in milliseconds (default: 120000ms = 2 minutes)
  * @returns Resource with the uploaded file URL
  */
 export async function uploadFileToChatkuAPI(
   file: File,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  abortSignal?: AbortSignal,
+  timeoutMs: number = 120000 // 2 minutes default timeout
 ): Promise<Resource<string>> {
   try {
     // Create form data
@@ -35,6 +39,21 @@ export async function uploadFileToChatkuAPI(
     // Use XMLHttpRequest for progress tracking
     return new Promise((resolve) => {
       const xhr = new XMLHttpRequest();
+      let timeoutId: NodeJS.Timeout | null = null;
+
+      // Set timeout to prevent hanging uploads
+      timeoutId = setTimeout(() => {
+        xhr.abort();
+        resolve(Resource.error('Upload timeout - network connection too slow or server not responding'));
+      }, timeoutMs);
+
+      // Listen to abort signal
+      if (abortSignal) {
+        abortSignal.addEventListener('abort', () => {
+          if (timeoutId) clearTimeout(timeoutId);
+          xhr.abort();
+        });
+      }
 
       // Track upload progress
       if (onProgress) {
@@ -48,6 +67,9 @@ export async function uploadFileToChatkuAPI(
 
       // Handle completion
       xhr.addEventListener('load', () => {
+        // Clear timeout on successful load
+        if (timeoutId) clearTimeout(timeoutId);
+
         if (xhr.status === 200) {
           try {
             const result: UploadResponse = JSON.parse(xhr.responseText);
@@ -66,11 +88,13 @@ export async function uploadFileToChatkuAPI(
 
       // Handle errors
       xhr.addEventListener('error', () => {
+        if (timeoutId) clearTimeout(timeoutId);
         resolve(Resource.error('Network error occurred during upload'));
       });
 
       xhr.addEventListener('abort', () => {
-        resolve(Resource.error('Upload was cancelled'));
+        if (timeoutId) clearTimeout(timeoutId);
+        resolve(Resource.error('Upload cancelled'));
       });
 
       // Send request

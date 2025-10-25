@@ -15,6 +15,9 @@ export function MessageStatusIcon({ status, className = '' }: MessageStatusIconP
   const iconStyle = { fontSize: 16 };
 
   switch (status) {
+    case MessageStatus.PENDING:
+      return <AccessTimeIcon sx={iconStyle} className={`text-gray-400 ${className}`} />;
+
     case MessageStatus.SENDING:
       return <AccessTimeIcon sx={iconStyle} className={className} />;
 

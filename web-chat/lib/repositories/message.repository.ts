@@ -300,6 +300,7 @@ export class MessageRepository {
     shouldCompress: boolean,
     currentUserAvatar?: string,
     onProgress?: (progress: number) => void,
+    abortSignal?: AbortSignal,
     tempId?: string
   ): Promise<Resource<void>> {
     try {
@@ -320,8 +321,8 @@ export class MessageRepository {
       const extension = this.getFileExtension(fileToUpload);
       const fileName = `IMG_${Date.now()}.${extension}`;
 
-      // Upload to Chatku Asset Server with progress tracking
-      const uploadResult = await uploadFileToChatkuAPI(fileToUpload, onProgress);
+      // Upload to Chatku Asset Server with progress tracking and cancel support
+      const uploadResult = await uploadFileToChatkuAPI(fileToUpload, onProgress, abortSignal);
 
       if (uploadResult.status !== 'success' || !uploadResult.data) {
         return Resource.error('Failed to upload image');
@@ -372,6 +373,7 @@ export class MessageRepository {
     currentUserAvatar?: string,
     onPhaseChange?: (phase: 'compressing' | 'uploading') => void,
     onProgress?: (progress: number) => void,
+    abortSignal?: AbortSignal,
     tempId?: string
   ): Promise<Resource<void>> {
     try {
@@ -398,8 +400,8 @@ export class MessageRepository {
       const extension = this.getFileExtension(fileToUpload);
       const fileName = `VID_${Date.now()}.${extension}`;
 
-      // Upload to Chatku Asset Server with progress tracking
-      const uploadResult = await uploadFileToChatkuAPI(fileToUpload, onProgress);
+      // Upload to Chatku Asset Server with progress tracking and cancel support
+      const uploadResult = await uploadFileToChatkuAPI(fileToUpload, onProgress, abortSignal);
 
       if (uploadResult.status !== 'success' || !uploadResult.data) {
         return Resource.error('Failed to upload video');
@@ -447,6 +449,7 @@ export class MessageRepository {
     isGroupChat: boolean,
     currentUserAvatar?: string,
     onProgress?: (progress: number) => void,
+    abortSignal?: AbortSignal,
     tempId?: string
   ): Promise<Resource<void>> {
     try {
@@ -455,8 +458,8 @@ export class MessageRepository {
       const originalName = documentFile.name;
       const fileName = `DOC_${Date.now()}_${originalName}`;
 
-      // Upload to Chatku Asset Server
-      const uploadResult = await uploadFileToChatkuAPI(documentFile, onProgress);
+      // Upload to Chatku Asset Server with cancel support
+      const uploadResult = await uploadFileToChatkuAPI(documentFile, onProgress, abortSignal);
 
       if (uploadResult.status !== 'success' || !uploadResult.data) {
         const errorMsg = uploadResult.status === 'error' ? uploadResult.message : 'Failed to upload document';

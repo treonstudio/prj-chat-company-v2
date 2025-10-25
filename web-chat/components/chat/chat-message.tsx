@@ -102,6 +102,7 @@ export function ChatMessage({
   onReplyClick,
   isDeletedUser = false,
   userCache,
+  onCancel,
 }: {
   data: ChatMessageUnion
   userCache?: Map<string, string>
@@ -119,6 +120,7 @@ export function ChatMessage({
   onReply?: (messageId: string) => void
   onReplyClick?: (messageId: string) => void
   isDeletedUser?: boolean
+  onCancel?: (messageId: string) => void
 }) {
   const [showImagePreview, setShowImagePreview] = useState(false)
   const [showVideoPreview, setShowVideoPreview] = useState(false)
@@ -691,6 +693,18 @@ export function ChatMessage({
                           <div className="text-xs text-muted-foreground font-medium">
                             Uploading image...
                           </div>
+                          {/* Cancel button */}
+                          {onCancel && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => onCancel(data.id)}
+                              className="mt-2"
+                            >
+                              <X className="h-3 w-3 mr-1" />
+                              Cancel
+                            </Button>
+                          )}
                         </div>
                       </>
                     ) : (
@@ -818,6 +832,18 @@ export function ChatMessage({
                         <div className="text-xs text-muted-foreground font-medium">
                           {'content' in data ? data.content.replace('🎥 ', '') : 'Uploading video...'}
                         </div>
+                        {/* Cancel button */}
+                        {onCancel && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => onCancel(data.id)}
+                            className="mt-2"
+                          >
+                            <X className="h-3 w-3 mr-1" />
+                            Cancel
+                          </Button>
+                        )}
                       </div>
                     </>
                   ) : (
@@ -940,7 +966,20 @@ export function ChatMessage({
                   {data.fileSize && <p className="text-xs opacity-70 mt-1">{data.fileSize}</p>}
                 </div>
                 {data.status === 'SENDING' ? (
-                  <div className="text-xs opacity-70 mt-2">Uploading...</div>
+                  <div className="flex flex-col gap-2 mt-2">
+                    <div className="text-xs opacity-70">Uploading...</div>
+                    {onCancel && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="w-full"
+                        onClick={() => onCancel(data.id)}
+                      >
+                        <X className="h-3 w-3 mr-1" />
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
                 ) : (
                   <Button
                     size="sm"

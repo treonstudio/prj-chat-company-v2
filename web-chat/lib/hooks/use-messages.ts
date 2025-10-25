@@ -8,8 +8,35 @@ import { Timestamp, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { useMessageCache } from '@/lib/stores/message-cache.store';
 import { extractUrls, fetchLinkPreview, LinkPreviewData } from '@/lib/utils/link-preview';
+import { OfflineMessageQueue } from '@/lib/utils/offline-queue';
+import { useOnlineStatus } from '@/lib/hooks/use-online-status';
 
 const messageRepository = new MessageRepository();
+
+// Helper function for retrying operations with exponential backoff
+async function retryOperation<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  let lastError: any;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+
+      if (attempt < maxRetries - 1) {
+        // Exponential backoff: 1s, 2s, 4s
+        const delay = baseDelay * Math.pow(2, attempt);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError;
+}
 
 // Helper function to safely get milliseconds from timestamp (handles both Firestore Timestamp and plain objects from cache)
 function getTimestampMillis(timestamp: any): number {
@@ -63,6 +90,22 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
   const [userJoinedAt, setUserJoinedAt] = useState<Timestamp | null>(null);
   const [deleteHistoryTimestamp, setDeleteHistoryTimestamp] = useState<Timestamp | null>(null);
 
+  // Track abort controllers for ongoing uploads (key: tempId, value: AbortController)
+  const [uploadAbortControllers] = useState<Map<string, AbortController>>(new Map());
+
+  // Track pending uploads (lost on page refresh since Files can't be stored)
+  const [pendingUploads] = useState<Map<string, {
+    file: File;
+    fileType: 'image' | 'video' | 'document';
+    shouldCompress: boolean;
+    userId: string;
+    userName: string;
+    userAvatar?: string;
+  }>>(new Map());
+
+  // Monitor online status for auto-send pending messages
+  const { isOnline } = useOnlineStatus();
+
   useEffect(() => {
     // Reset state when chatId changes
     setUploadingMessage(null);
@@ -70,6 +113,13 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     setOptimisticMessages([]);
     setUserJoinedAt(null);
     setDeleteHistoryTimestamp(null);
+
+    // Cancel any ongoing uploads when switching chats
+    uploadAbortControllers.forEach(controller => controller.abort());
+    uploadAbortControllers.clear();
+
+    // Clear pending uploads (they're chat-specific)
+    pendingUploads.clear();
 
     if (!chatId) {
       setMessages([]);
@@ -194,6 +244,212 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     };
   }, [chatId, isGroupChat, currentUserId]);
 
+  // RESTORE: Load pending messages from localStorage on mount
+  useEffect(() => {
+    if (!chatId) return;
+
+    const pendingMessages = OfflineMessageQueue.getPendingMessagesForChat(chatId);
+
+    if (pendingMessages.length > 0) {
+      console.log('[OfflineQueue] Restoring', pendingMessages.length, 'pending messages');
+
+      // Add pending messages to optimistic messages
+      const restoredMessages = pendingMessages.map(pending => ({
+        ...pending.message,
+        status: MessageStatus.PENDING,
+      }));
+
+      setOptimisticMessages(prev => [...restoredMessages, ...prev]);
+    }
+  }, [chatId]); // Only run when chatId changes
+
+  // AUTO-SEND: Send pending messages when coming back online
+  useEffect(() => {
+    if (!isOnline || !chatId) return;
+
+    // Get pending messages for this chat
+    const pendingMessages = OfflineMessageQueue.getPendingMessagesForChat(chatId);
+
+    if (pendingMessages.length === 0) return;
+
+    console.log('[OfflineQueue] Sending', pendingMessages.length, 'pending messages');
+
+    // Send each pending message
+    pendingMessages.forEach(async (pending) => {
+      // Check if we should retry this message
+      if (!OfflineMessageQueue.shouldRetry(pending.id)) {
+        console.log('[OfflineQueue] Message exceeded retry count:', pending.id);
+        OfflineMessageQueue.removePendingMessage(pending.id);
+
+        // Update UI to show as failed
+        setOptimisticMessages(prev =>
+          prev.map(msg =>
+            msg.messageId === pending.id
+              ? { ...msg, status: MessageStatus.FAILED, error: 'Message exceeded retry limit' }
+              : msg
+          )
+        );
+        return;
+      }
+
+      // Update UI to show as sending
+      setOptimisticMessages(prev =>
+        prev.map(msg =>
+          msg.messageId === pending.id
+            ? { ...msg, status: MessageStatus.SENDING }
+            : msg
+        )
+      );
+
+      try {
+        // Send the message
+        const result = await messageRepository.sendMessage(
+          pending.chatId,
+          pending.message,
+          pending.isGroupChat
+        );
+
+        if (result.status === 'success') {
+          // Success - remove from queue
+          console.log('[OfflineQueue] Message sent successfully:', pending.id);
+          OfflineMessageQueue.removePendingMessage(pending.id);
+
+          // Remove from optimistic messages (real message will appear from listener)
+          setOptimisticMessages(prev =>
+            prev.filter(msg => msg.messageId !== pending.id)
+          );
+        } else {
+          // Failed - increment retry count
+          const errorMessage = result.status === 'error' ? result.message : 'Unknown error';
+          console.log('[OfflineQueue] Message send failed:', pending.id, errorMessage);
+          OfflineMessageQueue.incrementRetryCount(pending.id);
+
+          // Update UI to show as failed
+          setOptimisticMessages(prev =>
+            prev.map(msg =>
+              msg.messageId === pending.id
+                ? { ...msg, status: MessageStatus.FAILED, error: errorMessage }
+                : msg
+            )
+          );
+        }
+      } catch (error: any) {
+        // Error - increment retry count
+        console.error('[OfflineQueue] Error sending message:', pending.id, error);
+        OfflineMessageQueue.incrementRetryCount(pending.id);
+
+        // Update UI to show as failed
+        setOptimisticMessages(prev =>
+          prev.map(msg =>
+            msg.messageId === pending.id
+              ? { ...msg, status: MessageStatus.FAILED, error: error.message || 'Failed to send message' }
+              : msg
+          )
+        );
+      }
+    });
+  }, [isOnline, chatId]);
+
+  // AUTO-SEND: Send pending uploads when coming back online
+  useEffect(() => {
+    if (!isOnline || !chatId || pendingUploads.size === 0) return;
+
+    console.log('[UploadQueue] Sending', pendingUploads.size, 'pending uploads');
+
+    // Process each pending upload
+    pendingUploads.forEach(async (uploadData, tempId) => {
+      // Update UI to show as sending
+      setOptimisticMessages(prev =>
+        prev.map(msg =>
+          msg.messageId === tempId
+            ? { ...msg, status: MessageStatus.SENDING, text: msg.text.replace(' (queued)', '') }
+            : msg
+        )
+      );
+
+      try {
+        let result;
+
+        // Send based on file type
+        if (uploadData.fileType === 'image') {
+          result = await messageRepository.uploadAndSendImage(
+            chatId,
+            uploadData.userId,
+            uploadData.userName,
+            uploadData.file,
+            isGroupChat,
+            uploadData.shouldCompress,
+            uploadData.userAvatar,
+            undefined,
+            undefined,
+            tempId
+          );
+        } else if (uploadData.fileType === 'video') {
+          result = await messageRepository.uploadAndSendVideo(
+            chatId,
+            uploadData.userId,
+            uploadData.userName,
+            uploadData.file,
+            isGroupChat,
+            uploadData.shouldCompress,
+            uploadData.userAvatar,
+            undefined,
+            undefined,
+            undefined,
+            tempId
+          );
+        } else {
+          result = await messageRepository.uploadAndSendDocument(
+            chatId,
+            uploadData.userId,
+            uploadData.userName,
+            uploadData.file,
+            isGroupChat,
+            uploadData.userAvatar,
+            undefined,
+            undefined,
+            tempId
+          );
+        }
+
+        if (result.status === 'success') {
+          // Success - remove from queue and optimistic messages
+          console.log('[UploadQueue] Upload sent successfully:', tempId);
+          pendingUploads.delete(tempId);
+
+          setOptimisticMessages(prev =>
+            prev.filter(msg => msg.messageId !== tempId)
+          );
+        } else {
+          // Failed - mark as failed
+          const errorMessage = result.status === 'error' ? result.message : 'Unknown error';
+          console.log('[UploadQueue] Upload failed:', tempId, errorMessage);
+          pendingUploads.delete(tempId);
+
+          setOptimisticMessages(prev =>
+            prev.map(msg =>
+              msg.messageId === tempId
+                ? { ...msg, status: MessageStatus.FAILED, error: errorMessage }
+                : msg
+            )
+          );
+        }
+      } catch (error: any) {
+        // Error - mark as failed
+        console.error('[UploadQueue] Error sending upload:', tempId, error);
+        pendingUploads.delete(tempId);
+
+        setOptimisticMessages(prev =>
+          prev.map(msg =>
+            msg.messageId === tempId
+              ? { ...msg, status: MessageStatus.FAILED, error: error.message || 'Upload failed' }
+              : msg
+          )
+        );
+      }
+    });
+  }, [isOnline, chatId, pendingUploads, isGroupChat]);
+
   const sendTextMessage = useCallback(
     async (currentUserId: string, currentUserName: string, text: string, currentUserAvatar?: string, replyTo?: ReplyTo | null) => {
       if (!chatId || !text.trim()) return;
@@ -247,25 +503,56 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         tempId: tempId, // Store tempId for deduplication
       };
 
-      const result = await messageRepository.sendMessage(chatId, message, isGroupChat);
-      setSending(false);
+      // OFFLINE QUEUE: If offline, queue message instead of sending
+      if (!navigator.onLine) {
+        console.log('[OfflineQueue] User offline - queueing message:', tempId);
+        OfflineMessageQueue.addPendingMessage(chatId, { ...message, messageId: tempId }, isGroupChat);
+        setSending(false);
 
-      if (result.status === 'error') {
-        // Update optimistic message to failed
+        // Update status to pending (will auto-send when online)
         setOptimisticMessages(prev =>
           prev.map(msg =>
             msg.messageId === tempId
-              ? { ...msg, status: MessageStatus.FAILED, error: result.message }
+              ? { ...msg, status: MessageStatus.PENDING }
               : msg
           )
         );
-        setError(result.message);
-      } else {
+        return;
+      }
+
+      try {
+        // Auto-retry with exponential backoff (max 3 attempts: 0s, 1s, 2s)
+        const result = await retryOperation(
+          async () => {
+            const res = await messageRepository.sendMessage(chatId, message, isGroupChat);
+            if (res.status === 'error') {
+              throw new Error(res.message || 'Failed to send message');
+            }
+            return res;
+          },
+          3, // max retries
+          1000 // base delay 1s
+        );
+
+        setSending(false);
+
         // SUCCESS: Remove optimistic message immediately
         // Real message will appear from Firestore listener
         setOptimisticMessages(prev =>
           prev.filter(msg => msg.messageId !== tempId)
         );
+      } catch (error: any) {
+        setSending(false);
+
+        // All retries failed - mark as FAILED
+        setOptimisticMessages(prev =>
+          prev.map(msg =>
+            msg.messageId === tempId
+              ? { ...msg, status: MessageStatus.FAILED, error: error.message || 'Failed to send message' }
+              : msg
+          )
+        );
+        setError(error.message || 'Failed to send message');
       }
     },
     [chatId, isGroupChat]
@@ -283,6 +570,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
 
       // Create optimistic message
       const tempId = `temp_${Date.now()}_${Math.random()}`;
+
       const optimisticMessage: Message = {
         messageId: tempId,
         senderId: currentUserId,
@@ -297,6 +585,36 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
       };
 
       setOptimisticMessages(prev => [optimisticMessage, ...prev]);
+
+      // OFFLINE QUEUE: If offline, queue upload instead of sending
+      if (!navigator.onLine) {
+        console.log('[UploadQueue] User offline - queueing image upload');
+
+        // Store upload in memory (will auto-send when online)
+        pendingUploads.set(tempId, {
+          file: imageFile,
+          fileType: 'image',
+          shouldCompress,
+          userId: currentUserId,
+          userName: currentUserName,
+          userAvatar: currentUserAvatar,
+        });
+
+        // Update status to pending (will auto-send when online)
+        setOptimisticMessages(prev =>
+          prev.map(msg =>
+            msg.messageId === tempId
+              ? { ...msg, status: MessageStatus.PENDING, text: '🖼️ Photo (queued)' }
+              : msg
+          )
+        );
+        return;
+      }
+
+      // Create abort controller for this upload
+      const abortController = new AbortController();
+      uploadAbortControllers.set(tempId, abortController);
+
       // NOTE: uploading state now managed by MessageComposer internally
       console.log('[IMAGE UPLOAD] Started');
 
@@ -319,21 +637,30 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
               )
             );
           },
+          abortController.signal,
           tempId
         );
 
         console.log('[IMAGE UPLOAD] Repository result:', result.status);
 
+        // Clean up abort controller
+        uploadAbortControllers.delete(tempId);
+
         if (result.status === 'error') {
           console.log('[IMAGE UPLOAD] Error:', result.message);
+
+          // Check if it was cancelled
+          const isCancelled = result.message?.includes('cancelled');
           setOptimisticMessages(prev =>
             prev.map(msg =>
               msg.messageId === tempId
-                ? { ...msg, status: MessageStatus.FAILED, error: result.message }
+                ? { ...msg, status: MessageStatus.FAILED, error: isCancelled ? 'Upload cancelled' : result.message }
                 : msg
             )
           );
-          setError(result.message);
+          if (!isCancelled) {
+            setError(result.message);
+          }
         } else {
           console.log('[IMAGE UPLOAD] Success - removing optimistic message');
           // SUCCESS: Remove optimistic message immediately
@@ -344,6 +671,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         }
       } catch (error) {
         console.error('[IMAGE UPLOAD] Unexpected error:', error);
+        uploadAbortControllers.delete(tempId);
         setOptimisticMessages(prev =>
           prev.map(msg =>
             msg.messageId === tempId
@@ -353,7 +681,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         );
       }
     },
-    [chatId, isGroupChat]
+    [chatId, isGroupChat, uploadAbortControllers, pendingUploads]
   );
 
   const sendVideo = useCallback(
@@ -362,6 +690,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
 
       // Create optimistic message
       const tempId = `temp_${Date.now()}_${Math.random()}`;
+
       const optimisticMessage: Message = {
         messageId: tempId,
         senderId: currentUserId,
@@ -376,6 +705,36 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
       };
 
       setOptimisticMessages(prev => [optimisticMessage, ...prev]);
+
+      // OFFLINE QUEUE: If offline, queue upload instead of sending
+      if (!navigator.onLine) {
+        console.log('[UploadQueue] User offline - queueing video upload');
+
+        // Store upload in memory (will auto-send when online)
+        pendingUploads.set(tempId, {
+          file: videoFile,
+          fileType: 'video',
+          shouldCompress,
+          userId: currentUserId,
+          userName: currentUserName,
+          userAvatar: currentUserAvatar,
+        });
+
+        // Update status to pending (will auto-send when online)
+        setOptimisticMessages(prev =>
+          prev.map(msg =>
+            msg.messageId === tempId
+              ? { ...msg, status: MessageStatus.PENDING, text: '🎥 Video (queued)' }
+              : msg
+          )
+        );
+        return;
+      }
+
+      // Create abort controller for this upload
+      const abortController = new AbortController();
+      uploadAbortControllers.set(tempId, abortController);
+
       // NOTE: uploading state now managed by MessageComposer internally
 
       // Update status to uploading after compression (if compressing)
@@ -423,18 +782,25 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
               )
             );
           },
+          abortController.signal,
           tempId
         );
 
+        // Clean up abort controller
+        uploadAbortControllers.delete(tempId);
+
         if (result.status === 'error') {
+          const isCancelled = result.message?.includes('cancelled');
           setOptimisticMessages(prev =>
             prev.map(msg =>
               msg.messageId === tempId
-                ? { ...msg, status: MessageStatus.FAILED, error: result.message }
+                ? { ...msg, status: MessageStatus.FAILED, error: isCancelled ? 'Upload cancelled' : result.message }
                 : msg
             )
           );
-          setError(result.message);
+          if (!isCancelled) {
+            setError(result.message);
+          }
         } else {
           // SUCCESS: Remove optimistic message immediately
           // Real message will appear from Firestore listener
@@ -443,6 +809,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
           );
         }
       } catch (error) {
+        uploadAbortControllers.delete(tempId);
         setOptimisticMessages(prev =>
           prev.map(msg =>
             msg.messageId === tempId
@@ -452,7 +819,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         );
       }
     },
-    [chatId, isGroupChat]
+    [chatId, isGroupChat, uploadAbortControllers, pendingUploads]
   );
 
   const sendDocument = useCallback(
@@ -475,6 +842,32 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
       };
 
       setOptimisticMessages(prev => [optimisticMessage, ...prev]);
+
+      // OFFLINE QUEUE: If offline, queue upload instead of sending
+      if (!navigator.onLine) {
+        console.log('[UploadQueue] User offline - queueing document upload');
+
+        // Store upload in memory (will auto-send when online)
+        pendingUploads.set(tempId, {
+          file: documentFile,
+          fileType: 'document',
+          shouldCompress: false,
+          userId: currentUserId,
+          userName: currentUserName,
+          userAvatar: currentUserAvatar,
+        });
+
+        // Update status to pending (will auto-send when online)
+        setOptimisticMessages(prev =>
+          prev.map(msg =>
+            msg.messageId === tempId
+              ? { ...msg, status: MessageStatus.PENDING, text: `📄 ${documentFile.name} (queued)` }
+              : msg
+          )
+        );
+        return;
+      }
+
       // NOTE: uploading state now managed by MessageComposer internally
 
       try {
@@ -485,6 +878,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
           documentFile,
           isGroupChat,
           currentUserAvatar,
+          undefined,
           undefined,
           tempId
         );
@@ -515,7 +909,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         );
       }
     },
-    [chatId, isGroupChat]
+    [chatId, isGroupChat, pendingUploads]
   );
 
   const markAsRead = useCallback(
@@ -634,6 +1028,27 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     });
   }, [messages, optimisticMessages]);
 
+  /**
+   * Cancel an ongoing upload
+   */
+  const cancelUpload = useCallback((messageId: string) => {
+    const abortController = uploadAbortControllers.get(messageId);
+    if (abortController) {
+      console.log('[UPLOAD CANCEL] Cancelling upload:', messageId);
+      abortController.abort();
+      uploadAbortControllers.delete(messageId);
+
+      // Update message status to cancelled
+      setOptimisticMessages(prev =>
+        prev.map(msg =>
+          msg.messageId === messageId
+            ? { ...msg, status: MessageStatus.FAILED, error: 'Upload cancelled' }
+            : msg
+        )
+      );
+    }
+  }, [uploadAbortControllers]);
+
   return {
     messages: allMessages,
     loading,
@@ -649,5 +1064,6 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     retryMessage,
     deleteMessage,
     editMessage,
+    cancelUpload,
   };
 }
