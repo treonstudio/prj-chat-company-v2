@@ -959,7 +959,7 @@ export function ChatRoom({
 
   return (
     <div className="flex h-full w-full min-h-0 flex-col relative">
-      <header className="flex items-center justify-between border-b px-4 py-3 shadow-sm z-10" style={{ backgroundColor: '#fafafa' }}>
+      <header className="flex items-center justify-between border-b py-3 shadow-sm z-10" style={{ backgroundColor: '#fafafa' }}>
         <button
           onClick={handleHeaderClick}
           className="flex items-center gap-3 flex-1 min-w-0 hover:bg-muted/50 transition-colors rounded-lg px-2 py-1 -ml-2 disabled:hover:bg-transparent"
@@ -1340,10 +1340,10 @@ export function ChatRoom({
         </ContextMenuContent>
       </ContextMenu>
       <Separator />
-      <div className="w-full absolute left-0 right-0 w-full bottom-0">
+      <div className="message-composer absolute left-0 bottom-0">
         {selectionMode ? (
           /* Selection toolbar */
-          <div className="flex items-center justify-between border-t px-4 py-3 bg-background shadow-sm">
+          <div className="flex items-center justify-between border-t py-3 bg-background shadow-sm">
             <div className="flex items-center gap-3 flex-1">
               <Button variant="ghost" size="icon" onClick={handleCancelSelection}>
                 <X className="h-5 w-5" />
@@ -1375,12 +1375,10 @@ export function ChatRoom({
           <div className="flex flex-col">
             {/* Reply preview bar - mepet dengan message composer */}
             {replyingTo && (
-              <div className="px-4">
                 <ReplyPreviewBar
                   replyingTo={replyingTo}
                   onCancel={handleCancelReply}
                 />
-              </div>
             )}
             <MessageComposer
               isReplying={replyingTo !== null}

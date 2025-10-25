@@ -6,6 +6,7 @@ import { Message, MessageType, MessageStatus, ReplyTo } from '@/types/models';
 import { Timestamp, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { useMessageCache } from '@/lib/stores/message-cache.store';
+import { extractUrls, fetchLinkPreview, LinkPreviewData } from '@/lib/utils/link-preview';
 
 const messageRepository = new MessageRepository();
 
@@ -189,6 +190,20 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     async (currentUserId: string, currentUserName: string, text: string, currentUserAvatar?: string, replyTo?: ReplyTo | null) => {
       if (!chatId || !text.trim()) return;
 
+      // Extract URLs and fetch link preview for the first URL
+      const urls = extractUrls(text.trim());
+      let linkPreview: LinkPreviewData | null = null;
+
+      if (urls.length > 0) {
+        try {
+          // Fetch preview for the first URL only
+          linkPreview = await fetchLinkPreview(urls[0]);
+        } catch (error) {
+          console.error('Error fetching link preview:', error);
+          // Continue without preview if fetch fails
+        }
+      }
+
       // Create optimistic message
       const tempId = `temp_${Date.now()}_${Math.random()}`;
       const optimisticMessage: Message = {
@@ -203,6 +218,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         timestamp: Timestamp.now(),
         status: MessageStatus.SENDING,
         replyTo: replyTo || null,
+        linkPreview: linkPreview,
       };
 
       // Add to optimistic messages immediately
@@ -219,6 +235,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         readBy: {},
         deliveredTo: {},
         replyTo: replyTo || null,
+        linkPreview: linkPreview,
       };
 
       const result = await messageRepository.sendMessage(chatId, message, isGroupChat);

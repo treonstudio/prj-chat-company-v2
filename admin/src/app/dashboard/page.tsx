@@ -666,6 +666,18 @@ export default function DashboardPage() {
 
     setIsLoading(true)
 
+    console.log('=== Creating User ===');
+    console.log('Username:', username);
+    console.log('Display Name:', displayName);
+    console.log('Has Photo:', !!photoFile);
+    if (photoFile) {
+      console.log('Photo File:', {
+        name: photoFile.name,
+        type: photoFile.type,
+        size: (photoFile.size / 1024).toFixed(2) + ' KB'
+      });
+    }
+
     try {
       const { result, error } = await createUser(username, password, {
         displayName: displayName.trim(),

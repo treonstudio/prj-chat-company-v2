@@ -26,6 +26,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
+import { LinkPreviewCard } from "./link-preview-card"
+import { linkifyText } from "@/lib/utils/linkify"
 
 type Base = {
   id: string
@@ -45,6 +47,14 @@ type Base = {
     text: string
     type: string
     mediaUrl?: string | null
+  } | null
+  linkPreview?: {
+    url: string
+    title?: string
+    description?: string
+    image?: string
+    siteName?: string
+    favicon?: string
   } | null
 }
 
@@ -69,6 +79,11 @@ type CallMsg = Base & {
 }
 
 export type ChatMessageUnion = TextMsg | ImageMsg | VideoMsg | DocMsg | CallMsg
+
+// Type guard to check if message is a call message
+function isCallMessage(data: ChatMessageUnion): data is CallMsg {
+  return data.type === "voice_call" || data.type === "video_call";
+}
 
 export function ChatMessage({
   data,
@@ -468,7 +483,7 @@ export function ChatMessage({
                   {data.content.length > CHAR_LIMIT && !isExpanded ? (
                     <>
                       <p className="whitespace-pre-wrap break-words overflow-wrap-anywhere chat-text-safe">
-                        {sanitizeMessageText(data.content.slice(0, CHAR_LIMIT))}...
+                        {linkifyText(sanitizeMessageText(data.content.slice(0, CHAR_LIMIT)), isMe)}...
                       </p>
                       <button
                         onClick={() => setIsExpanded(true)}
@@ -482,7 +497,9 @@ export function ChatMessage({
                     </>
                   ) : (
                     <>
-                      <p className="whitespace-pre-wrap break-words overflow-wrap-anywhere chat-text-safe">{sanitizeMessageText(data.content)}</p>
+                      <p className="whitespace-pre-wrap break-words overflow-wrap-anywhere chat-text-safe">
+                        {linkifyText(sanitizeMessageText(data.content), isMe)}
+                      </p>
                       {data.content.length > CHAR_LIMIT && (
                         <button
                           onClick={() => setIsExpanded(false)}
@@ -497,6 +514,11 @@ export function ChatMessage({
                     </>
                   )}
                 </div>
+              )}
+
+              {/* Link Preview Card */}
+              {!data.isDeleted && data.linkPreview && (
+                <LinkPreviewCard preview={data.linkPreview} isMe={isMe} />
               )}
             </>
           )}
@@ -514,9 +536,9 @@ export function ChatMessage({
                   const iconSize = "h-5 w-5"
 
                   if (status === "missed") {
-                    return <PhoneMissed className={`${iconSize} text-red-500`} />
+                    return <PhoneMissed className={`${iconSize} ${isMe ? 'text-white' : 'text-red-500'}`} />
                   } else if (status === "declined") {
-                    return <PhoneOff className={`${iconSize} text-red-500`} />
+                    return <PhoneOff className={`${iconSize} ${isMe ? 'text-white' : 'text-red-500'}`} />
                   } else if (status === "cancelled") {
                     return <PhoneOff className={`${iconSize} text-muted-foreground`} />
                   } else if (status === "completed") {
@@ -538,7 +560,7 @@ export function ChatMessage({
                   <span className={cn(
                     "text-sm",
                     (data as CallMsg).callMetadata?.status === "missed" || (data as CallMsg).callMetadata?.status === "declined"
-                      ? "text-red-500"
+                      ? isMe ? "text-white" : "text-red-500"
                       : (data as CallMsg).callMetadata?.status === "cancelled"
                       ? "text-muted-foreground"
                       : ""
@@ -687,17 +709,19 @@ export function ChatMessage({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                  {/* Forward */}
-                  <DropdownMenuItem
-                    className="flex items-center gap-2"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onForward?.(data.id)
-                    }}
-                  >
-                    <Forward className="h-4 w-4" />
-                    <span>Teruskan</span>
-                  </DropdownMenuItem>
+                  {/* Forward - hide for call messages */}
+                  {!isCallMessage(data) && (
+                    <DropdownMenuItem
+                      className="flex items-center gap-2"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onForward?.(data.id)
+                      }}
+                    >
+                      <Forward className="h-4 w-4" />
+                      <span>Teruskan</span>
+                    </DropdownMenuItem>
+                  )}
 
                   {/* Reply */}
                   <DropdownMenuItem
@@ -813,8 +837,8 @@ export function ChatMessage({
 
           </div>
 
-          {/* Forward button - appears on hover (hide for deleted messages and selection mode) */}
-          {onForward && !selectionMode && !data.isDeleted && (
+          {/* Forward button - appears on hover (hide for deleted messages, call messages, and selection mode) */}
+          {onForward && !selectionMode && !data.isDeleted && !isCallMessage(data) && (
             <button
               onClick={() => onForward(data.id)}
               style={{

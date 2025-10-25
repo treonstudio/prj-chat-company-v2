@@ -2,14 +2,14 @@ import { initializeApp } from "firebase/app";
 import { createUserWithEmailAndPassword, getAuth, Auth } from "firebase/auth";
 import { serverTimestamp } from "firebase/firestore";
 import addData from "../firestore/addData";
-import uploadPhoto from "../storage/uploadPhoto";
+import uploadPhoto from "../storage/uploadPhoto"; // Now uses Chatku Asset Server API
 
 // Firebase configuration - same as main app
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET, // Keep for backward compatibility
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
@@ -53,6 +53,7 @@ export default async function createUser(username: string, password: string, add
       // Upload photo if provided
       let imageURL = null;
       if (additionalData?.photoFile) {
+        console.log("Starting photo upload for user:", userCredential.user.uid);
         const { result: uploadResult, error: uploadError } = await uploadPhoto(
           additionalData.photoFile,
           userCredential.user.uid
@@ -60,8 +61,12 @@ export default async function createUser(username: string, password: string, add
 
         if (uploadError) {
           console.error("Error uploading photo:", uploadError);
-        } else {
+          // Don't fail user creation if photo upload fails, but log it
+        } else if (uploadResult) {
           imageURL = uploadResult;
+          console.log("Photo uploaded successfully, URL:", imageURL);
+        } else {
+          console.warn("Photo upload returned no result and no error");
         }
       }
 
@@ -78,6 +83,13 @@ export default async function createUser(username: string, password: string, add
         ...(imageURL && { imageURL }), // Add imageURL only if it exists
         ...restAdditionalData,
       };
+
+      console.log("Saving user data to Firestore:", {
+        ...userData,
+        createdAt: "[serverTimestamp]",
+        hasImageURL: !!imageURL,
+        imageURL: imageURL || "not set"
+      });
 
       const { error: firestoreError } = await addData(
         "users",

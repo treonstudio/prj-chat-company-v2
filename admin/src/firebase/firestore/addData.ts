@@ -16,12 +16,15 @@ export default async function addData(
   let error = null;
 
   try {
+    console.log(`[addData] Saving to ${collection}/${id}:`, data);
     // Set the document with the provided data in the specified collection and ID
     result = await setDoc(doc(db, collection, id), data, {
       merge: true, // Merge the new data with existing document data
     });
+    console.log(`[addData] Successfully saved to ${collection}/${id}`);
   } catch (e) {
     // Catch and store any error that occurs during the operation
+    console.error(`[addData] Error saving to ${collection}/${id}:`, e);
     error = e;
   }
 

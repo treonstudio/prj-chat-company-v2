@@ -240,3 +240,19 @@
 .dark *::-webkit-scrollbar-thumb:active {
   background-color: rgba(255, 255, 255, 0.6);
 }
+
+.message-composer {
+    width: calc(100% - 2rem);
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.message-link-me {
+  color: rgb(153 232 153);
+  text-decoration-color: rgb(153 232 153);
+}
+
+.message-link-other {
+  color: rgb(37 102 237);
+  text-decoration-color: rgb(37 102 237);
+}

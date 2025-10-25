@@ -63,6 +63,15 @@ export interface CallMetadata {
   status: 'completed' | 'missed' | 'declined' | 'cancelled';
 }
 
+export interface LinkPreview {
+  url: string;
+  title?: string;
+  description?: string;
+  image?: string;
+  siteName?: string;
+  favicon?: string;
+}
+
 export interface Message {
   messageId: string;
   senderId: string;
@@ -86,6 +95,7 @@ export interface Message {
   isForwarded?: boolean; // Track if message was forwarded
   hideFrom?: Record<string, Timestamp>; // For "Delete for Me" - maps userId to deletion timestamp
   replyTo?: ReplyTo | null; // For reply/quote message feature
+  linkPreview?: LinkPreview | null; // For link preview in text messages
 }
 
 // Chat models

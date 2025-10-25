@@ -16,8 +16,8 @@ export class AuthRepository {
    */
   private getAuthErrorMessage(errorCode: string): string {
     const errorMessages: Record<string, string> = {
-      'auth/invalid-credential': 'Email atau password yang Anda masukkan salah',
-      'auth/user-not-found': 'Email tidak terdaftar',
+      'auth/invalid-credential': 'Username atau password yang Anda masukkan salah',
+      'auth/user-not-found': 'Username tidak terdaftar',
       'auth/wrong-password': 'Password yang Anda masukkan salah',
       'auth/invalid-email': 'Format email tidak valid',
       'auth/user-disabled': 'Akun Anda telah dinonaktifkan',

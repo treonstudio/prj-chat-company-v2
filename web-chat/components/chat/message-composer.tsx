@@ -278,7 +278,7 @@ export function MessageComposer({
 
   return (
     <>
-      <form onSubmit={handleSubmit} className={cn("flex flex-col gap-2 px-4 py-3", isReplying ? "pt-0" : "")}>
+      <form onSubmit={handleSubmit} className={cn("flex flex-col gap-2 py-3", isReplying ? "pt-0" : "")}>
         {/* WhatsApp-style floating rounded input container */}
         <div className={cn("flex items-center gap-2 bg-white px-2 py-1.5 shadow-md", isReplying ? "rounded-none rounded-b-[1.6rem]" : "rounded-full")}>
           {/* Attachment menu - only show if allowSendMedia is true */}
