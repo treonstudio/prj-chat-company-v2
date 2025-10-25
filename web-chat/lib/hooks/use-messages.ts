@@ -402,17 +402,19 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
           shouldCompress,
           currentUserAvatar,
           (phase) => {
-            // Update message based on phase
-            setOptimisticMessages(prev =>
-              prev.map(msg =>
-                msg.messageId === tempId
-                  ? { ...msg, text: phase === 'compressing' ? '🎥 Compressing...' : '🎥 Uploading...' }
-                  : msg
-              )
-            );
+            // Update message based on phase (only for compressing, uploading handled by progress callback)
+            if (phase === 'compressing') {
+              setOptimisticMessages(prev =>
+                prev.map(msg =>
+                  msg.messageId === tempId
+                    ? { ...msg, text: '🎥 Compressing...' }
+                    : msg
+                )
+              );
+            }
           },
           (progress) => {
-            // Update message with upload progress
+            // Update message with upload progress percentage
             setOptimisticMessages(prev =>
               prev.map(msg =>
                 msg.messageId === tempId
