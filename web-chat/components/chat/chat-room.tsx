@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useMemo, useCallback, useLayoutEffect } from "react"
+import { useEffect, useRef, useMemo, useCallback, useLayoutEffect, startTransition } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { ChatMessage } from "./chat-message"
@@ -76,6 +76,8 @@ export function ChatRoom({
   currentUserName,
   currentUserAvatar,
   isGroupChat,
+  initialTitle,
+  initialAvatar,
   onLeaveGroup,
   onChatSelect,
   onCloseChat,
@@ -85,8 +87,10 @@ export function ChatRoom({
   currentUserName: string
   currentUserAvatar?: string
   isGroupChat: boolean
+  initialTitle?: string
+  initialAvatar?: string
   onLeaveGroup?: () => void
-  onChatSelect?: (chatId: string, isGroup: boolean) => void
+  onChatSelect?: (chatId: string, isGroup: boolean, chatName?: string, chatAvatar?: string) => void
   onCloseChat?: () => void
 }) {
   const {
@@ -106,9 +110,16 @@ export function ChatRoom({
     editMessage,
   } = useMessages(chatId, isGroupChat, currentUserId)
 
-  const [roomTitle, setRoomTitle] = useState<string>('Chat')
-  const [roomAvatar, setRoomAvatar] = useState<string>('')
+  // CRITICAL: Use initialTitle/initialAvatar from props to prevent flicker
+  const [roomTitle, setRoomTitle] = useState<string>(initialTitle || 'Chat')
+  const [roomAvatar, setRoomAvatar] = useState<string>(initialAvatar || '')
   const [otherUserId, setOtherUserId] = useState<string | null>(null)
+
+  // Sync with initial props when they change (chat switch)
+  useEffect(() => {
+    if (initialTitle) setRoomTitle(initialTitle)
+    if (initialAvatar !== undefined) setRoomAvatar(initialAvatar)
+  }, [chatId, initialTitle, initialAvatar])
   const [groupMembers, setGroupMembers] = useState<User[]>([])
   const [groupAdmins, setGroupAdmins] = useState<string[]>([])
   const [showGroupInfoDialog, setShowGroupInfoDialog] = useState(false)
@@ -246,26 +257,30 @@ export function ChatRoom({
         console.log('[ChatRoom] Group chat result:', groupResult)
 
         if (groupResult.status === 'success') {
-          setRoomTitle(groupResult.data.name)
-          setRoomAvatar(groupResult.data.avatar || groupResult.data.avatarUrl || '')
-          setGroupAdmins(groupResult.data.admins || [])
+          // CRITICAL: Batch all initial state updates to prevent flickering
+          // Use startTransition for non-urgent updates
+          startTransition(() => {
+            setRoomTitle(groupResult.data.name)
+            setRoomAvatar(groupResult.data.avatar || groupResult.data.avatarUrl || '')
+            setGroupAdmins(groupResult.data.admins || [])
 
-          console.log('[ChatRoom] Group info loaded:', {
-            name: groupResult.data.name,
-            participants: groupResult.data.participants,
-            admins: groupResult.data.admins,
+            console.log('[ChatRoom] Group info loaded:', {
+              name: groupResult.data.name,
+              participants: groupResult.data.participants,
+              admins: groupResult.data.admins,
+            })
+
+            // Check if current user is still a participant
+            const isStillParticipant = groupResult.data.participants.includes(currentUserId)
+            setIsParticipant(isStillParticipant)
+
+            // Get leftAt timestamp if user has left
+            if (!isStillParticipant && groupResult.data.leftMembers?.[currentUserId]) {
+              setLeftAt(timestampToDate(groupResult.data.leftMembers[currentUserId]))
+            } else {
+              setLeftAt(null)
+            }
           })
-
-          // Check if current user is still a participant
-          const isStillParticipant = groupResult.data.participants.includes(currentUserId)
-          setIsParticipant(isStillParticipant)
-
-          // Get leftAt timestamp if user has left
-          if (!isStillParticipant && groupResult.data.leftMembers?.[currentUserId]) {
-            setLeftAt(timestampToDate(groupResult.data.leftMembers[currentUserId]))
-          } else {
-            setLeftAt(null)
-          }
 
           // Fetch all group members initially
           const memberPromises = groupResult.data.participants.map(userId =>
@@ -299,7 +314,11 @@ export function ChatRoom({
             }
           })
           console.log('[ChatRoom] All members loaded:', members)
-          setGroupMembers(members)
+
+          // CRITICAL: Use startTransition to prevent blocking render
+          startTransition(() => {
+            setGroupMembers(members)
+          })
 
           // Setup real-time listeners for each group member
           console.log('[ChatRoom] Setting up real-time listeners for group members')
@@ -307,22 +326,34 @@ export function ChatRoom({
             const unsubscribe = userRepository.listenToUser(
               userId,
               (userData: User) => {
-                console.log('[ChatRoom] Group member data updated:', {
-                  userId: userData.userId,
-                  displayName: userData.displayName
-                })
                 // Update this specific member in the groupMembers array
                 setGroupMembers(prevMembers => {
+                  // Find existing member to compare
+                  const existingMember = prevMembers.find(m => m.userId === userId)
+
+                  // Handle deleted user or missing displayName
+                  const displayName = userData.displayName && userData.displayName.trim() !== ''
+                    ? userData.displayName
+                    : 'Deleted User'
+
+                  const newEmail = userData.email || 'deleted@user.com'
+
+                  // CRITICAL: Skip update if data hasn't changed (prevent unnecessary re-renders)
+                  if (existingMember &&
+                      existingMember.displayName === displayName &&
+                      existingMember.email === newEmail &&
+                      existingMember.status === userData.status &&
+                      existingMember.imageURL === userData.imageURL &&
+                      existingMember.imageUrl === userData.imageUrl) {
+                    return prevMembers // No change, return same reference to prevent re-render
+                  }
+
                   const updatedMembers = prevMembers.map(member => {
                     if (member.userId === userId) {
-                      // Handle deleted user or missing displayName
-                      const displayName = userData.displayName && userData.displayName.trim() !== ''
-                        ? userData.displayName
-                        : 'Deleted User'
                       return {
                         ...userData,
                         displayName,
-                        email: userData.email || 'deleted@user.com'
+                        email: newEmail
                       }
                     }
                     return member
@@ -351,7 +382,9 @@ export function ChatRoom({
           })
         }
         // Reset for group chats
-        setIsDeletedUser(false)
+        startTransition(() => {
+          setIsDeletedUser(false)
+        })
       } else {
         // For direct chats, get the other user's info and listen for changes
         const parts = chatId.replace('direct_', '').split('_')
@@ -359,9 +392,12 @@ export function ChatRoom({
         console.log('[ChatRoom] Direct chat - Other user ID:', foundOtherUserId)
 
         if (foundOtherUserId) {
-          setOtherUserId(foundOtherUserId)
+          startTransition(() => {
+            setOtherUserId(foundOtherUserId)
+          })
 
           // Setup real-time listener for user data
+          let prevData = { displayName: '', avatar: '', isDeleted: false }
           unsubscribeDirectUser = userRepository.listenToUser(
             foundOtherUserId,
             (userData: User) => {
@@ -369,21 +405,34 @@ export function ChatRoom({
               const displayName = userData.displayName && userData.displayName.trim() !== ''
                 ? userData.displayName
                 : 'Deleted User'
-              console.log('[ChatRoom] Direct chat user data updated:', {
-                userId: userData.userId,
-                displayName,
-                isDeleted: displayName === 'Deleted User'
+              const avatar = userData.imageURL || userData.imageUrl || ''
+              const isDeleted = displayName === 'Deleted User'
+
+              // CRITICAL: Skip update if data hasn't changed (prevent unnecessary re-renders)
+              if (prevData.displayName === displayName &&
+                  prevData.avatar === avatar &&
+                  prevData.isDeleted === isDeleted) {
+                return // No change, skip state updates
+              }
+
+              // Update previous data
+              prevData = { displayName, avatar, isDeleted }
+
+              // CRITICAL: Use startTransition for smoother updates
+              startTransition(() => {
+                setRoomTitle(displayName)
+                setRoomAvatar(avatar)
+                setIsDeletedUser(isDeleted)
               })
-              setRoomTitle(displayName)
-              setRoomAvatar(userData.imageURL || userData.imageUrl || '')
-              setIsDeletedUser(displayName === 'Deleted User')
             },
             (error: string) => {
               // User not found or error
               console.error('[ChatRoom] Error listening to user:', error)
-              setRoomTitle('Deleted User')
-              setRoomAvatar('')
-              setIsDeletedUser(true)
+              startTransition(() => {
+                setRoomTitle('Deleted User')
+                setRoomAvatar('')
+                setIsDeletedUser(true)
+              })
             }
           )
         } else {
@@ -415,6 +464,13 @@ export function ChatRoom({
 
     console.log('[ChatRoom] Setting up real-time listener for group:', chatId)
 
+    // Track previous values to prevent unnecessary re-renders
+    let prevGroupData = {
+      admins: [] as string[],
+      name: '',
+      avatar: ''
+    }
+
     // Listen to group document for participant changes and admin updates
     const groupRef = doc(db(), 'groupChats', chatId)
     const unsubscribe = onSnapshot(
@@ -432,6 +488,8 @@ export function ChatRoom({
         const participantsMap = groupData?.participantsMap || {}
         const participants = groupData?.participants || []
         const admins = groupData?.admins || []
+        const name = groupData?.name || ''
+        const avatar = groupData?.avatar || groupData?.avatarUrl || ''
 
         console.log('[ChatRoom] Real-time group update:', {
           participants,
@@ -441,15 +499,29 @@ export function ChatRoom({
           currentUserInParticipantsMap: !!participantsMap[currentUserId]
         })
 
-        // Update admins state in real-time
-        setGroupAdmins(admins)
-
-        // Update room title and avatar in real-time
-        if (groupData?.name) {
-          setRoomTitle(groupData.name)
+        // CRITICAL: Only update admins if changed (prevent re-render)
+        const adminsChanged = JSON.stringify(prevGroupData.admins) !== JSON.stringify(admins)
+        if (adminsChanged) {
+          startTransition(() => {
+            setGroupAdmins(admins)
+          })
+          prevGroupData.admins = admins
         }
-        if (groupData?.avatar || groupData?.avatarUrl) {
-          setRoomAvatar(groupData.avatar || groupData.avatarUrl || '')
+
+        // CRITICAL: Only update room title if changed (prevent re-render)
+        if (name && name !== prevGroupData.name) {
+          startTransition(() => {
+            setRoomTitle(name)
+          })
+          prevGroupData.name = name
+        }
+
+        // CRITICAL: Only update room avatar if changed (prevent re-render)
+        if (avatar !== prevGroupData.avatar) {
+          startTransition(() => {
+            setRoomAvatar(avatar)
+          })
+          prevGroupData.avatar = avatar
         }
 
         // Check if current user is still in participantsMap

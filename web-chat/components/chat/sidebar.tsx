@@ -7,7 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState, useEffect, memo } from "react"
 import { useChatList } from "@/lib/hooks/use-chat-list"
 import { useAuth } from "@/lib/contexts/auth.context"
 import { useFeatureFlags } from "@/lib/contexts/feature-flags.context"
@@ -31,7 +31,7 @@ export function Sidebar({
   currentUserName: string
   currentUserData: User
   selectedChatId?: string | null
-  onChatSelect: (chatId: string, isGroup: boolean) => void
+  onChatSelect: (chatId: string, isGroup: boolean, chatName?: string, chatAvatar?: string) => void
 }) {
   const [query, setQuery] = useState("")
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -69,19 +69,27 @@ export function Sidebar({
           draftMap[chat.chatId] = draft
         }
       })
-      setDrafts(draftMap)
+
+      // Only update state if drafts actually changed (prevent unnecessary re-renders)
+      setDrafts(prev => {
+        const hasChanges = Object.keys(draftMap).length !== Object.keys(prev).length ||
+          Object.keys(draftMap).some(key => draftMap[key] !== prev[key])
+
+        return hasChanges ? draftMap : prev
+      })
     }
 
     loadDrafts()
 
-    // Set up interval to refresh drafts (in case they're updated in another tab or component)
-    const interval = setInterval(loadDrafts, 1000)
+    // CRITICAL: Use much longer interval to reduce re-renders (10 seconds instead of 1 second)
+    // This prevents glitch/flicker when uploading files
+    const interval = setInterval(loadDrafts, 10000)
     return () => clearInterval(interval)
   }, [chats])
 
-  const handleChatClick = (chatId: string, isGroup: boolean) => {
+  const handleChatClick = (chatId: string, isGroup: boolean, chatName?: string, chatAvatar?: string) => {
     setActiveId(chatId)
-    onChatSelect(chatId, isGroup)
+    onChatSelect(chatId, isGroup, chatName, chatAvatar)
   }
 
   const filtered = useMemo(() => {
@@ -278,7 +286,7 @@ export function Sidebar({
               return (
                 <li key={c.chatId}>
                   <button
-                    onClick={() => handleChatClick(c.chatId, isGroup)}
+                    onClick={() => handleChatClick(c.chatId, isGroup, name, avatar || undefined)}
                     className={cn(
                       "w-full px-4 py-3 text-left transition-colors",
                       activeId === c.chatId ? "bg-accent" : "hover:bg-muted",

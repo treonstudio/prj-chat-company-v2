@@ -11,8 +11,9 @@ let ffmpegLoading = false;
 
 /**
  * Load FFmpeg.wasm (lazy loading)
+ * Can be called early to pre-load FFmpeg for faster video compression
  */
-async function loadFFmpeg(): Promise<FFmpeg> {
+export async function loadFFmpeg(): Promise<FFmpeg> {
   if (ffmpeg) return ffmpeg;
 
   if (ffmpegLoading) {
@@ -97,20 +98,21 @@ export async function compressVideo(
     await ffmpegInstance.writeFile(inputFileName, await fetchFile(file));
 
     // Calculate CRF value from quality (lower quality = higher CRF)
-    // Quality 0.3 (30%) -> CRF ~35 (more compression)
-    // Quality 1.0 (100%) -> CRF ~18 (less compression)
-    const crf = Math.round(18 + (1 - quality) * 33); // CRF range: 18-51
+    // OPTIMIZED: Reduced compression range for faster encoding
+    // Quality 0.3 (30%) -> CRF ~28 (faster, still good quality)
+    // Quality 1.0 (100%) -> CRF ~23 (less compression)
+    const crf = Math.round(23 + (1 - quality) * 5); // CRF range: 23-28
 
     // Compress video with FFmpeg
-    // -crf: Constant Rate Factor (18-51, lower = better quality)
-    // -preset: Encoding speed (ultrafast, fast, medium, slow)
+    // -crf: Constant Rate Factor (23-28, balanced quality/speed)
+    // -preset: veryfast for much faster encoding (was "fast")
     // -vf scale: Resize to max 1280x720 (720p)
     await ffmpegInstance.exec([
       '-i', inputFileName,
       '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease',
       '-c:v', 'libx264',
       '-crf', crf.toString(),
-      '-preset', 'fast',
+      '-preset', 'veryfast',
       '-c:a', 'aac',
       '-b:a', '128k',
       outputFileName

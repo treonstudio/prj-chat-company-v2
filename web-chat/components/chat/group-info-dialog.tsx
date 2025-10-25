@@ -440,7 +440,7 @@ export function GroupInfoDialog({
           // Create File from blob
           const file = new File([blob], 'group-avatar.jpg', { type: 'image/jpeg' })
 
-          // Upload to Firebase Storage
+          // Upload to Chatku Asset Server
           const uploadResult = await uploadGroupAvatar(chatId, file)
 
           if (uploadResult.status === 'success') {

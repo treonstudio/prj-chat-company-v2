@@ -320,8 +320,8 @@ export class MessageRepository {
       const extension = this.getFileExtension(fileToUpload);
       const fileName = `IMG_${Date.now()}.${extension}`;
 
-      // Upload to Chatku Asset Server
-      const uploadResult = await uploadFileToChatkuAPI(fileToUpload);
+      // Upload to Chatku Asset Server with progress tracking
+      const uploadResult = await uploadFileToChatkuAPI(fileToUpload, onProgress);
 
       if (uploadResult.status !== 'success' || !uploadResult.data) {
         return Resource.error('Failed to upload image');
@@ -371,6 +371,7 @@ export class MessageRepository {
     shouldCompress: boolean,
     currentUserAvatar?: string,
     onPhaseChange?: (phase: 'compressing' | 'uploading') => void,
+    onProgress?: (progress: number) => void,
     tempId?: string
   ): Promise<Resource<void>> {
     try {
@@ -397,8 +398,8 @@ export class MessageRepository {
       const extension = this.getFileExtension(fileToUpload);
       const fileName = `VID_${Date.now()}.${extension}`;
 
-      // Upload to Chatku Asset Server
-      const uploadResult = await uploadFileToChatkuAPI(fileToUpload);
+      // Upload to Chatku Asset Server with progress tracking
+      const uploadResult = await uploadFileToChatkuAPI(fileToUpload, onProgress);
 
       if (uploadResult.status !== 'success' || !uploadResult.data) {
         return Resource.error('Failed to upload video');

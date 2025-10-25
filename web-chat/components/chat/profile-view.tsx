@@ -221,7 +221,7 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
     setUploadingAvatar(true)
 
     try {
-      // Upload to Firebase Storage
+      // Upload to Chatku Asset Server
       const uploadResult = await storageRepository.uploadAvatar(user.userId, croppedImageFile)
 
       if (uploadResult.status === 'success') {

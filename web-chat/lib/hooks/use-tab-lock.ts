@@ -34,7 +34,7 @@ export function useTabLock(userId: string | null) {
     console.log('[TabLock] Tab initialized:', currentTabId);
 
     // Function to claim this tab as active
-    const claimActiveTab = () => {
+    const claimActiveTab = (forceLog = false) => {
       const activeTab: ActiveTab = {
         tabId: currentTabId,
         timestamp: Date.now(),
@@ -43,7 +43,10 @@ export function useTabLock(userId: string | null) {
       setIsActive(true);
       setHasConflict(false);
       conflictDetectedRef.current = false;
-      console.log('[TabLock] Claimed as active tab:', currentTabId);
+      // Only log on initial claim or force, not on periodic refresh
+      if (forceLog) {
+        console.log('[TabLock] Claimed as active tab:', currentTabId);
+      }
     };
 
     // Function to check if this tab should be active
@@ -52,7 +55,7 @@ export function useTabLock(userId: string | null) {
         const activeTabStr = localStorage.getItem(ACTIVE_TAB_KEY);
         if (!activeTabStr) {
           // No active tab, claim it
-          claimActiveTab();
+          claimActiveTab(true);
           return;
         }
 
@@ -60,8 +63,8 @@ export function useTabLock(userId: string | null) {
 
         // Check if this is the active tab
         if (activeTab.tabId === currentTabId) {
-          // This tab is active, update timestamp
-          claimActiveTab();
+          // This tab is active, update timestamp silently (no log spam)
+          claimActiveTab(false);
           return;
         }
 
@@ -81,19 +84,19 @@ export function useTabLock(userId: string | null) {
           // Active tab seems stale (no update in grace period + 5s)
           // This could mean the other tab was closed, so claim this tab
           console.log('[TabLock] Previous active tab seems stale, claiming this tab');
-          claimActiveTab();
+          claimActiveTab(true);
         }
       } catch (error) {
         console.error('[TabLock] Error checking tab status:', error);
-        claimActiveTab();
+        claimActiveTab(true);
       }
     };
 
     // Initial claim
-    claimActiveTab();
+    claimActiveTab(true);
 
-    // Check tab status periodically
-    checkIntervalRef.current = setInterval(checkTabStatus, 2000); // Check every 2 seconds
+    // Check tab status periodically (increased to 5s since we have real-time storage events)
+    checkIntervalRef.current = setInterval(checkTabStatus, 5000); // Check every 5 seconds
 
     // Listen to storage events (when other tabs update localStorage)
     const handleStorageChange = (event: StorageEvent) => {

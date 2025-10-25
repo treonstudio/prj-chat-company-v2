@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, FormEvent, useEffect } from 'react';
+import { useState, useRef, FormEvent, useEffect, useLayoutEffect, memo } from 'react';
+import { flushSync } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -26,35 +27,70 @@ import { cn } from '@/lib/utils';
 interface MessageComposerProps {
   chatId: string;
   onSendText: (text: string) => void;
-  onSendImage: (file: File, shouldCompress: boolean) => void;
-  onSendVideo: (file: File, shouldCompress: boolean) => void;
-  onSendDocument: (file: File) => void;
+  onSendImage: (file: File, shouldCompress: boolean) => void | Promise<void>;
+  onSendVideo: (file: File, shouldCompress: boolean) => void | Promise<void>;
+  onSendDocument: (file: File) => void | Promise<void>;
   disabled?: boolean;
   uploading?: boolean;
   isReplying?: boolean;
 }
 
-export function MessageComposer({
+function MessageComposerComponent({
   chatId,
   onSendText,
   onSendImage,
   onSendVideo,
   onSendDocument,
   disabled = false,
-  uploading = false,
+  uploading: parentUploading = false,
   isReplying = false,
 }: MessageComposerProps) {
   const { draft, saveDraft, clearDraft } = useDraftMessage(chatId);
   const [message, setMessage] = useState('');
   const messageRef = useRef('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // CRITICAL: Use ONLY internal state for uploading to prevent parent re-render interference
+  // Ignore parent uploading state completely to avoid conflicts
+  const [internalUploading, setInternalUploading] = useState(false);
+  const uploading = internalUploading; // ONLY use internal state
+
+  // Debug: Log uploading state changes
+  useEffect(() => {
+    console.log('[MessageComposer] uploading state changed:', uploading, 'internal:', internalUploading, 'parent:', parentUploading, 'IGNORED');
+    console.log('[MessageComposer] Button should be:', uploading ? 'DISABLED' : 'ENABLED');
+  }, [uploading, internalUploading, parentUploading]);
+
+  // Debug: Check actual DOM state after render
+  useLayoutEffect(() => {
+    if (attachButtonRef.current) {
+      const isDisabled = attachButtonRef.current.disabled || attachButtonRef.current.getAttribute('data-disabled') === 'true';
+      console.log('[MessageComposer DOM CHECK] Attach button actual state in DOM:', isDisabled ? 'DISABLED' : 'ENABLED', 'Expected:', uploading ? 'DISABLED' : 'ENABLED');
+    }
+  }, [uploading]);
+
+  // Force re-mount DropdownMenu when upload completes to reset any internal state
+  const prevUploadingRef = useRef(uploading);
+  useEffect(() => {
+    // Detect transition from uploading=true to uploading=false (upload completed)
+    if (prevUploadingRef.current === true && uploading === false) {
+      // Upload just completed - force DropdownMenu re-mount
+      flushSync(() => {
+        setDropdownKey(prev => prev + 1);
+      });
+      console.log('[MessageComposer] Force DropdownMenu re-mount - upload completed');
+    }
+    prevUploadingRef.current = uploading;
+  }, [uploading]);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
+  const attachButtonRef = useRef<HTMLButtonElement>(null);
   const [showCompressionDialog, setShowCompressionDialog] = useState(false);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
   const [pendingVideoFile, setPendingVideoFile] = useState<File | null>(null);
   const [compressionFileType, setCompressionFileType] = useState<'image' | 'video'>('image');
+  const [dropdownKey, setDropdownKey] = useState(0); // Force re-mount DropdownMenu
   const { featureFlags } = useFeatureFlags();
   const { usageControls } = useUsageControls();
 
@@ -211,11 +247,30 @@ export function MessageComposer({
     }
   };
 
-  const handleImageUpload = (shouldCompress: boolean) => {
+  const handleImageUpload = async (shouldCompress: boolean) => {
     if (pendingImageFile) {
-      onSendImage(pendingImageFile, shouldCompress);
-      setPendingImageFile(null);
-      setShowCompressionDialog(false);
+      const fileToSend = pendingImageFile;
+
+      // Close dialog FIRST using flushSync to force synchronous update
+      flushSync(() => {
+        setPendingImageFile(null);
+        setShowCompressionDialog(false);
+      });
+
+      // Then start upload
+      flushSync(() => {
+        setInternalUploading(true);
+      });
+      console.log('[MessageComposer] Setting internal uploading=true for image');
+
+      try {
+        await onSendImage(fileToSend, shouldCompress);
+      } finally {
+        console.log('[MessageComposer] Setting internal uploading=false for image');
+        flushSync(() => {
+          setInternalUploading(false);
+        });
+      }
     }
   };
 
@@ -242,15 +297,34 @@ export function MessageComposer({
     }
   };
 
-  const handleVideoUpload = (shouldCompress: boolean) => {
+  const handleVideoUpload = async (shouldCompress: boolean) => {
     if (pendingVideoFile) {
-      onSendVideo(pendingVideoFile, shouldCompress);
-      setPendingVideoFile(null);
-      setShowCompressionDialog(false);
+      const fileToSend = pendingVideoFile;
+
+      // Close dialog FIRST using flushSync to force synchronous update
+      flushSync(() => {
+        setPendingVideoFile(null);
+        setShowCompressionDialog(false);
+      });
+
+      // Then start upload
+      flushSync(() => {
+        setInternalUploading(true);
+      });
+      console.log('[MessageComposer] Setting internal uploading=true for video');
+
+      try {
+        await onSendVideo(fileToSend, shouldCompress);
+      } finally {
+        console.log('[MessageComposer] Setting internal uploading=false for video');
+        flushSync(() => {
+          setInternalUploading(false);
+        });
+      }
     }
   };
 
-  const handleDocumentSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDocumentSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       // Allowed document file extensions
@@ -289,13 +363,28 @@ export function MessageComposer({
         return;
       }
 
-      onSendDocument(file);
+      flushSync(() => {
+        setInternalUploading(true);
+      });
+      console.log('[MessageComposer] Setting internal uploading=true for document');
+
+      try {
+        await onSendDocument(file);
+      } finally {
+        console.log('[MessageComposer] Setting internal uploading=false for document');
+        flushSync(() => {
+          setInternalUploading(false);
+        });
+      }
     }
     // Reset input
     if (documentInputRef.current) {
       documentInputRef.current.value = '';
     }
   };
+
+  console.log("[MessageComposer] uploading state:", uploading);
+  console.log("[MessageComposer] disabled state:", disabled);
 
   return (
     <>
@@ -304,13 +393,13 @@ export function MessageComposer({
         <div className={cn("flex items-center gap-2 bg-white px-2 py-1.5 shadow-md", isReplying ? "rounded-none rounded-b-[1.6rem]" : "rounded-full")}>
           {/* Attachment menu - only show if allowSendMedia is true */}
           {featureFlags.allowSendMedia && (
-            <DropdownMenu>
+            <DropdownMenu key={dropdownKey}>
               <DropdownMenuTrigger asChild>
                 <Button
+                  ref={attachButtonRef}
                   type="button"
                   variant="ghost"
                   size="icon"
-                  disabled={disabled || uploading}
                   aria-label="Attach file"
                   className="shrink-0"
                 >
@@ -376,7 +465,7 @@ export function MessageComposer({
                 onChange={handleMessageChange}
                 onKeyDown={handleKeyDown}
                 placeholder="Ketik pesan"
-                disabled={disabled || uploading}
+                disabled={disabled}
                 rows={1}
                 className="flex-1 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-0 text-[15px] shadow-none resize-none overflow-y-auto outline-none"
                 style={{ minHeight: '24px', maxHeight: '120px' }}
@@ -386,7 +475,7 @@ export function MessageComposer({
               <Button
                 type="submit"
                 size="icon"
-                disabled={!message.trim() || disabled || uploading}
+                disabled={!message.trim() || disabled}
                 className="shrink-0 rounded-full h-10 w-10"
               >
                 <SendIcon className="h-5 w-5" />
@@ -470,3 +559,16 @@ export function MessageComposer({
     </>
   );
 }
+
+// Export with React.memo and custom comparison
+// CRITICAL: Ignore parent 'uploading' prop in comparison - we use internal state
+export const MessageComposer = memo(MessageComposerComponent, (prevProps, nextProps) => {
+  // Re-render ONLY if these props change
+  return (
+    prevProps.chatId === nextProps.chatId &&
+    prevProps.disabled === nextProps.disabled &&
+    prevProps.isReplying === nextProps.isReplying
+    // NOTE: Intentionally ignore 'uploading' prop from parent
+    // We use internal state management to prevent re-render interference
+  );
+});

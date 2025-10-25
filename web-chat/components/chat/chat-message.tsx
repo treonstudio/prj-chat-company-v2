@@ -914,41 +914,51 @@ export function ChatMessage({
 
           {data.type === "doc" && (
             <div className="flex items-start gap-3 min-w-[200px] max-w-[280px]">
-              {/* simple inline doc icon */}
-              <svg
-                aria-hidden
-                className="mt-1 h-10 w-10 flex-shrink-0 p-2 rounded-lg bg-white/10"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M14 2H8a2 2 0 0 0-2 2v16.5a1.5 1.5 0 0 0 1.5 1.5H16a2 2 0 0 0 2-2V8z" />
-                <path d="M14 2v6h6" />
-              </svg>
+              {/* Document icon or upload indicator */}
+              {data.status === 'SENDING' ? (
+                <div className="mt-1 h-10 w-10 flex-shrink-0 flex items-center justify-center rounded-lg bg-white/10">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                </div>
+              ) : (
+                <svg
+                  aria-hidden
+                  className="mt-1 h-10 w-10 flex-shrink-0 p-2 rounded-lg bg-white/10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M14 2H8a2 2 0 0 0-2 2v16.5a1.5 1.5 0 0 0 1.5 1.5H16a2 2 0 0 0 2-2V8z" />
+                  <path d="M14 2v6h6" />
+                </svg>
+              )}
               <div className="min-w-0 flex-1 space-y-1.5">
                 <div>
                   <p className="text-sm font-medium leading-tight break-words line-clamp-2">{sanitizeMessageText(data.fileName || "Document")}</p>
                   {data.fileSize && <p className="text-xs opacity-70 mt-1">{data.fileSize}</p>}
                 </div>
-                <Button
-                  size="sm"
-                  variant={isMe ? "secondary" : "default"}
-                  className="w-full mt-2 rounded-md"
-                  onClick={() => handleDownload(data.content, data.fileName, data.mimeType)}
-                  disabled={downloading}
-                >
-                  {downloading ? (
-                    <div className="flex items-center gap-2">
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      <span>Downloading...</span>
-                    </div>
-                  ) : (
-                    "Download"
-                  )}
-                </Button>
+                {data.status === 'SENDING' ? (
+                  <div className="text-xs opacity-70 mt-2">Uploading...</div>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant={isMe ? "secondary" : "default"}
+                    className="w-full mt-2 rounded-md"
+                    onClick={() => handleDownload(data.content, data.fileName, data.mimeType)}
+                    disabled={downloading}
+                  >
+                    {downloading ? (
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        <span>Downloading...</span>
+                      </div>
+                    ) : (
+                      "Download"
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
           )}

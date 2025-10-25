@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo, useLayoutEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { MessageRepository } from '@/lib/repositories/message.repository';
 import { Message, MessageType, MessageStatus, ReplyTo } from '@/types/models';
 import { Timestamp, doc, getDoc } from 'firebase/firestore';
@@ -28,17 +29,7 @@ function getTimestampMillis(timestamp: any): number {
 }
 
 export function useMessages(chatId: string | null, isGroupChat: boolean, currentUserId?: string) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadingMessage, setUploadingMessage] = useState<Message | null>(null);
-  const [userJoinedAt, setUserJoinedAt] = useState<Timestamp | null>(null);
-  const [deleteHistoryTimestamp, setDeleteHistoryTimestamp] = useState<Timestamp | null>(null);
-
-  // Zustand cache store
+  // Zustand cache store (get this first for lazy init)
   const {
     getMessages: getCachedMessages,
     setMessages: setCachedMessages,
@@ -48,8 +39,32 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     clearChatHistory: clearCachedHistory
   } = useMessageCache();
 
+  // CRITICAL: Lazy initialize to prevent skeleton flash
+  // Check cache synchronously on first render to avoid loading state flicker
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (!chatId) return [];
+    const cached = getCachedMessages(chatId);
+    return cached && cached.length > 0 ? cached : [];
+  });
+
+  const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
+
+  // CRITICAL: Start with loading=false if we have cached data
+  const [loading, setLoading] = useState(() => {
+    if (!chatId) return false;
+    const cached = getCachedMessages(chatId);
+    return !(cached && cached.length > 0); // Only loading if no cache
+  });
+
+  const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadingMessage, setUploadingMessage] = useState<Message | null>(null);
+  const [userJoinedAt, setUserJoinedAt] = useState<Timestamp | null>(null);
+  const [deleteHistoryTimestamp, setDeleteHistoryTimestamp] = useState<Timestamp | null>(null);
+
   useEffect(() => {
-    // Reset uploading state when chatId changes
+    // Reset state when chatId changes
     setUploadingMessage(null);
     setUploading(false);
     setOptimisticMessages([]);
@@ -57,17 +72,21 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     setDeleteHistoryTimestamp(null);
 
     if (!chatId) {
+      setMessages([]);
       setLoading(false);
       return;
     }
 
     // INSTANT LOAD: Check cache first (WhatsApp-like experience)
+    // Note: On first mount, lazy init already loaded cache, but we still need this
+    // for when chatId changes (navigating between different chats)
     const cachedMessages = getCachedMessages(chatId);
     if (cachedMessages && cachedMessages.length > 0) {
       console.log(`[Cache] Loading ${cachedMessages.length} messages from cache for ${chatId}`);
       setMessages(cachedMessages);
       setLoading(false); // Show cached data immediately, no loading state!
     } else {
+      setMessages([]); // Clear old messages
       setLoading(true); // Only show loading if no cache
     }
 
@@ -138,56 +157,23 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
           setError(null);
 
           // Remove optimistic messages that have been confirmed
+          // This is a safety cleanup - normally optimistic messages are removed on success
+          // This handles edge cases where cleanup didn't happen
+          const realTempIds = new Set<string>();
+          filteredMessages.forEach(msg => {
+            if ('tempId' in msg && msg.tempId) {
+              realTempIds.add(msg.tempId);
+            }
+          });
+
           setOptimisticMessages(prev => {
-            // Only keep optimistic messages (temp_ ids)
-            // If a message with same content exists in real messages, remove optimistic version
+            // Safety cleanup: Remove any temp message that has a real counterpart
             return prev.filter(optMsg => {
               if (!optMsg.messageId.startsWith('temp_')) {
-                return false; // Remove non-temp messages from optimistic list
+                return false;
               }
-
-              // IMPORTANT: Don't remove SENDING/FAILED messages
-              // They should stay until upload completes or user retries
-              if (optMsg.status === MessageStatus.SENDING || optMsg.status === MessageStatus.FAILED) {
-                return true; // Keep the message
-              }
-
-              // For SENT messages, check if a real version exists
-              const hasRealVersion = filteredMessages.some(msg => {
-                if (msg.messageId.startsWith('temp_')) {
-                  return false; // Skip other temp messages
-                }
-
-                // BEST: Match by tempId if available (most reliable)
-                if ('tempId' in msg && msg.tempId === optMsg.messageId) {
-                  return true;
-                }
-
-                // FALLBACK: Match by time and other criteria (for backward compatibility)
-                const timeDiff = Math.abs(
-                  getTimestampMillis(msg.timestamp) - getTimestampMillis(optMsg.timestamp)
-                );
-
-                // For media messages (IMAGE, VIDEO, DOCUMENT), match by type and time only
-                // since the text might change during upload (e.g., "🎥 Uploading..." -> "🎥 Video")
-                if (optMsg.type === MessageType.IMAGE || optMsg.type === MessageType.VIDEO || optMsg.type === MessageType.DOCUMENT) {
-                  return (
-                    msg.senderId === optMsg.senderId &&
-                    msg.type === optMsg.type &&
-                    timeDiff < 300000 // 5 minute window for media messages
-                  );
-                }
-
-                // For text messages, match by content and time
-                return (
-                  msg.senderId === optMsg.senderId &&
-                  msg.text === optMsg.text &&
-                  msg.type === optMsg.type &&
-                  timeDiff < 10000 // 10 second window
-                );
-              });
-
-              return !hasRealVersion; // Keep if no real version exists yet
+              // Remove if real message exists
+              return !realTempIds.has(optMsg.messageId);
             });
           });
         },
@@ -258,6 +244,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         deliveredTo: {},
         replyTo: replyTo || null,
         linkPreview: linkPreview,
+        tempId: tempId, // Store tempId for deduplication
       };
 
       const result = await messageRepository.sendMessage(chatId, message, isGroupChat);
@@ -274,14 +261,10 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         );
         setError(result.message);
       } else {
-        // Success - the real message listener will remove the optimistic message
-        // Just update status to SENT for now
+        // SUCCESS: Remove optimistic message immediately
+        // Real message will appear from Firestore listener
         setOptimisticMessages(prev =>
-          prev.map(msg =>
-            msg.messageId === tempId
-              ? { ...msg, status: MessageStatus.SENT }
-              : msg
-          )
+          prev.filter(msg => msg.messageId !== tempId)
         );
       }
     },
@@ -314,36 +297,57 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
       };
 
       setOptimisticMessages(prev => [optimisticMessage, ...prev]);
-      setUploading(true);
+      // NOTE: uploading state now managed by MessageComposer internally
+      console.log('[IMAGE UPLOAD] Started');
 
-      const result = await messageRepository.uploadAndSendImage(
-        chatId,
-        currentUserId,
-        currentUserName,
-        imageFile,
-        isGroupChat,
-        shouldCompress,
-        currentUserAvatar,
-        undefined,
-        tempId
-      );
-
-      setUploading(false);
-
-      if (result.status === 'error') {
-        setOptimisticMessages(prev =>
-          prev.map(msg =>
-            msg.messageId === tempId
-              ? { ...msg, status: MessageStatus.FAILED, error: result.message }
-              : msg
-          )
+      try {
+        const result = await messageRepository.uploadAndSendImage(
+          chatId,
+          currentUserId,
+          currentUserName,
+          imageFile,
+          isGroupChat,
+          shouldCompress,
+          currentUserAvatar,
+          (progress) => {
+            // Update message with upload progress
+            setOptimisticMessages(prev =>
+              prev.map(msg =>
+                msg.messageId === tempId
+                  ? { ...msg, text: `🖼️ Uploading... ${progress}%` }
+                  : msg
+              )
+            );
+          },
+          tempId
         );
-        setError(result.message);
-      } else {
+
+        console.log('[IMAGE UPLOAD] Repository result:', result.status);
+
+        if (result.status === 'error') {
+          console.log('[IMAGE UPLOAD] Error:', result.message);
+          setOptimisticMessages(prev =>
+            prev.map(msg =>
+              msg.messageId === tempId
+                ? { ...msg, status: MessageStatus.FAILED, error: result.message }
+                : msg
+            )
+          );
+          setError(result.message);
+        } else {
+          console.log('[IMAGE UPLOAD] Success - removing optimistic message');
+          // SUCCESS: Remove optimistic message immediately
+          // Real message will appear from Firestore listener
+          setOptimisticMessages(prev =>
+            prev.filter(msg => msg.messageId !== tempId)
+          );
+        }
+      } catch (error) {
+        console.error('[IMAGE UPLOAD] Unexpected error:', error);
         setOptimisticMessages(prev =>
           prev.map(msg =>
             msg.messageId === tempId
-              ? { ...msg, status: MessageStatus.SENT }
+              ? { ...msg, status: MessageStatus.FAILED, error: 'Upload failed' }
               : msg
           )
         );
@@ -372,7 +376,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
       };
 
       setOptimisticMessages(prev => [optimisticMessage, ...prev]);
-      setUploading(true);
+      // NOTE: uploading state now managed by MessageComposer internally
 
       // Update status to uploading after compression (if compressing)
       if (shouldCompress) {
@@ -388,43 +392,59 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         }, 2000); // Give time for compression UI to show
       }
 
-      const result = await messageRepository.uploadAndSendVideo(
-        chatId,
-        currentUserId,
-        currentUserName,
-        videoFile,
-        isGroupChat,
-        shouldCompress,
-        currentUserAvatar,
-        (phase) => {
-          // Update message based on phase
+      try {
+        const result = await messageRepository.uploadAndSendVideo(
+          chatId,
+          currentUserId,
+          currentUserName,
+          videoFile,
+          isGroupChat,
+          shouldCompress,
+          currentUserAvatar,
+          (phase) => {
+            // Update message based on phase
+            setOptimisticMessages(prev =>
+              prev.map(msg =>
+                msg.messageId === tempId
+                  ? { ...msg, text: phase === 'compressing' ? '🎥 Compressing...' : '🎥 Uploading...' }
+                  : msg
+              )
+            );
+          },
+          (progress) => {
+            // Update message with upload progress
+            setOptimisticMessages(prev =>
+              prev.map(msg =>
+                msg.messageId === tempId
+                  ? { ...msg, text: `🎥 Uploading... ${progress}%` }
+                  : msg
+              )
+            );
+          },
+          tempId
+        );
+
+        if (result.status === 'error') {
           setOptimisticMessages(prev =>
             prev.map(msg =>
               msg.messageId === tempId
-                ? { ...msg, text: phase === 'compressing' ? '🎥 Compressing...' : '🎥 Uploading...' }
+                ? { ...msg, status: MessageStatus.FAILED, error: result.message }
                 : msg
             )
           );
-        },
-        tempId
-      );
-
-      setUploading(false);
-
-      if (result.status === 'error') {
+          setError(result.message);
+        } else {
+          // SUCCESS: Remove optimistic message immediately
+          // Real message will appear from Firestore listener
+          setOptimisticMessages(prev =>
+            prev.filter(msg => msg.messageId !== tempId)
+          );
+        }
+      } catch (error) {
         setOptimisticMessages(prev =>
           prev.map(msg =>
             msg.messageId === tempId
-              ? { ...msg, status: MessageStatus.FAILED, error: result.message }
-              : msg
-          )
-        );
-        setError(result.message);
-      } else {
-        setOptimisticMessages(prev =>
-          prev.map(msg =>
-            msg.messageId === tempId
-              ? { ...msg, status: MessageStatus.SENT }
+              ? { ...msg, status: MessageStatus.FAILED, error: 'Upload failed' }
               : msg
           )
         );
@@ -453,35 +473,41 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
       };
 
       setOptimisticMessages(prev => [optimisticMessage, ...prev]);
-      setUploading(true);
+      // NOTE: uploading state now managed by MessageComposer internally
 
-      const result = await messageRepository.uploadAndSendDocument(
-        chatId,
-        currentUserId,
-        currentUserName,
-        documentFile,
-        isGroupChat,
-        currentUserAvatar,
-        undefined,
-        tempId
-      );
-
-      setUploading(false);
-
-      if (result.status === 'error') {
-        setOptimisticMessages(prev =>
-          prev.map(msg =>
-            msg.messageId === tempId
-              ? { ...msg, status: MessageStatus.FAILED, error: result.message }
-              : msg
-          )
+      try {
+        const result = await messageRepository.uploadAndSendDocument(
+          chatId,
+          currentUserId,
+          currentUserName,
+          documentFile,
+          isGroupChat,
+          currentUserAvatar,
+          undefined,
+          tempId
         );
-        setError(result.message);
-      } else {
+
+        if (result.status === 'error') {
+          setOptimisticMessages(prev =>
+            prev.map(msg =>
+              msg.messageId === tempId
+                ? { ...msg, status: MessageStatus.FAILED, error: result.message }
+                : msg
+            )
+          );
+          setError(result.message);
+        } else {
+          // SUCCESS: Remove optimistic message immediately
+          // Real message will appear from Firestore listener
+          setOptimisticMessages(prev =>
+            prev.filter(msg => msg.messageId !== tempId)
+          );
+        }
+      } catch (error) {
         setOptimisticMessages(prev =>
           prev.map(msg =>
             msg.messageId === tempId
-              ? { ...msg, status: MessageStatus.SENT }
+              ? { ...msg, status: MessageStatus.FAILED, error: 'Upload failed' }
               : msg
           )
         );
@@ -562,79 +588,49 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
   );
 
   // Combine real messages and optimistic messages, sorted by timestamp
-  // First, deduplicate to avoid showing same message twice
-  const messageMap = new Map<string, Message>();
+  // Use useMemo to avoid re-computing on every render (performance optimization)
+  const allMessages = useMemo(() => {
+    const messageMap = new Map<string, Message>();
 
-  // Add all real messages first (they have priority)
-  messages.forEach(msg => {
-    messageMap.set(msg.messageId, msg);
-  });
-
-  // Add optimistic messages only if they don't match any real message
-  optimisticMessages.forEach(optMsg => {
-    // Only add if it's a temp message and not already in map
-    if (optMsg.messageId.startsWith('temp_') && !messageMap.has(optMsg.messageId)) {
-      // IMPORTANT: If the optimistic message is still SENDING, ALWAYS add it
-      // It's impossible for a SENDING message to be a duplicate of a real message
-      if (optMsg.status === MessageStatus.SENDING || optMsg.status === MessageStatus.FAILED) {
-        messageMap.set(optMsg.messageId, optMsg);
-        return; // Skip deduplication check
+    // Build a set of tempIds from real messages for fast deduplication lookup
+    const realTempIds = new Set<string>();
+    messages.forEach(msg => {
+      if (msg.tempId) {
+        realTempIds.add(msg.tempId);
       }
+    });
 
-      // For SENT messages, check if it's a duplicate of a real message
-      const isDuplicate = Array.from(messageMap.values()).some(realMsg => {
-        if (realMsg.messageId.startsWith('temp_')) {
-          return false; // Skip other temp messages
+    // Add all real messages first (they have priority)
+    messages.forEach(msg => {
+      messageMap.set(msg.messageId, msg);
+    });
+
+    // Add optimistic messages (only SENDING and FAILED exist now)
+    // Skip if real message with same tempId already exists (deduplication)
+    optimisticMessages.forEach(optMsg => {
+      if (optMsg.messageId.startsWith('temp_') && !messageMap.has(optMsg.messageId)) {
+        // Skip optimistic message if real message with this tempId exists
+        if (realTempIds.has(optMsg.messageId)) {
+          return; // Duplicate - skip
         }
-
-        // BEST: Match by tempId if available (most reliable)
-        if ('tempId' in realMsg && realMsg.tempId === optMsg.messageId) {
-          return true;
-        }
-
-        // FALLBACK: Match by time and other criteria (for backward compatibility)
-        const timeDiff = Math.abs(
-          getTimestampMillis(realMsg.timestamp) - getTimestampMillis(optMsg.timestamp)
-        );
-
-        // For media messages (IMAGE, VIDEO, DOCUMENT), match by type and time only
-        // since the text might change during upload (e.g., "🎥 Uploading..." -> "🎥 Video")
-        if (optMsg.type === MessageType.IMAGE || optMsg.type === MessageType.VIDEO || optMsg.type === MessageType.DOCUMENT) {
-          return (
-            realMsg.senderId === optMsg.senderId &&
-            realMsg.type === optMsg.type &&
-            timeDiff < 300000 // 5 minute window for media messages
-          );
-        }
-
-        // For text messages, match by content and time
-        return (
-          realMsg.senderId === optMsg.senderId &&
-          realMsg.text === optMsg.text &&
-          realMsg.type === optMsg.type &&
-          timeDiff < 10000
-        );
-      });
-
-      if (!isDuplicate) {
         messageMap.set(optMsg.messageId, optMsg);
       }
-    }
-  });
+    });
 
-  // Convert to array and sort
-  const allMessages = Array.from(messageMap.values()).sort((a, b) => {
-    // Use timestamp, fallback to createdAt, then messageId for consistent ordering
-    const timeA = getTimestampMillis(a.timestamp) || getTimestampMillis(a.createdAt) || 0;
-    const timeB = getTimestampMillis(b.timestamp) || getTimestampMillis(b.createdAt) || 0;
+    // Convert to array and sort
+    return Array.from(messageMap.values()).sort((a, b) => {
+      // Use timestamp, fallback to createdAt, then messageId for consistent ordering
+      const timeA = getTimestampMillis(a.timestamp) || getTimestampMillis(a.createdAt) || 0;
+      const timeB = getTimestampMillis(b.timestamp) || getTimestampMillis(b.createdAt) || 0;
 
-    // If timestamps are equal, use messageId as tiebreaker
-    if (timeA === timeB) {
-      return a.messageId.localeCompare(b.messageId);
-    }
+      // If timestamps are equal, use messageId as tiebreaker
+      if (timeA === timeB) {
+        return a.messageId.localeCompare(b.messageId);
+      }
 
-    return timeB - timeA; // Descending order (newest first)
-  });
+      return timeB - timeA; // Descending order (newest first)
+    });
+  }, [messages, optimisticMessages]);
 
   return {
     messages: allMessages,

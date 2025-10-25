@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/chat/sidebar';
 import { ChatRoom } from '@/components/chat/chat-room';
 import { useAuth } from '@/lib/contexts/auth.context';
+import { loadFFmpeg } from '@/lib/utils/media-compression';
 import packageJson from '../package.json';
 
 // Get commit hash - will be set during build
@@ -15,6 +16,8 @@ export default function Page() {
   const router = useRouter();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [selectedChatIsGroup, setSelectedChatIsGroup] = useState(false);
+  const [selectedChatName, setSelectedChatName] = useState<string | undefined>();
+  const [selectedChatAvatar, setSelectedChatAvatar] = useState<string | undefined>();
   const [avatarCacheKey, setAvatarCacheKey] = useState(Date.now());
 
   useEffect(() => {
@@ -29,6 +32,20 @@ export default function Page() {
       setAvatarCacheKey(Date.now());
     }
   }, [userData?.imageURL, userData?.imageUrl]);
+
+  // Pre-load FFmpeg for faster video compression (runs in background)
+  useEffect(() => {
+    // Only pre-load if user is authenticated
+    if (currentUser && userData) {
+      loadFFmpeg()
+        .then(() => {
+          console.log('[FFmpeg] Pre-loaded successfully');
+        })
+        .catch((error) => {
+          console.warn('[FFmpeg] Pre-load failed (will load on first use):', error);
+        });
+    }
+  }, [currentUser, userData]);
 
   if (loading) {
     return (
@@ -104,9 +121,11 @@ export default function Page() {
             currentUserName={userData.displayName}
             currentUserData={userData}
             selectedChatId={selectedChatId}
-            onChatSelect={(chatId, isGroup) => {
+            onChatSelect={(chatId, isGroup, chatName, chatAvatar) => {
               setSelectedChatId(chatId);
               setSelectedChatIsGroup(isGroup);
+              setSelectedChatName(chatName);
+              setSelectedChatAvatar(chatAvatar);
             }}
           />
         </aside>
@@ -118,19 +137,27 @@ export default function Page() {
               currentUserName={userData.displayName}
               currentUserAvatar={currentUserAvatar}
               isGroupChat={selectedChatIsGroup}
+              initialTitle={selectedChatName}
+              initialAvatar={selectedChatAvatar}
               onLeaveGroup={() => {
                 // Reset to no chat selected after leaving
                 setSelectedChatId(null);
                 setSelectedChatIsGroup(false);
+                setSelectedChatName(undefined);
+                setSelectedChatAvatar(undefined);
               }}
               onCloseChat={() => {
                 // Close chat and return to chat list
                 setSelectedChatId(null);
                 setSelectedChatIsGroup(false);
+                setSelectedChatName(undefined);
+                setSelectedChatAvatar(undefined);
               }}
-              onChatSelect={(chatId, isGroup) => {
+              onChatSelect={(chatId, isGroup, chatName, chatAvatar) => {
                 setSelectedChatId(chatId);
                 setSelectedChatIsGroup(isGroup);
+                setSelectedChatName(chatName);
+                setSelectedChatAvatar(chatAvatar);
               }}
             />
           ) : (
