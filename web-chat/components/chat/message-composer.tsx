@@ -117,6 +117,31 @@ function MessageComposerComponent({
     }
   }, [message]);
 
+  // Auto-focus input when replying
+  useEffect(() => {
+    if (isReplying && textareaRef.current) {
+      // Multiple focus attempts to ensure it sticks
+      // (scroll behavior in chat-room might steal focus)
+      const focusInput = () => {
+        // Use requestAnimationFrame to ensure focus happens after all DOM updates
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            textareaRef.current?.focus({ preventScroll: true });
+          });
+        });
+      };
+
+      // Schedule multiple focus attempts with increasing delays
+      const timers = [
+        setTimeout(focusInput, 100),   // Initial focus after reply bar renders
+        setTimeout(focusInput, 300),   // After scroll/layout completes
+        setTimeout(focusInput, 500),   // Final guarantee (catches edge cases)
+      ];
+
+      return () => timers.forEach(clearTimeout);
+    }
+  }, [isReplying]);
+
   // Save draft when chatId changes (user switches room)
   useEffect(() => {
     return () => {

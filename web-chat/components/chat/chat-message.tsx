@@ -103,6 +103,7 @@ export function ChatMessage({
   isDeletedUser = false,
   userCache,
   onCancel,
+  onMediaViewerChange,
 }: {
   data: ChatMessageUnion
   userCache?: Map<string, string>
@@ -121,11 +122,18 @@ export function ChatMessage({
   onReplyClick?: (messageId: string) => void
   isDeletedUser?: boolean
   onCancel?: (messageId: string) => void
+  onMediaViewerChange?: (isOpen: boolean) => void
 }) {
   const [showImagePreview, setShowImagePreview] = useState(false)
   const [showVideoPreview, setShowVideoPreview] = useState(false)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [downloading, setDownloading] = useState(false)
+
+  // Notify parent when media viewer opens/closes
+  useEffect(() => {
+    const isViewerOpen = showImagePreview || showVideoPreview
+    onMediaViewerChange?.(isViewerOpen)
+  }, [showImagePreview, showVideoPreview, onMediaViewerChange])
   const [isExpanded, setIsExpanded] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [editText, setEditText] = useState("")

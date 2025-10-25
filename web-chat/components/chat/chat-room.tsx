@@ -152,8 +152,64 @@ export function ChatRoom({
   const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set())
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
+  // Header dropdown menu
+  const [showDropdownMenu, setShowDropdownMenu] = useState(false)
+
+  // Media viewer (image/video preview)
+  const [hasMediaViewerOpen, setHasMediaViewerOpen] = useState(false)
+
+  // Check if any dialog, menu, or media viewer is open - disable context menu when true
+  const hasOpenDialog = showGroupInfoDialog ||
+                        showLeaveDialog ||
+                        showDeleteChatDialog ||
+                        showDeleteHistoryDialog ||
+                        showForwardDialog ||
+                        showUserProfileDialog ||
+                        showDeleteDialog ||
+                        showDropdownMenu ||
+                        hasMediaViewerOpen
+
   // Reply mode
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
+  const replyBarRef = useRef<HTMLDivElement>(null)
+  const [replyBarHeight, setReplyBarHeight] = useState(0)
+
+  // Measure reply bar height when it appears/disappears
+  useLayoutEffect(() => {
+    if (replyingTo && replyBarRef.current) {
+      const height = replyBarRef.current.offsetHeight
+      setReplyBarHeight(height)
+
+      // Auto-scroll to bottom when reply bar appears
+      // Multiple scroll attempts to ensure we reach true bottom after padding applied
+      const smoothScrollAttempt = () => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            scrollToBottom(false) // Smooth scroll
+          })
+        })
+      }
+
+      const instantScrollAttempt = () => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            scrollToBottom(true) // Instant scroll to guarantee bottom
+          })
+        })
+      }
+
+      // Schedule multiple scrolls with increasing delays
+      const timers = [
+        setTimeout(smoothScrollAttempt, 100),  // Initial smooth scroll
+        setTimeout(smoothScrollAttempt, 300),  // After layout recalculation
+        setTimeout(instantScrollAttempt, 600), // Final instant scroll to guarantee true bottom
+      ]
+
+      return () => timers.forEach(clearTimeout)
+    } else {
+      setReplyBarHeight(0)
+    }
+  }, [replyingTo])
 
   // User cache for looking up sender names
   const [userCache, setUserCache] = useState<Map<string, string>>(new Map())
@@ -1169,7 +1225,7 @@ export function ChatRoom({
         </button>
 
         {/* Three dots menu */}
-        <DropdownMenu>
+        <DropdownMenu open={showDropdownMenu} onOpenChange={setShowDropdownMenu}>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
@@ -1268,7 +1324,18 @@ export function ChatRoom({
       </header>
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <ScrollArea ref={scrollContainerRef} className="flex-1 min-h-0 smooth-scroll scroll-optimized" style={{ backgroundImage: 'url(/tile-pattern.png)', backgroundRepeat: 'repeat' }}>
+          <ScrollArea
+            ref={scrollContainerRef}
+            className="flex-1 min-h-0 smooth-scroll scroll-optimized"
+            style={{ backgroundImage: 'url(/tile-pattern.png)', backgroundRepeat: 'repeat' }}
+            onContextMenu={(e) => {
+              // Prevent context menu when any dialog is open
+              if (hasOpenDialog) {
+                e.preventDefault()
+                e.stopPropagation()
+              }
+            }}
+          >
             {loading ? (
           <div className="mx-auto w-full space-y-3 p-4">
             {/* Enhanced Message skeleton loader with varied heights */}
@@ -1297,7 +1364,10 @@ export function ChatRoom({
             <p className="text-sm text-destructive">{error}</p>
           </div>
         ) : (
-          <div className="mx-auto w-full space-y-3 p-4">
+          <div
+            className="mx-auto w-full space-y-3 p-4"
+            style={{ paddingBottom: replyBarHeight > 0 ? `${replyBarHeight + 16}px` : '16px' }}
+          >
             {messages.length === 0 ? (
               <div className="flex h-full items-center justify-center">
                 <p className="text-sm text-muted-foreground">No messages yet. Start the conversation!</p>
@@ -1409,6 +1479,7 @@ export function ChatRoom({
                         onReply={handleReply}
                         onReplyClick={handleReplyClick}
                         onCancel={cancelUpload}
+                        onMediaViewerChange={setHasMediaViewerOpen}
                       />
                     </div>
                   )
@@ -1557,10 +1628,12 @@ export function ChatRoom({
           <div className="flex flex-col">
             {/* Reply preview bar - mepet dengan message composer */}
             {replyingTo && (
-                <ReplyPreviewBar
-                  replyingTo={replyingTo}
-                  onCancel={handleCancelReply}
-                />
+                <div ref={replyBarRef}>
+                  <ReplyPreviewBar
+                    replyingTo={replyingTo}
+                    onCancel={handleCancelReply}
+                  />
+                </div>
             )}
             <MessageComposer
               isReplying={replyingTo !== null}

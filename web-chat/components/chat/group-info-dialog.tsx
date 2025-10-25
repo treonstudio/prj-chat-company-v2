@@ -581,18 +581,11 @@ export function GroupInfoDialog({
                   Group · {groupMembers.length} {groupMembers.length === 1 ? 'member' : 'members'}
                 </p>
 
-                {/* Created At and Created By */}
-                {createdAt && (
-                  <div className="mt-4 space-y-1.5 text-sm">
-                    <p className="text-muted-foreground">
-                      <span className="font-medium text-foreground">createdAt:</span> {format(createdAt, 'MMMM d, yyyy \'at\' h:mm:ss a \'UTC\'XXX')}
-                    </p>
-                    {createdBy && (
-                      <p className="text-muted-foreground">
-                        <span className="font-medium text-foreground">createdBy:</span> {creatorName || createdBy}
-                      </p>
-                    )}
-                  </div>
+                {/* Created At and Created By - Minimalist format */}
+                {createdAt && createdBy && (
+                  <p className="mt-3 text-xs text-muted-foreground/80">
+                    Grup dibuat oleh <span className="font-medium text-foreground/90">{createdBy === currentUserId ? 'Anda' : (creatorName || createdBy)}</span>, pada <span className="font-medium text-foreground/90">{format(createdAt, 'd/M/yyyy')}</span> pukul <span className="font-medium text-foreground/90">{format(createdAt, 'HH.mm')}</span>
+                  </p>
                 )}
               </div>
 
