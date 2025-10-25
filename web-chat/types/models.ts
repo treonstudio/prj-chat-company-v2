@@ -96,6 +96,7 @@ export interface Message {
   hideFrom?: Record<string, Timestamp>; // For "Delete for Me" - maps userId to deletion timestamp
   replyTo?: ReplyTo | null; // For reply/quote message feature
   linkPreview?: LinkPreview | null; // For link preview in text messages
+  tempId?: string; // Temporary ID from optimistic message (for deduplication)
 }
 
 // Chat models

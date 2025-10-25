@@ -238,8 +238,9 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
           toast.error(updateResult.message || 'Gagal memperbarui foto profil')
           setOptimisticAvatar(null) // Reset optimistic update on error
         }
-      } else if (uploadResult.status === 'error') {
-        toast.error(uploadResult.message || 'Gagal mengunggah foto profil')
+      } else {
+        const errorMsg = uploadResult.status === 'error' ? uploadResult.message : 'Unknown error';
+        toast.error(errorMsg || 'Gagal mengunggah foto profil')
       }
     } catch (error) {
       toast.error('Terjadi kesalahan saat mengunggah foto profil')

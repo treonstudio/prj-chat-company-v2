@@ -8,6 +8,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { ImageIcon, VideoIcon, FileIcon, PlusIcon, SendIcon, Smile, Mic } from 'lucide-react';
 import { useFeatureFlags } from '@/lib/contexts/feature-flags.context';
 import { useUsageControls } from '@/lib/contexts/usage-controls.context';
@@ -19,7 +27,7 @@ interface MessageComposerProps {
   chatId: string;
   onSendText: (text: string) => void;
   onSendImage: (file: File, shouldCompress: boolean) => void;
-  onSendVideo: (file: File) => void;
+  onSendVideo: (file: File, shouldCompress: boolean) => void;
   onSendDocument: (file: File) => void;
   disabled?: boolean;
   uploading?: boolean;
@@ -45,6 +53,8 @@ export function MessageComposer({
   const documentInputRef = useRef<HTMLInputElement>(null);
   const [showCompressionDialog, setShowCompressionDialog] = useState(false);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
+  const [pendingVideoFile, setPendingVideoFile] = useState<File | null>(null);
+  const [compressionFileType, setCompressionFileType] = useState<'image' | 'video'>('image');
   const { featureFlags } = useFeatureFlags();
   const { usageControls } = useUsageControls();
 
@@ -192,6 +202,7 @@ export function MessageComposer({
       }
 
       setPendingImageFile(file);
+      setCompressionFileType('image');
       setShowCompressionDialog(true);
     }
     // Reset input
@@ -210,9 +221,17 @@ export function MessageComposer({
 
   const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    console.log('[MessageComposer] handleVideoSelect:', { file, fileType: file?.type });
+
     if (file && file.type.startsWith('video/')) {
       // Validate file size
       const maxSizeInBytes = usageControls.maxFileSizeUploadedInMB * 1024 * 1024;
+      console.log('[MessageComposer] Video size check:', {
+        fileSize: file.size,
+        maxSize: maxSizeInBytes,
+        valid: file.size <= maxSizeInBytes
+      });
+
       if (file.size > maxSizeInBytes) {
         toast.error(`Ukuran file tidak boleh lebih dari ${usageControls.maxFileSizeUploadedInMB}MB`);
         if (videoInputRef.current) {
@@ -221,11 +240,28 @@ export function MessageComposer({
         return;
       }
 
-      onSendVideo(file);
+      console.log('[MessageComposer] Showing compression dialog for video');
+      setPendingVideoFile(file);
+      setCompressionFileType('video');
+      setShowCompressionDialog(true);
     }
     // Reset input
     if (videoInputRef.current) {
       videoInputRef.current.value = '';
+    }
+  };
+
+  const handleVideoUpload = (shouldCompress: boolean) => {
+    console.log('[MessageComposer] handleVideoUpload:', {
+      hasPendingFile: !!pendingVideoFile,
+      shouldCompress
+    });
+
+    if (pendingVideoFile) {
+      console.log('[MessageComposer] Calling onSendVideo');
+      onSendVideo(pendingVideoFile, shouldCompress);
+      setPendingVideoFile(null);
+      setShowCompressionDialog(false);
     }
   };
 
@@ -397,36 +433,55 @@ export function MessageComposer({
       </form>
 
       {/* Compression dialog */}
-      {showCompressionDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-md rounded-lg bg-card p-6 shadow-lg">
-            <h2 className="mb-4 text-lg font-semibold">Send Image</h2>
-            <p className="mb-6 text-sm text-muted-foreground">
-              Would you like to compress the image before sending?
-            </p>
-            <div className="flex justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setPendingImageFile(null);
-                  setShowCompressionDialog(false);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => handleImageUpload(false)}
-              >
-                Send Original
-              </Button>
-              <Button onClick={() => handleImageUpload(true)}>
-                Compress & Send
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog open={showCompressionDialog} onOpenChange={setShowCompressionDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Send {compressionFileType === 'image' ? 'Image' : 'Video'}
+            </DialogTitle>
+            <DialogDescription>
+              Would you like to compress the {compressionFileType} before sending?
+              {compressionFileType === 'image' && ' (80% quality)'}
+              {compressionFileType === 'video' && ' (30% quality, 720p)'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-row justify-end gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPendingImageFile(null);
+                setPendingVideoFile(null);
+                setShowCompressionDialog(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (compressionFileType === 'image') {
+                  handleImageUpload(false);
+                } else {
+                  handleVideoUpload(false);
+                }
+              }}
+            >
+              Send Original
+            </Button>
+            <Button
+              onClick={() => {
+                if (compressionFileType === 'image') {
+                  handleImageUpload(true);
+                } else {
+                  handleVideoUpload(true);
+                }
+              }}
+            >
+              Compress & Send
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

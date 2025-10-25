@@ -455,8 +455,9 @@ export function GroupInfoDialog({
             } else if (updateResult.status === 'error') {
               toast.error(`Gagal mengubah foto grup: ${updateResult.message}`)
             }
-          } else if (uploadResult.status === 'error') {
-            toast.error(`Gagal mengunggah gambar: ${uploadResult.message}`)
+          } else {
+            const errorMsg = uploadResult.status === 'error' ? uploadResult.message : 'Unknown error';
+            toast.error(`Gagal mengunggah gambar: ${errorMsg}`)
           }
         } catch (error: any) {
           toast.error('Gagal mengubah foto grup')

@@ -2,11 +2,16 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   images: {
-    // Allow images from Firebase Storage
+    // Allow images from Firebase Storage and Chatku Asset Server
     remotePatterns: [
       {
         protocol: 'https',
         hostname: 'firebasestorage.googleapis.com',
+        pathname: '**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'chatku-asset.treonstudio.com',
         pathname: '**',
       },
     ],

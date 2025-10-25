@@ -152,11 +152,27 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
                   return false; // Skip other temp messages
                 }
 
+                // BEST: Match by tempId if available (most reliable)
+                if ('tempId' in msg && msg.tempId === optMsg.messageId) {
+                  return true;
+                }
+
+                // FALLBACK: Match by time and other criteria (for backward compatibility)
                 const timeDiff = Math.abs(
                   getTimestampMillis(msg.timestamp) - getTimestampMillis(optMsg.timestamp)
                 );
 
-                // Match by content and time
+                // For media messages (IMAGE, VIDEO, DOCUMENT), match by type and time only
+                // since the text might change during upload (e.g., "🎥 Uploading..." -> "🎥 Video")
+                if (optMsg.type === MessageType.IMAGE || optMsg.type === MessageType.VIDEO || optMsg.type === MessageType.DOCUMENT) {
+                  return (
+                    msg.senderId === optMsg.senderId &&
+                    msg.type === optMsg.type &&
+                    timeDiff < 300000 // 5 minute window for media messages
+                  );
+                }
+
+                // For text messages, match by content and time
                 return (
                   msg.senderId === optMsg.senderId &&
                   msg.text === optMsg.text &&
@@ -301,7 +317,9 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         imageFile,
         isGroupChat,
         shouldCompress,
-        currentUserAvatar
+        currentUserAvatar,
+        undefined,
+        tempId
       );
 
       setUploading(false);
@@ -329,26 +347,58 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
   );
 
   const sendVideo = useCallback(
-    async (currentUserId: string, currentUserName: string, videoFile: File, currentUserAvatar?: string) => {
-      if (!chatId) return;
+    async (currentUserId: string, currentUserName: string, videoFile: File, shouldCompress: boolean, currentUserAvatar?: string) => {
+      if (!chatId) {
+        console.error('sendVideo: chatId is null');
+        return;
+      }
 
       // Create optimistic message
       const tempId = `temp_${Date.now()}_${Math.random()}`;
+      const now = Timestamp.now();
+
       const optimisticMessage: Message = {
         messageId: tempId,
         senderId: currentUserId,
         senderName: currentUserName,
         senderAvatar: currentUserAvatar,
-        text: '🎥 Video',
+        text: shouldCompress ? '🎥 Compressing...' : '🎥 Uploading...',
         type: MessageType.VIDEO,
         readBy: {},
         deliveredTo: {},
-        timestamp: Timestamp.now(),
+        timestamp: now,
         status: MessageStatus.SENDING,
       };
 
-      setOptimisticMessages(prev => [optimisticMessage, ...prev]);
+      console.log('sendVideo: Adding optimistic message', {
+        tempId,
+        chatId,
+        currentUserId,
+        currentUserName,
+        timestamp: now,
+        shouldCompress
+      });
+
+      setOptimisticMessages(prev => {
+        const updated = [optimisticMessage, ...prev];
+        console.log('sendVideo: Optimistic messages updated', { count: updated.length });
+        return updated;
+      });
       setUploading(true);
+
+      // Update status to uploading after compression (if compressing)
+      if (shouldCompress) {
+        // Wait a bit for compression to start
+        setTimeout(() => {
+          setOptimisticMessages(prev =>
+            prev.map(msg =>
+              msg.messageId === tempId
+                ? { ...msg, text: '🎥 Uploading...' }
+                : msg
+            )
+          );
+        }, 2000); // Give time for compression UI to show
+      }
 
       const result = await messageRepository.uploadAndSendVideo(
         chatId,
@@ -356,7 +406,19 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         currentUserName,
         videoFile,
         isGroupChat,
-        currentUserAvatar
+        shouldCompress,
+        currentUserAvatar,
+        (phase) => {
+          // Update message based on phase
+          setOptimisticMessages(prev =>
+            prev.map(msg =>
+              msg.messageId === tempId
+                ? { ...msg, text: phase === 'compressing' ? '🎥 Compressing...' : '🎥 Uploading...' }
+                : msg
+            )
+          );
+        },
+        tempId
       );
 
       setUploading(false);
@@ -411,7 +473,9 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         currentUserName,
         documentFile,
         isGroupChat,
-        currentUserAvatar
+        currentUserAvatar,
+        undefined,
+        tempId
       );
 
       setUploading(false);
@@ -518,22 +582,83 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     messageMap.set(msg.messageId, msg);
   });
 
+  console.log('[useMessages] Merging messages:', {
+    realMessagesCount: messages.length,
+    optimisticMessagesCount: optimisticMessages.length,
+    optimisticIds: optimisticMessages.map(m => m.messageId)
+  });
+
   // Add optimistic messages only if they don't match any real message
   optimisticMessages.forEach(optMsg => {
     // Only add if it's a temp message and not already in map
     if (optMsg.messageId.startsWith('temp_') && !messageMap.has(optMsg.messageId)) {
-      // Double-check it doesn't duplicate a real message by content
+      // IMPORTANT: If the optimistic message is still SENDING, ALWAYS add it
+      // It's impossible for a SENDING message to be a duplicate of a real message
+      if (optMsg.status === MessageStatus.SENDING || optMsg.status === MessageStatus.FAILED) {
+        console.log('[useMessages] Adding SENDING/FAILED optimistic message (no dedup check):', {
+          messageId: optMsg.messageId,
+          status: optMsg.status
+        });
+        messageMap.set(optMsg.messageId, optMsg);
+        return; // Skip deduplication check
+      }
+
+      // For SENT messages, check if it's a duplicate of a real message
       const isDuplicate = Array.from(messageMap.values()).some(realMsg => {
+        if (realMsg.messageId.startsWith('temp_')) {
+          return false; // Skip other temp messages
+        }
+
+        // BEST: Match by tempId if available (most reliable)
+        if ('tempId' in realMsg && realMsg.tempId === optMsg.messageId) {
+          console.log('[useMessages] Found duplicate by tempId:', {
+            optMsgId: optMsg.messageId,
+            realMsgId: realMsg.messageId,
+            tempId: realMsg.tempId
+          });
+          return true;
+        }
+
+        // FALLBACK: Match by time and other criteria (for backward compatibility)
         const timeDiff = Math.abs(
           getTimestampMillis(realMsg.timestamp) - getTimestampMillis(optMsg.timestamp)
         );
+
+        // For media messages (IMAGE, VIDEO, DOCUMENT), match by type and time only
+        // since the text might change during upload (e.g., "🎥 Uploading..." -> "🎥 Video")
+        if (optMsg.type === MessageType.IMAGE || optMsg.type === MessageType.VIDEO || optMsg.type === MessageType.DOCUMENT) {
+          const isDup = (
+            realMsg.senderId === optMsg.senderId &&
+            realMsg.type === optMsg.type &&
+            timeDiff < 300000 // 5 minute window for media messages
+          );
+
+          if (isDup) {
+            console.log('[useMessages] Found duplicate media by time:', {
+              optMsgId: optMsg.messageId,
+              realMsgId: realMsg.messageId,
+              timeDiff,
+              optTime: getTimestampMillis(optMsg.timestamp),
+              realTime: getTimestampMillis(realMsg.timestamp)
+            });
+          }
+
+          return isDup;
+        }
+
+        // For text messages, match by content and time
         return (
-          !realMsg.messageId.startsWith('temp_') &&
           realMsg.senderId === optMsg.senderId &&
           realMsg.text === optMsg.text &&
           realMsg.type === optMsg.type &&
           timeDiff < 10000
         );
+      });
+
+      console.log('[useMessages] Processing SENT optimistic message:', {
+        messageId: optMsg.messageId,
+        isDuplicate,
+        willAdd: !isDuplicate
       });
 
       if (!isDuplicate) {

@@ -1,114 +1,87 @@
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { storage } from '@/lib/firebase/config';
 import { Resource } from '@/types/resource';
+import { uploadFileToChatkuAPI, validateFile } from '@/lib/utils/file-upload.utils';
 
 export class StorageRepository {
   private readonly PROFILE_IMAGES_PATH = 'profile_images';
   private readonly GROUP_AVATARS_PATH = 'group_avatars';
 
   /**
-   * Upload avatar image to Firebase Storage
-   * @param userId - The user ID
+   * Upload avatar image to Chatku Asset Server
+   * @param userId - The user ID (not used in new API, kept for backward compatibility)
    * @param file - The image file to upload
    * @param maxSizeInMB - Maximum file size in MB (optional, for extra validation)
    * @returns Resource with the download URL
    */
   async uploadAvatar(userId: string, file: File, maxSizeInMB?: number): Promise<Resource<string>> {
     try {
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        return Resource.error('Please select a valid image file');
+      // Validate file
+      const validationError = validateFile(file, {
+        maxSizeMB: maxSizeInMB || 10,
+        allowedTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+      });
+
+      if (validationError) {
+        return Resource.error(validationError);
       }
 
-      // Validate file size if maxSizeInMB is provided
-      if (maxSizeInMB) {
-        const maxSize = maxSizeInMB * 1024 * 1024;
-        if (file.size > maxSize) {
-          return Resource.error(`Image size must be less than ${maxSizeInMB}MB`);
-        }
+      // Upload to Chatku asset server
+      const uploadResult = await uploadFileToChatkuAPI(file);
+
+      if (uploadResult.status === 'success' && uploadResult.data) {
+        return Resource.success(uploadResult.data);
+      } else {
+        const errorMsg = uploadResult.status === 'error' ? uploadResult.message : 'Failed to upload avatar';
+        return Resource.error(errorMsg || 'Failed to upload avatar');
       }
-
-      // Create a unique filename with timestamp
-      const timestamp = Date.now();
-      const extension = file.name.split('.').pop();
-      const filename = `${timestamp}.${extension}`;
-      const filePath = `${this.PROFILE_IMAGES_PATH}/${userId}/${filename}`;
-
-      // Create storage reference
-      const storageRef = ref(storage(), filePath);
-
-      // Upload file
-      await uploadBytes(storageRef, file);
-
-      // Get download URL
-      const downloadURL = await getDownloadURL(storageRef);
-
-      return Resource.success(downloadURL);
     } catch (error: any) {
       return Resource.error(error.message || 'Failed to upload avatar');
     }
   }
 
   /**
-   * Upload group avatar image to Firebase Storage
-   * @param chatId - The group chat ID
+   * Upload group avatar image to Chatku Asset Server
+   * @param chatId - The group chat ID (not used in new API, kept for backward compatibility)
    * @param file - The image file to upload
    * @param maxSizeInMB - Maximum file size in MB (optional, for extra validation)
    * @returns Resource with the download URL
    */
   async uploadGroupAvatar(chatId: string, file: File, maxSizeInMB?: number): Promise<Resource<string>> {
     try {
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        return Resource.error('Please select a valid image file');
+      // Validate file
+      const validationError = validateFile(file, {
+        maxSizeMB: maxSizeInMB || 10,
+        allowedTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+      });
+
+      if (validationError) {
+        return Resource.error(validationError);
       }
 
-      // Validate file size if maxSizeInMB is provided
-      if (maxSizeInMB) {
-        const maxSize = maxSizeInMB * 1024 * 1024;
-        if (file.size > maxSize) {
-          return Resource.error(`Image size must be less than ${maxSizeInMB}MB`);
-        }
+      // Upload to Chatku asset server
+      const uploadResult = await uploadFileToChatkuAPI(file);
+
+      if (uploadResult.status === 'success' && uploadResult.data) {
+        return Resource.success(uploadResult.data);
+      } else {
+        const errorMsg = uploadResult.status === 'error' ? uploadResult.message : 'Failed to upload group avatar';
+        return Resource.error(errorMsg || 'Failed to upload group avatar');
       }
-
-      // Create a unique filename with timestamp
-      const timestamp = Date.now();
-      const extension = file.name.split('.').pop();
-      const filename = `${timestamp}.${extension}`;
-      const filePath = `${this.GROUP_AVATARS_PATH}/${chatId}/${filename}`;
-
-      // Create storage reference
-      const storageRef = ref(storage(), filePath);
-
-      // Upload file
-      await uploadBytes(storageRef, file);
-
-      // Get download URL
-      const downloadURL = await getDownloadURL(storageRef);
-
-      return Resource.success(downloadURL);
     } catch (error: any) {
       return Resource.error(error.message || 'Failed to upload group avatar');
     }
   }
 
   /**
-   * Delete avatar image from Firebase Storage
+   * Delete avatar image
+   * Note: Chatku Asset Server does not provide delete endpoint
+   * This function is kept for backward compatibility but does nothing
    * @param imageUrl - The full URL of the image to delete
    * @returns Resource indicating success or failure
    */
   async deleteAvatar(imageUrl: string): Promise<Resource<void>> {
-    try {
-      // Extract the path from the URL
-      const storageRef = ref(storage(), imageUrl);
-      await deleteObject(storageRef);
-      return Resource.success(undefined);
-    } catch (error: any) {
-      // If file doesn't exist, consider it a success
-      if (error.code === 'storage/object-not-found') {
-        return Resource.success(undefined);
-      }
-      return Resource.error(error.message || 'Failed to delete avatar');
-    }
+    // Chatku Asset Server doesn't support file deletion via API
+    // Files are managed on the server side
+    // Return success to maintain backward compatibility
+    return Resource.success(undefined);
   }
 }

@@ -522,7 +522,22 @@ export function ChatRoom({
 
   // Memoize visible messages to avoid re-computing on every render (must be before scroll effects that use it)
   const visibleMessages = useMemo(() => {
-    return [...messages].reverse().slice(-visibleMessageCount)
+    const reversed = [...messages].reverse()
+    const visible = reversed.slice(-visibleMessageCount)
+
+    console.log('[ChatRoom] visibleMessages:', {
+      totalMessages: messages.length,
+      visibleMessageCount,
+      visibleLength: visible.length,
+      firstMessageId: messages[0]?.messageId,
+      lastMessageId: messages[messages.length - 1]?.messageId,
+      firstVisibleId: visible[0]?.messageId,
+      lastVisibleId: visible[visible.length - 1]?.messageId,
+      optimisticInTotal: messages.some(m => m.messageId.startsWith('temp_')),
+      optimisticInVisible: visible.some(m => m.messageId.startsWith('temp_')),
+    })
+
+    return visible
   }, [messages, visibleMessageCount])
 
   // Progressive loading with IntersectionObserver (more performant than scroll listener)
@@ -1396,7 +1411,7 @@ export function ChatRoom({
                 setReplyingTo(null) // Clear reply state after sending
               }}
               onSendImage={(file, shouldCompress) => sendImage(currentUserId, currentUserName, file, shouldCompress, currentUserAvatar)}
-              onSendVideo={(file) => sendVideo(currentUserId, currentUserName, file, currentUserAvatar)}
+              onSendVideo={(file, shouldCompress) => sendVideo(currentUserId, currentUserName, file, shouldCompress, currentUserAvatar)}
               onSendDocument={(file) => sendDocument(currentUserId, currentUserName, file, currentUserAvatar)}
               disabled={false}
               uploading={uploading}

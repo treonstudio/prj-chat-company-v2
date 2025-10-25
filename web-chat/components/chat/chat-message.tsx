@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils"
 import { sanitizeMessageText } from "@/lib/utils/text-sanitizer"
 import { Button } from "@/components/ui/button"
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import {
   Dialog,
@@ -127,9 +127,24 @@ export function ChatMessage({
   const [isExpanded, setIsExpanded] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [editText, setEditText] = useState("")
+  const previousImageUrl = useRef<string>('')
 
   // Character limit for "Read More" functionality
   const CHAR_LIMIT = 300
+
+  // Reset imageLoaded only when image URL actually changes
+  useEffect(() => {
+    if (data.type === 'image' && 'content' in data) {
+      const currentUrl = data.content || ''
+
+      // Only reset if URL changed
+      if (currentUrl !== previousImageUrl.current) {
+        setImageLoaded(false)
+        previousImageUrl.current = currentUrl
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data])
 
   const handleCopy = async () => {
     if (data.type === 'text') {
@@ -602,24 +617,6 @@ export function ChatMessage({
 
           {data.type === "image" && (
             <div className="relative group">
-              {/* Skeleton loader */}
-              {!imageLoaded && (
-                <div className="absolute inset-0 bg-muted rounded-md animate-pulse flex items-center justify-center min-h-[200px]">
-                  <svg
-                    className="w-12 h-12 text-muted-foreground/30"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                    />
-                  </svg>
-                </div>
-              )}
               <div
                 className="cursor-pointer hover:opacity-90 transition-opacity"
                 style={{
@@ -631,18 +628,76 @@ export function ChatMessage({
                 }}
                 onClick={() => setShowImagePreview(true)}
               >
-                <Image
-                  src={data.content || "/placeholder.svg?height=320&width=480&query=pastel%20green%20chat%20image"}
-                  alt="Shared image"
-                  fill
-                  sizes="(max-width: 330px) 100vw, 330px"
-                  className={cn(
-                    "object-contain rounded-md",
-                    !imageLoaded && "opacity-0"
-                  )}
-                  loading="lazy"
-                  onLoad={() => setImageLoaded(true)}
-                />
+                {data.content && (data.content.startsWith('http://') || data.content.startsWith('https://')) ? (
+                  <>
+                    {/* Skeleton loader - only show when valid URL but not loaded yet */}
+                    {!imageLoaded && (
+                      <div className="absolute inset-0 bg-muted rounded-md animate-pulse flex items-center justify-center">
+                        <svg
+                          className="w-12 h-12 text-muted-foreground/30"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={1.5}
+                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                          />
+                        </svg>
+                      </div>
+                    )}
+                    <Image
+                      src={data.content}
+                      alt="Shared image"
+                      fill
+                      sizes="(max-width: 330px) 100vw, 330px"
+                      className="object-contain rounded-md transition-opacity duration-200"
+                      style={{ opacity: imageLoaded ? 1 : 0 }}
+                      loading="lazy"
+                      onLoad={() => setImageLoaded(true)}
+                      onError={() => setImageLoaded(true)}
+                      priority={false}
+                      unoptimized={false}
+                    />
+                  </>
+                ) : (
+                  <div className="relative flex flex-col items-center justify-center h-full text-muted-foreground bg-muted rounded-md">
+                    {data.status === 'SENDING' ? (
+                      <>
+                        {/* Upload/Compress indicator */}
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="relative">
+                            {/* Spinner */}
+                            <div className="h-12 w-12 animate-spin rounded-full border-4 border-muted-foreground/20 border-t-primary" />
+                            {/* Upload icon in center */}
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <svg
+                                className="h-6 w-6 text-primary"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                                />
+                              </svg>
+                            </div>
+                          </div>
+                          <div className="text-xs text-muted-foreground font-medium">
+                            Uploading image...
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <ImageIcon className="h-12 w-12" />
+                    )}
+                  </div>
+                )}
               </div>
               {/* Download button - appears on hover */}
               {imageLoaded && (
@@ -681,17 +736,95 @@ export function ChatMessage({
                 minWidth: '200px',
               }}
             >
-              <video
-                className="h-auto w-full rounded-md pointer-events-none"
-                style={{
-                  maxHeight: '500px',
-                  objectFit: 'contain',
-                }}
-                preload="metadata"
-              >
-                <source src={data.content} type={data.mimeType || 'video/mp4'} />
-                Your browser does not support the video tag.
-              </video>
+              {data.content && (data.content.startsWith('http://') || data.content.startsWith('https://')) ? (
+                <>
+                  <video
+                    className="h-auto w-full rounded-md pointer-events-none"
+                    style={{
+                      maxHeight: '500px',
+                      objectFit: 'contain',
+                    }}
+                    preload="metadata"
+                  >
+                    <source src={data.content} type={data.mimeType || 'video/mp4'} />
+                    Your browser does not support the video tag.
+                  </video>
+
+                  {/* Play button overlay - only show when NOT uploading */}
+                  {data.status !== 'SENDING' && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+                        <svg
+                          className="w-8 h-8 text-green-600 ml-1"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="relative flex flex-col items-center justify-center h-[200px] w-full rounded-md bg-muted">
+                  {data.status === 'SENDING' ? (
+                    <>
+                      {/* Upload/Compress indicator */}
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="relative">
+                          {/* Spinner */}
+                          <div className="h-12 w-12 animate-spin rounded-full border-4 border-muted-foreground/20 border-t-primary" />
+                          {/* Icon in center - different for compress vs upload */}
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            {'content' in data && data.content.includes('Compressing') ? (
+                              // Compress icon (gear/settings)
+                              <svg
+                                className="h-6 w-6 text-primary"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                                />
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                />
+                              </svg>
+                            ) : (
+                              // Upload icon
+                              <svg
+                                className="h-6 w-6 text-primary"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                                />
+                              </svg>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground font-medium">
+                          {'content' in data ? data.content.replace('🎥 ', '') : 'Uploading video...'}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <Video className="h-12 w-12 text-muted-foreground" />
+                  )}
+                </div>
+              )}
 
               {/* Options menu button - top right */}
               <DropdownMenu>
@@ -762,18 +895,20 @@ export function ChatMessage({
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* Play overlay */}
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors rounded-md pointer-events-none">
-                <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center">
-                  <svg
-                    className="w-8 h-8 text-primary ml-1"
-                    fill="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
+              {/* Play overlay - only show when NOT uploading */}
+              {data.status !== 'SENDING' && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors rounded-md pointer-events-none">
+                  <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center">
+                    <svg
+                      className="w-8 h-8 text-primary ml-1"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 

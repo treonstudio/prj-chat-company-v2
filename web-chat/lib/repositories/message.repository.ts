@@ -12,11 +12,11 @@ import {
   getDoc,
   setDoc
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase/config';
+import { db } from '@/lib/firebase/config';
 import { Message, MessageType, MediaMetadata, MessageStatus } from '@/types/models';
 import { Resource } from '@/types/resource';
-import imageCompression from 'browser-image-compression';
+import { compressImage, compressVideo } from '@/lib/utils/media-compression';
+import { uploadFileToChatkuAPI } from '@/lib/utils/file-upload.utils';
 
 /**
  * Generate a UUID compatible with all browsers
@@ -299,33 +299,35 @@ export class MessageRepository {
     isGroupChat: boolean,
     shouldCompress: boolean,
     currentUserAvatar?: string,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    tempId?: string
   ): Promise<Resource<void>> {
     try {
       let fileToUpload = imageFile;
 
       // Compress image if requested
       if (shouldCompress && imageFile.type.startsWith('image/')) {
-        const options = {
-          maxSizeMB: 1,
-          maxWidthOrHeight: 1920,
-          useWebWorker: true,
-        };
-        fileToUpload = await imageCompression(imageFile, options);
+        try {
+          // Use browser-image-compression with 80% quality, max 1920px
+          fileToUpload = await compressImage(imageFile, 0.8, 1920);
+        } catch (error) {
+          console.error('Compression failed, using original file:', error);
+          // If compression fails, use original file
+        }
       }
 
       // Generate filename with timestamp and proper extension
       const extension = this.getFileExtension(fileToUpload);
       const fileName = `IMG_${Date.now()}.${extension}`;
 
-      // Upload to Firebase Storage with proper path structure
-      const collection_name = isGroupChat ? 'group' : 'direct';
-      const randomId = generateUUID();
-      const storagePath = `chats/${collection_name}/${chatId}/${randomId}/${fileName}`;
-      const storageRef = ref(storage(), storagePath);
+      // Upload to Chatku Asset Server
+      const uploadResult = await uploadFileToChatkuAPI(fileToUpload);
 
-      await uploadBytes(storageRef, fileToUpload);
-      const downloadUrl = await getDownloadURL(storageRef);
+      if (uploadResult.status !== 'success' || !uploadResult.data) {
+        return Resource.error('Failed to upload image');
+      }
+
+      const downloadUrl = uploadResult.data;
 
       // Create media metadata
       const mediaMetadata: MediaMetadata = {
@@ -347,6 +349,7 @@ export class MessageRepository {
         mediaMetadata,
         readBy: {},
         deliveredTo: {},
+        ...(tempId && { tempId }), // Store tempId for deduplication
       };
 
       return await this.sendMessage(chatId, message, isGroupChat);
@@ -365,28 +368,49 @@ export class MessageRepository {
     currentUserName: string,
     videoFile: File,
     isGroupChat: boolean,
+    shouldCompress: boolean,
     currentUserAvatar?: string,
-    onProgress?: (progress: number) => void
+    onPhaseChange?: (phase: 'compressing' | 'uploading') => void,
+    tempId?: string
   ): Promise<Resource<void>> {
     try {
+      let fileToUpload = videoFile;
+
+      // Compress video if requested
+      if (shouldCompress && videoFile.type.startsWith('video/')) {
+        try {
+          // Report compressing phase
+          onPhaseChange?.('compressing');
+
+          // Use FFmpeg.wasm compression with 30% quality (720p max)
+          fileToUpload = await compressVideo(videoFile, 0.3);
+        } catch (error) {
+          console.error('Video compression failed, using original file:', error);
+          // If compression fails, use original file
+        }
+      }
+
+      // Report uploading phase
+      onPhaseChange?.('uploading');
+
       // Generate filename with timestamp and proper extension
-      const extension = this.getFileExtension(videoFile);
+      const extension = this.getFileExtension(fileToUpload);
       const fileName = `VID_${Date.now()}.${extension}`;
 
-      // Upload to Firebase Storage with proper path structure
-      const collection_name = isGroupChat ? 'group' : 'direct';
-      const randomId = generateUUID();
-      const storagePath = `chats/${collection_name}/${chatId}/${randomId}/${fileName}`;
-      const storageRef = ref(storage(), storagePath);
+      // Upload to Chatku Asset Server
+      const uploadResult = await uploadFileToChatkuAPI(fileToUpload);
 
-      await uploadBytes(storageRef, videoFile);
-      const downloadUrl = await getDownloadURL(storageRef);
+      if (uploadResult.status !== 'success' || !uploadResult.data) {
+        return Resource.error('Failed to upload video');
+      }
+
+      const downloadUrl = uploadResult.data;
 
       // Create media metadata (no thumbnailUrl for videos)
       const mediaMetadata: MediaMetadata = {
         fileName,
-        fileSize: videoFile.size,
-        mimeType: videoFile.type,
+        fileSize: fileToUpload.size,
+        mimeType: fileToUpload.type,
       };
 
       // Send message with video
@@ -401,6 +425,7 @@ export class MessageRepository {
         mediaMetadata,
         readBy: {},
         deliveredTo: {},
+        ...(tempId && { tempId }), // Store tempId for deduplication
       };
 
       return await this.sendMessage(chatId, message, isGroupChat);
@@ -420,7 +445,8 @@ export class MessageRepository {
     documentFile: File,
     isGroupChat: boolean,
     currentUserAvatar?: string,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    tempId?: string
   ): Promise<Resource<void>> {
     try {
       // Use original filename for documents (with timestamp prefix for uniqueness)
@@ -428,14 +454,15 @@ export class MessageRepository {
       const originalName = documentFile.name;
       const fileName = `DOC_${Date.now()}_${originalName}`;
 
-      // Upload to Firebase Storage with proper path structure (documents subfolder)
-      const collection_name = isGroupChat ? 'group' : 'direct';
-      const randomId = generateUUID();
-      const storagePath = `chats/${collection_name}/${chatId}/documents/${randomId}/${fileName}`;
-      const storageRef = ref(storage(), storagePath);
+      // Upload to Chatku Asset Server
+      const uploadResult = await uploadFileToChatkuAPI(documentFile, onProgress);
 
-      await uploadBytes(storageRef, documentFile);
-      const downloadUrl = await getDownloadURL(storageRef);
+      if (uploadResult.status !== 'success' || !uploadResult.data) {
+        const errorMsg = uploadResult.status === 'error' ? uploadResult.message : 'Failed to upload document';
+        return Resource.error(errorMsg || 'Failed to upload document');
+      }
+
+      const downloadUrl = uploadResult.data;
 
       // Create media metadata (no thumbnailUrl for documents)
       const mediaMetadata: MediaMetadata = {
@@ -456,6 +483,7 @@ export class MessageRepository {
         mediaMetadata,
         readBy: {},
         deliveredTo: {},
+        ...(tempId && { tempId }), // Store tempId for deduplication
       };
 
       return await this.sendMessage(chatId, message, isGroupChat);

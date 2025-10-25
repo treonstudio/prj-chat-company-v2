@@ -1,6 +1,5 @@
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { storage } from '@/lib/firebase/config';
 import { Resource } from '@/types/resource';
+import { uploadFileToChatkuAPI, validateFile } from '@/lib/utils/file-upload.utils';
 
 /**
  * Compress image before upload
@@ -56,39 +55,35 @@ async function compressImage(file: File, maxSizeMB = 1): Promise<File> {
 }
 
 /**
- * Upload group avatar to Firebase Storage
+ * Upload group avatar to Chatku Asset Server
  */
 export async function uploadGroupAvatar(
   groupId: string,
   file: File
 ): Promise<Resource<string>> {
   try {
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      return Resource.error('Please select an image file');
-    }
+    // Validate file
+    const validationError = validateFile(file, {
+      maxSizeMB: 5,
+      allowedTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    });
 
-    // Validate file size (max 5MB before compression)
-    const maxSize = 5 * 1024 * 1024;
-    if (file.size > maxSize) {
-      return Resource.error('Image size must be less than 5MB');
+    if (validationError) {
+      return Resource.error(validationError);
     }
 
     // Compress image
     const compressedFile = await compressImage(file);
 
-    // Create storage reference
-    const timestamp = Date.now();
-    const fileName = `group_${groupId}_${timestamp}.jpg`;
-    const storageRef = ref(storage(), `group-avatars/${fileName}`);
+    // Upload to Chatku asset server
+    const uploadResult = await uploadFileToChatkuAPI(compressedFile);
 
-    // Upload file
-    await uploadBytes(storageRef, compressedFile);
-
-    // Get download URL
-    const downloadURL = await getDownloadURL(storageRef);
-
-    return Resource.success(downloadURL);
+    if (uploadResult.status === 'success' && uploadResult.data) {
+      return Resource.success(uploadResult.data);
+    } else {
+      const errorMsg = uploadResult.status === 'error' ? uploadResult.message : 'Failed to upload image';
+      return Resource.error(errorMsg || 'Failed to upload image');
+    }
   } catch (error: any) {
     console.error('Upload error:', error);
     return Resource.error(error.message || 'Failed to upload image');
@@ -96,19 +91,13 @@ export async function uploadGroupAvatar(
 }
 
 /**
- * Delete group avatar from Firebase Storage
+ * Delete group avatar
+ * Note: Chatku Asset Server does not provide delete endpoint
+ * This function is kept for backward compatibility but does nothing
  */
 export async function deleteGroupAvatar(avatarUrl: string): Promise<Resource<void>> {
-  try {
-    // Extract file path from URL
-    const fileRef = ref(storage(), avatarUrl);
-    await deleteObject(fileRef);
-    return Resource.success(undefined);
-  } catch (error: any) {
-    // It's okay if file doesn't exist
-    if (error.code === 'storage/object-not-found') {
-      return Resource.success(undefined);
-    }
-    return Resource.error(error.message || 'Failed to delete image');
-  }
+  // Chatku Asset Server doesn't support file deletion via API
+  // Files are managed on the server side
+  // Return success to maintain backward compatibility
+  return Resource.success(undefined);
 }
