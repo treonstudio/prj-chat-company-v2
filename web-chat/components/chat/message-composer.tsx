@@ -221,17 +221,9 @@ export function MessageComposer({
 
   const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    console.log('[MessageComposer] handleVideoSelect:', { file, fileType: file?.type });
-
     if (file && file.type.startsWith('video/')) {
       // Validate file size
       const maxSizeInBytes = usageControls.maxFileSizeUploadedInMB * 1024 * 1024;
-      console.log('[MessageComposer] Video size check:', {
-        fileSize: file.size,
-        maxSize: maxSizeInBytes,
-        valid: file.size <= maxSizeInBytes
-      });
-
       if (file.size > maxSizeInBytes) {
         toast.error(`Ukuran file tidak boleh lebih dari ${usageControls.maxFileSizeUploadedInMB}MB`);
         if (videoInputRef.current) {
@@ -240,7 +232,6 @@ export function MessageComposer({
         return;
       }
 
-      console.log('[MessageComposer] Showing compression dialog for video');
       setPendingVideoFile(file);
       setCompressionFileType('video');
       setShowCompressionDialog(true);
@@ -252,13 +243,7 @@ export function MessageComposer({
   };
 
   const handleVideoUpload = (shouldCompress: boolean) => {
-    console.log('[MessageComposer] handleVideoUpload:', {
-      hasPendingFile: !!pendingVideoFile,
-      shouldCompress
-    });
-
     if (pendingVideoFile) {
-      console.log('[MessageComposer] Calling onSendVideo');
       onSendVideo(pendingVideoFile, shouldCompress);
       setPendingVideoFile(null);
       setShowCompressionDialog(false);

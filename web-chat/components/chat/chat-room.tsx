@@ -522,22 +522,7 @@ export function ChatRoom({
 
   // Memoize visible messages to avoid re-computing on every render (must be before scroll effects that use it)
   const visibleMessages = useMemo(() => {
-    const reversed = [...messages].reverse()
-    const visible = reversed.slice(-visibleMessageCount)
-
-    console.log('[ChatRoom] visibleMessages:', {
-      totalMessages: messages.length,
-      visibleMessageCount,
-      visibleLength: visible.length,
-      firstMessageId: messages[0]?.messageId,
-      lastMessageId: messages[messages.length - 1]?.messageId,
-      firstVisibleId: visible[0]?.messageId,
-      lastVisibleId: visible[visible.length - 1]?.messageId,
-      optimisticInTotal: messages.some(m => m.messageId.startsWith('temp_')),
-      optimisticInVisible: visible.some(m => m.messageId.startsWith('temp_')),
-    })
-
-    return visible
+    return [...messages].reverse().slice(-visibleMessageCount)
   }, [messages, visibleMessageCount])
 
   // Progressive loading with IntersectionObserver (more performant than scroll listener)
