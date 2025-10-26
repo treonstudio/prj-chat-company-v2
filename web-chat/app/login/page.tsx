@@ -7,8 +7,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { toast } from 'sonner';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { PresenceRepository } from '@/lib/repositories/presence.repository';
 
 const EMAIL_DOMAIN = '@chatapp.com';
+
+const presenceRepository = new PresenceRepository();
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -16,6 +29,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showSessionDialog, setShowSessionDialog] = useState(false);
+  const [existingSessions, setExistingSessions] = useState<{deviceId: string, deviceName: string}[]>([]);
+  const [pendingLoginData, setPendingLoginData] = useState<{email: string, password: string, userId: string} | null>(null);
   const router = useRouter();
   const { signIn, signOut, currentUser, userData } = useAuth();
 
@@ -31,9 +47,42 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
-    // Convert username to email format
-    const email = username + EMAIL_DOMAIN;
+    try {
+      // Convert username to email format
+      const email = username + EMAIL_DOMAIN;
 
+      console.log('[Login] Checking for existing sessions...');
+
+      // Step 1: Get userId from username WITHOUT signing in
+      const userId = await presenceRepository.getUserIdByUsername(username);
+
+      if (userId) {
+        // Step 2: Check if user has existing web sessions in RTDB
+        const sessions = await presenceRepository.checkExistingSessions(userId, 'web');
+
+        if (sessions.length > 0) {
+          // Found existing sessions, show dialog
+          console.log('[Login] Found existing sessions:', sessions);
+          setExistingSessions(sessions);
+          setPendingLoginData({ email, password, userId });
+          setShowSessionDialog(true);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // No existing sessions, proceed with normal login
+      await proceedWithLogin(email, password);
+    } catch (error: any) {
+      console.error('[Login] Error:', error);
+      const errorMessage = error.message || 'Gagal login';
+      setError(errorMessage);
+      toast.error(errorMessage);
+      setLoading(false);
+    }
+  };
+
+  const proceedWithLogin = async (email: string, password: string) => {
     const result = await signIn(email, password);
 
     if (result.success) {
@@ -45,6 +94,42 @@ export default function LoginPage() {
       toast.error(errorMessage);
       setLoading(false);
     }
+  };
+
+  const handleConfirmLogin = async () => {
+    if (!pendingLoginData) return;
+
+    setShowSessionDialog(false);
+    setLoading(true);
+
+    try {
+      // Kick out all existing sessions
+      for (const session of existingSessions) {
+        console.log('[Login] Kicking out session:', session.deviceId);
+        await presenceRepository.kickOutDevice(pendingLoginData.userId, 'web', session.deviceId);
+      }
+
+      // Small delay to ensure sessions are kicked out
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Proceed with login
+      await proceedWithLogin(pendingLoginData.email, pendingLoginData.password);
+
+      // Clear pending data
+      setPendingLoginData(null);
+      setExistingSessions([]);
+    } catch (error) {
+      console.error('[Login] Error during login:', error);
+      toast.error('Gagal login. Silakan coba lagi.');
+      setLoading(false);
+    }
+  };
+
+  const handleCancelLogin = () => {
+    setShowSessionDialog(false);
+    setPendingLoginData(null);
+    setExistingSessions([]);
+    setLoading(false);
   };
 
   return (
@@ -119,6 +204,34 @@ export default function LoginPage() {
           </Button>
         </form>
       </Card>
+
+      {/* Session Conflict Dialog */}
+      <AlertDialog open={showSessionDialog} onOpenChange={setShowSessionDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Device Lain Terdeteksi</AlertDialogTitle>
+            <AlertDialogDescription>
+              Anda sedang login di device lain. Apakah Anda ingin login di device ini dan logout dari device lain?
+              {existingSessions.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  <p className="font-medium text-sm">Device aktif:</p>
+                  <ul className="list-disc list-inside text-sm">
+                    {existingSessions.map((session) => (
+                      <li key={session.deviceId}>{session.deviceName}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCancelLogin}>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmLogin}>
+              Ya, Login di Sini
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

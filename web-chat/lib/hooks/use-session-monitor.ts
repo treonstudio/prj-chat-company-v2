@@ -11,7 +11,7 @@
 
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { doc, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { ref, onValue, off } from 'firebase/database';
 import { db, realtimeDatabase } from '@/lib/firebase/config';
@@ -22,9 +22,10 @@ interface SessionMonitorOptions {
   userId: string | null;
   deviceId: string | null;
   onSessionDeleted?: () => Promise<void>;
+  isManualLogoutRef?: React.MutableRefObject<boolean>;
 }
 
-export function useSessionMonitor({ userId, deviceId, onSessionDeleted }: SessionMonitorOptions) {
+export function useSessionMonitor({ userId, deviceId, onSessionDeleted, isManualLogoutRef }: SessionMonitorOptions) {
   const [isKicked, setIsKicked] = useState(false);
   const router = useRouter();
   const sessionInitialized = useRef(false);
@@ -54,13 +55,12 @@ export function useSessionMonitor({ userId, deviceId, onSessionDeleted }: Sessio
         await onSessionDeleted();
       }
 
-      // Show graceful warning
-      toast.error('Sesi Anda telah berakhir', {
-        duration: 5000,
-        description: 'Anda akan dialihkan ke halaman login dalam 3 detik...',
-      });
+      // Show graceful warning only if NOT manual logout
+      const isManualLogout = isManualLogoutRef?.current || false;
+      console.log('[SessionMonitor] isManualLogout flag:', isManualLogout, 'reason:', reason);
 
-      // Force logout after 3 seconds
+      // Force logout after 3 seconds (or immediately if manual)
+      const delay = isManualLogout ? 0 : 3000;
       setTimeout(() => {
         // Clear localStorage
         localStorage.clear();
@@ -70,7 +70,7 @@ export function useSessionMonitor({ userId, deviceId, onSessionDeleted }: Sessio
 
         // Force page reload to reset all state
         window.location.href = '/login';
-      }, 3000);
+      }, delay);
     };
 
     // 1. Listen for kicked session in Firestore
@@ -128,7 +128,7 @@ export function useSessionMonitor({ userId, deviceId, onSessionDeleted }: Sessio
       sessionInitialized.current = false;
       logoutTriggered.current = false;
     };
-  }, [userId, deviceId, router, onSessionDeleted]);
+  }, [userId, deviceId, router, onSessionDeleted, isManualLogoutRef]);
 
   return { isKicked };
 }

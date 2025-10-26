@@ -180,6 +180,7 @@ export class ChatRepository {
   async startDirectChat(
     currentUserId: string,
     currentUserName: string,
+    currentUserAvatar: string | undefined,
     otherUserId: string,
     otherUserName: string,
     otherUserAvatar?: string
@@ -258,7 +259,7 @@ export class ChatRepository {
           chatType: ChatType.DIRECT,
           otherUserId: currentUserId,
           otherUserName: currentUserName,
-          // Note: Current user avatar not passed, would need to be added if available
+          ...(currentUserAvatar && { otherUserAvatar: currentUserAvatar }),
           lastMessage: 'Start conversation',
           lastMessageTime: Timestamp.now(),
           unreadCount: 0,

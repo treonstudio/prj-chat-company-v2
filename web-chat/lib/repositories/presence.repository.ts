@@ -11,7 +11,7 @@
  */
 
 import { ref, onValue, onDisconnect, set, serverTimestamp as rtdbServerTimestamp, get, off, remove } from 'firebase/database';
-import { doc, updateDoc, serverTimestamp, Timestamp, setDoc, collection, getDocs, query, deleteDoc } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp, Timestamp, setDoc, collection, getDocs, query, where, deleteDoc } from 'firebase/firestore';
 import { realtimeDatabase } from '@/lib/firebase/config';
 import { db } from '@/lib/firebase/config';
 import { UserStatus, DeviceType, DeviceSession } from '@/types/models';
@@ -58,6 +58,54 @@ export class PresenceRepository {
       }
     } catch (error) {
       console.error('[Presence] Error checking existing sessions:', error);
+    }
+  }
+
+  /**
+   * Get userId from username by querying users collection
+   */
+  async getUserIdByUsername(username: string): Promise<string | null> {
+    try {
+      const firestore = db();
+      const usersRef = collection(firestore, 'users');
+      const q = query(usersRef, where('username', '==', username));
+      const snapshot = await getDocs(q);
+
+      if (!snapshot.empty) {
+        return snapshot.docs[0].id;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('[Presence] Error getting userId by username:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Check if user has existing active sessions
+   * Returns array of existing session info
+   */
+  async checkExistingSessions(userId: string, deviceType: DeviceType): Promise<{deviceId: string, deviceName: string}[]> {
+    try {
+      const rtdb = realtimeDatabase();
+      const sessionsRef = ref(rtdb, `/sessions/${userId}/${deviceType}`);
+      const snapshot = await get(sessionsRef);
+
+      if (snapshot.exists()) {
+        const sessions = snapshot.val();
+        const sessionEntries = Object.entries(sessions);
+
+        return sessionEntries.map(([deviceId, sessionData]: [string, any]) => ({
+          deviceId,
+          deviceName: sessionData.deviceName || 'Unknown Device'
+        }));
+      }
+
+      return [];
+    } catch (error) {
+      console.error('[Presence] Error checking existing sessions:', error);
+      return [];
     }
   }
 

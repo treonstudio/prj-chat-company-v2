@@ -386,6 +386,7 @@ export function Sidebar({
         onOpenChange={setShowNewChatDialog}
         currentUserId={currentUserId}
         currentUserName={currentUserName}
+        currentUserAvatar={currentUserData.imageURL || currentUserData.imageUrl}
         onChatCreated={handleChatCreated}
       />
 

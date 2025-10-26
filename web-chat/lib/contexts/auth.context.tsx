@@ -30,8 +30,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const userRepositoryRef = useRef<any>(null);
   const presenceRepositoryRef = useRef<any>(null);
   const isLoggingOut = useRef(false);
+  const isManualLogout = useRef(false);
 
-  // Callback to stop presence monitoring when session is deleted
+  // Callback to stop presence monitoring when session is deleted externally
   const handleSessionDeleted = useCallback(async () => {
     console.log('[Auth] Session deleted externally, stopping presence monitoring...');
 
@@ -68,7 +69,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useSessionMonitor({
     userId: currentUser?.uid || null,
     deviceId,
-    onSessionDeleted: handleSessionDeleted
+    onSessionDeleted: handleSessionDeleted,
+    isManualLogoutRef: isManualLogout
   });
 
   // Monitor if tab should be kicked out (only 1 tab per browser)
@@ -282,8 +284,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUserData(null);
           setLoading(false);
 
-          // Reset logout flag
+          // Reset logout flags
           isLoggingOut.current = false;
+          isManualLogout.current = false;
 
           // Stop presence monitoring
           if (presenceRepositoryRef.current) {
@@ -390,6 +393,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    console.log('[Auth] Manual logout initiated');
+
+    // Save username for session check on next login
+    if (userData?.username) {
+      localStorage.setItem('lastLogoutUsername', userData.username);
+      console.log('[Auth] Saved lastLogoutUsername:', userData.username);
+    }
+
+    // Mark as manual logout to skip toast notification
+    isManualLogout.current = true;
+    console.log('[Auth] isManualLogout flag set to:', isManualLogout.current);
+
+    // Small delay to ensure flag is read by session monitor before session deletion
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     // Set user offline before signing out
     if (presenceRepositoryRef.current && currentUser) {
       try {

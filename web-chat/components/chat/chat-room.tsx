@@ -211,8 +211,8 @@ export function ChatRoom({
     }
   }, [replyingTo])
 
-  // User cache for looking up sender names
-  const [userCache, setUserCache] = useState<Map<string, string>>(new Map())
+  // User cache for looking up sender names and avatars
+  const [userCache, setUserCache] = useState<Map<string, {name: string, avatar?: string}>>(new Map())
 
   // Monitor other user's status (for direct chat only)
   const { status: otherUserStatus, lastSeenText } = useUserStatus(
@@ -285,26 +285,24 @@ export function ChatRoom({
     setReplyingTo(null) // Clear reply preview when switching rooms
   }, [chatId])
 
-  // Lookup missing sender names from users collection
+  // Lookup sender names and avatars from users collection
   useEffect(() => {
     const fetchMissingUsers = async () => {
-      // Find all unique sender IDs that need lookup (missing or empty senderName)
+      // Find all unique sender IDs that need lookup (not already in cache)
       const senderIdsToFetch = new Set<string>()
 
       messages.forEach(m => {
         // Skip system messages
         if (m.senderId === 'system') return
 
-        // Check if senderName is missing or empty and not already in cache
-        if ((!m.senderName || m.senderName.trim() === '') && !userCache.has(m.senderId)) {
+        // Fetch if not in cache - we need both name and avatar
+        if (!userCache.has(m.senderId)) {
           senderIdsToFetch.add(m.senderId)
         }
 
-        // Also check replyTo senderName
-        if (m.replyTo && (!m.replyTo.senderName || m.replyTo.senderName.trim() === '' || m.replyTo.senderName === 'Deleted User')) {
-          if (!userCache.has(m.replyTo.senderId)) {
-            senderIdsToFetch.add(m.replyTo.senderId)
-          }
+        // Also check replyTo sender
+        if (m.replyTo && !userCache.has(m.replyTo.senderId)) {
+          senderIdsToFetch.add(m.replyTo.senderId)
         }
       })
 
@@ -317,13 +315,17 @@ export function ChatRoom({
           try {
             const result = await userRepository.getUserById(userId)
             if (result.status === 'success' && result.data.displayName) {
-              return { userId, name: result.data.displayName }
+              return {
+                userId,
+                name: result.data.displayName,
+                avatar: result.data.imageURL || result.data.imageUrl
+              }
             } else {
-              return { userId, name: 'Deleted User' }
+              return { userId, name: 'Deleted User', avatar: undefined }
             }
           } catch (error) {
             console.error(`Error fetching user ${userId}:`, error)
-            return { userId, name: 'Deleted User' }
+            return { userId, name: 'Deleted User', avatar: undefined }
           }
         })
 
@@ -331,8 +333,8 @@ export function ChatRoom({
         const results = await Promise.all(fetchPromises)
 
         // Update cache with all results at once
-        results.forEach(({ userId, name }) => {
-          newCache.set(userId, name)
+        results.forEach(({ userId, name, avatar }) => {
+          newCache.set(userId, { name, avatar })
         })
 
         setUserCache(newCache)
@@ -1413,19 +1415,18 @@ export function ChatRoom({
                     : m.type === 'VIDEO_CALL' ? 'video_call'
                     : m.type.toLowerCase()
 
-                  // Handle missing senderName - lookup from users collection or use cached value
-                  // If senderName is not available and not in cache yet, skip rendering until cache is ready
-                  if (!m.senderName || m.senderName.trim() === '') {
-                    const cachedName = userCache.get(m.senderId)
-                    if (!cachedName) {
-                      // Still fetching, don't render this message yet to avoid flicker
-                      return null
-                    }
+                  // Get user info from cache (name and avatar fetched by senderId)
+                  const cachedUser = userCache.get(m.senderId)
+
+                  // If user not in cache yet, skip rendering to avoid flicker
+                  if (!cachedUser) {
+                    return null
                   }
 
                   const senderName = m.senderName && m.senderName.trim() !== ''
                     ? m.senderName
-                    : userCache.get(m.senderId) || 'Deleted User'
+                    : cachedUser.name
+                  const senderAvatar = cachedUser.avatar
 
                   // Compute actual message status based on readBy
                   const isMe = m.senderId === currentUserId
@@ -1448,7 +1449,7 @@ export function ChatRoom({
                           callMetadata: m.callMetadata,
                           senderId: m.senderId,
                           senderName: senderName,
-                          senderAvatar: m.senderAvatar,
+                          senderAvatar: senderAvatar,
                           timestamp: timeStr,
                           editedAt: editedTimeStr,
                           status: computedStatus,

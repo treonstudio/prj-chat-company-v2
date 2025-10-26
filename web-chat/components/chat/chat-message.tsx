@@ -106,7 +106,7 @@ export function ChatMessage({
   onMediaViewerChange,
 }: {
   data: ChatMessageUnion
-  userCache?: Map<string, string>
+  userCache?: Map<string, {name: string, avatar?: string}>
   isMe: boolean
   isGroupChat: boolean
   onRetry?: (messageId: string) => void
@@ -385,7 +385,8 @@ export function ChatMessage({
           {/* Sender name inside bubble only for group chat and other users */}
           {isGroupChat && !isMe ? (() => {
             // Try to get displayName from userCache first
-            const cachedDisplayName = userCache?.get(data.senderId)
+            const cachedUser = userCache?.get(data.senderId)
+            const cachedDisplayName = cachedUser?.name
 
             // Determine if user is deleted
             // User is deleted if:
@@ -460,9 +461,9 @@ export function ChatMessage({
                     const replyToName = data.replyTo!.senderName
                     // Try to get name from cache if senderName is empty or "Deleted User"
                     if (!replyToName || replyToName.trim() === '' || replyToName === "Deleted User") {
-                      const cachedName = userCache?.get(data.replyTo!.senderId)
-                      if (cachedName) {
-                        return cachedName
+                      const cachedUser = userCache?.get(data.replyTo!.senderId)
+                      if (cachedUser) {
+                        return cachedUser.name
                       }
                       return "Deleted User"
                     }

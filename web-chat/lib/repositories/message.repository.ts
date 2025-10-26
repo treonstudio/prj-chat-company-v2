@@ -681,10 +681,13 @@ export class MessageRepository {
       const newUnreadCount = isSender ? 0 : currentUnreadCount + 1;
 
       // Create chat item update
+      // Always update otherUserName and otherUserAvatar to keep them in sync with users collection
       const chatItemUpdate = {
         lastMessage,
         lastMessageTime,
         unreadCount: newUnreadCount,
+        otherUserName,
+        ...(otherUserAvatar && { otherUserAvatar }),
       };
 
       if (userChatSnapshot.exists()) {

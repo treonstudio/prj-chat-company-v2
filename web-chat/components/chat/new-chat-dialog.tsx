@@ -23,6 +23,7 @@ interface NewChatDialogProps {
   onOpenChange: (open: boolean) => void
   currentUserId: string
   currentUserName: string
+  currentUserAvatar?: string
   onChatCreated: (chatId: string, isGroup: boolean) => void
 }
 
@@ -31,6 +32,7 @@ export function NewChatDialog({
   onOpenChange,
   currentUserId,
   currentUserName,
+  currentUserAvatar,
   onChatCreated,
 }: NewChatDialogProps) {
   const [searchQuery, setSearchQuery] = useState("")
@@ -84,6 +86,7 @@ export function NewChatDialog({
     const result = await chatRepository.startDirectChat(
       currentUserId,
       currentUserName,
+      currentUserAvatar,
       user.userId,
       user.displayName,
       user.imageURL || user.imageUrl
