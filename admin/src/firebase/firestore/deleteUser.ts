@@ -1,25 +1,23 @@
 import firebase_app from "../config";
-import { getFirestore, doc, updateDoc } from "firebase/firestore";
+import { getFirestore, doc, deleteDoc } from "firebase/firestore";
 
 // Get the Firestore instance
 const db = getFirestore(firebase_app);
 
-// Function to soft delete a user by setting isDeleted to true
+// Function to hard delete a user from Firestore
 export default async function deleteUser(userId: string) {
   let result = null;
   let error = null;
 
   try {
-    // Soft delete: Update the user document to set isDeleted to true
+    // Hard delete: Delete the user document from Firestore
     const userRef = doc(db, "users", userId);
-    await updateDoc(userRef, {
-      isDeleted: true
-    });
+    await deleteDoc(userRef);
 
     result = { success: true };
   } catch (e) {
     error = e;
-    console.error("Error soft deleting user:", e);
+    console.error("Error deleting user from Firestore:", e);
   }
 
   return { result, error };

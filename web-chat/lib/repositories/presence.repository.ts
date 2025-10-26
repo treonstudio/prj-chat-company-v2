@@ -212,7 +212,17 @@ export class PresenceRepository {
   /**
    * Stop monitoring user presence and cleanup session
    */
-  stopPresenceMonitoring(): void {
+  async stopPresenceMonitoring(): Promise<void> {
+    // Delete session document before cleanup
+    if (this.sessionDatabaseRef) {
+      try {
+        await remove(this.sessionDatabaseRef);
+        console.log('[Presence] Session document deleted for:', this.currentUserId, this.currentDeviceId);
+      } catch (error) {
+        console.error('[Presence] Error deleting session document:', error);
+      }
+    }
+
     // Cancel onDisconnect handlers
     if (this.userStatusDatabaseRef) {
       onDisconnect(this.userStatusDatabaseRef).cancel();

@@ -349,9 +349,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Stop presence monitoring
+    // Stop presence monitoring and delete session
     if (presenceRepositoryRef.current) {
-      presenceRepositoryRef.current.stopPresenceMonitoring();
+      try {
+        await presenceRepositoryRef.current.stopPresenceMonitoring();
+      } catch (error) {
+        console.error('[Auth] Error stopping presence monitoring:', error);
+      }
     }
 
     // Clear device ID and tab ID

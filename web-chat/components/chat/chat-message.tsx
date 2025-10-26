@@ -235,6 +235,9 @@ export function ChatMessage({
     }
   }
 
+  // Check if sender is deleted user
+  const isSenderDeleted = isDeletedUser || (data.senderName === "Deleted User")
+
   const bubble = cn(
     "inline-flex flex-col gap-2 text-sm shadow-sm relative",
     // align and shape
@@ -246,7 +249,9 @@ export function ChatMessage({
       ? 'px-3 py-3'
       : data.type === 'image' || data.type === 'video'
       ? 'p-1.5'  // 6px padding for media
-      : 'px-3 py-2'
+      : 'px-3 py-2',
+    // Add red border for deleted user messages
+    isSenderDeleted && !isMe ? "border-2 border-red-400" : ""
   )
 
   const maxWidthStyle = data.type === 'text'
@@ -279,20 +284,29 @@ export function ChatMessage({
         )}
 
         {/* Avatar for group chat messages from others */}
-        {isGroupChat && !isMe && !selectionMode ? (
-          <button
-            onClick={() => onAvatarClick?.(data.senderId)}
-            className="shrink-0 mt-0.5 cursor-pointer"
-            aria-label={`View ${data.senderName} profile`}
-          >
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={data.senderAvatar || '/placeholder-user.jpg'} alt={data.senderName} />
-              <AvatarFallback className="text-xs">
-                {data.senderName.slice(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-          </button>
-        ) : null}
+        {isGroupChat && !isMe && !selectionMode ? (() => {
+          // Check if sender is deleted user
+          const isDeleted = isDeletedUser || (data.senderName === "Deleted User")
+
+          return (
+            <button
+              onClick={() => onAvatarClick?.(data.senderId)}
+              className="shrink-0 mt-0.5 cursor-pointer"
+              aria-label={`View ${data.senderName} profile`}
+            >
+              <Avatar className="h-8 w-8">
+                {/* Don't show image for deleted users - show fallback icon only */}
+                <AvatarImage src={isDeleted ? undefined : (data.senderAvatar || '/placeholder-user.jpg')} alt={data.senderName} />
+                <AvatarFallback className={cn(
+                  "text-xs",
+                  isDeleted ? "bg-red-100 text-red-600" : ""
+                )}>
+                  {isDeleted ? 'DU' : data.senderName.slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+            </button>
+          )
+        })() : null}
 
         <div className="relative">
           <div onClick={() => selectionMode && onToggleSelect?.(data.id)}>

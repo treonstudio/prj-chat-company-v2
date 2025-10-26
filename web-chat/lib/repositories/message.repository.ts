@@ -263,7 +263,7 @@ export class MessageRepository {
               participantId,
               chatId,
               chatSnapshot.get('name') || 'Group Chat',
-              chatSnapshot.get('avatarUrl'), // Keep as avatarUrl from GroupChat
+              chatSnapshot.get('imageURL') || chatSnapshot.get('avatarUrl') || chatSnapshot.get('avatar'),
               message.text,
               timestamp,
               message.senderId
@@ -874,7 +874,7 @@ export class MessageRepository {
                   participantId,
                   chatId,
                   chatSnapshot.get('name') || 'Group Chat',
-                  chatSnapshot.get('avatarUrl'),
+                  chatSnapshot.get('imageURL') || chatSnapshot.get('avatarUrl') || chatSnapshot.get('avatar'),
                   'Pesan ini dihapus',
                   timestamp,
                   lastMessage.senderId
@@ -961,7 +961,7 @@ export class MessageRepository {
                   participantId,
                   chatId,
                   chatSnapshot.get('name') || 'Group Chat',
-                  chatSnapshot.get('avatarUrl'),
+                  chatSnapshot.get('imageURL') || chatSnapshot.get('avatarUrl') || chatSnapshot.get('avatar'),
                   newText.trim(),
                   timestamp,
                   lastMessage.senderId
@@ -1231,7 +1231,7 @@ export class MessageRepository {
                       participantId,
                       chatId,
                       chatSnapshot.get('name') || 'Group Chat',
-                      chatSnapshot.get('avatarUrl'),
+                      chatSnapshot.get('imageURL') || chatSnapshot.get('avatarUrl') || chatSnapshot.get('avatar'),
                       'Pesan ini dihapus',
                       timestamp,
                       lastMessage.senderId

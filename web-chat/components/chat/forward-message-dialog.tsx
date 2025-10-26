@@ -101,10 +101,13 @@ export function ForwardMessageDialog({
               <div className="px-4 py-2">
                 {filtered.map((chat) => {
                   const name = chat.chatType === 'GROUP' ? chat.groupName : chat.otherUserName
-                  const avatar = chat.chatType === 'GROUP' ? chat.groupAvatar : chat.otherUserAvatar
+                  const displayName = name && name.trim() !== '' ? name : 'Deleted User'
+                  const isDeletedUser = displayName === 'Deleted User' && chat.chatType !== 'GROUP'
+                  const avatar = chat.chatType === 'GROUP'
+                    ? chat.groupAvatar
+                    : (isDeletedUser ? undefined : chat.otherUserAvatar)
                   const isGroup = chat.chatType === 'GROUP'
                   const isForwarding = forwardingChatId === chat.chatId
-                  const displayName = name && name.trim() !== '' ? name : 'Unknown'
 
                   return (
                     <button
@@ -115,9 +118,13 @@ export function ForwardMessageDialog({
                     >
                       <Avatar className="h-12 w-12 shrink-0">
                         <AvatarImage src={avatar || "/placeholder-user.jpg"} alt="" />
-                        <AvatarFallback>
+                        <AvatarFallback className={cn(
+                          isDeletedUser ? "bg-red-100 text-red-600" : ""
+                        )}>
                           {isGroup ? (
                             <Users className="h-5 w-5 text-muted-foreground" />
+                          ) : isDeletedUser ? (
+                            'DU'
                           ) : (
                             displayName.slice(0, 2).toUpperCase()
                           )}

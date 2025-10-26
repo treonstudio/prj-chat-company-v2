@@ -460,17 +460,42 @@ export default function DashboardPage() {
 
   const handleDeleteUser = async (userId: string) => {
     try {
-      const { error } = await deleteUser(userId)
+      // First, delete from Firestore
+      const { error: firestoreError } = await deleteUser(userId)
 
-      if (error) {
-        console.error("Error deleting user:", error)
-        toast.error("Gagal menghapus user")
-      } else {
-        toast.success("User berhasil dihapus")
-
-        // Reload all users to ensure pagination is correct
-        await reloadUsers()
+      if (firestoreError) {
+        console.error("Error deleting user from Firestore:", firestoreError)
+        toast.error("Gagal menghapus user dari database")
+        return
       }
+
+      // Then, delete from Authentication
+      try {
+        const response = await fetch('/api/deleteAuthUser', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ userId }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          console.error("Error deleting user from Authentication:", data.error)
+          toast.error("User dihapus dari database, tapi gagal menghapus dari Authentication", {
+            description: data.details || data.error
+          })
+        } else {
+          toast.success("User berhasil dihapus dari database dan authentication")
+        }
+      } catch (authError) {
+        console.error("Error calling deleteAuthUser API:", authError)
+        toast.error("User dihapus dari database, tapi gagal menghapus dari Authentication")
+      }
+
+      // Reload all users to ensure pagination is correct
+      await reloadUsers()
     } catch (err) {
       console.error("Error deleting user:", err)
       toast.error("Terjadi kesalahan saat menghapus user")

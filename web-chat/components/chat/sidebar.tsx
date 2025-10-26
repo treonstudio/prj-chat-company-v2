@@ -19,6 +19,8 @@ import { MessageSquarePlus, Users, TriangleAlert, RefreshCw } from "lucide-react
 import { User } from "@/types/models"
 import { useOnlineStatus } from "@/lib/hooks/use-online-status"
 import { getDraftMessage } from "@/lib/hooks/use-draft-message"
+import { doc, getDoc } from "firebase/firestore"
+import { db } from "@/lib/firebase/config"
 
 export function Sidebar({
   currentUserId,
@@ -44,6 +46,44 @@ export function Sidebar({
   const { featureFlags } = useFeatureFlags()
   const { isOnline, isSlow } = useOnlineStatus()
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [groupAvatars, setGroupAvatars] = useState<Record<string, string>>({})
+
+  // Fetch missing group avatars from groupChats collection
+  useEffect(() => {
+    const fetchMissingGroupAvatars = async () => {
+      const groupChatsWithoutAvatar = chats.filter(
+        (chat) => chat.chatType === 'GROUP' && !chat.groupAvatar && !groupAvatars[chat.chatId]
+      )
+
+      if (groupChatsWithoutAvatar.length === 0) return
+
+      const newAvatars: Record<string, string> = {}
+
+      for (const chat of groupChatsWithoutAvatar) {
+        try {
+          const groupChatRef = doc(db(), 'groupChats', chat.chatId)
+          const groupChatDoc = await getDoc(groupChatRef)
+
+          if (groupChatDoc.exists()) {
+            const groupData = groupChatDoc.data()
+            const avatar = groupData?.imageURL || groupData?.avatarUrl || groupData?.avatar
+
+            if (avatar) {
+              newAvatars[chat.chatId] = avatar
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching avatar for group ${chat.chatId}:`, error)
+        }
+      }
+
+      if (Object.keys(newAvatars).length > 0) {
+        setGroupAvatars(prev => ({ ...prev, ...newAvatars }))
+      }
+    }
+
+    fetchMissingGroupAvatars()
+  }, [chats])
 
   // Sync activeId with selectedChatId from parent
   useEffect(() => {
@@ -262,7 +302,10 @@ export function Sidebar({
               // Handle deleted user
               const rawName = c.chatType === 'GROUP' ? c.groupName : c.otherUserName
               const name = rawName && rawName.trim() !== '' ? rawName : 'Deleted User'
-              const avatar = c.chatType === 'GROUP' ? c.groupAvatar : c.otherUserAvatar
+              const isDeletedUser = name === 'Deleted User' && c.chatType !== 'GROUP'
+              const avatar = c.chatType === 'GROUP'
+                ? (c.groupAvatar || groupAvatars[c.chatId])
+                : (isDeletedUser ? undefined : c.otherUserAvatar) // undefined will show fallback icon
               const isGroup = c.chatType === 'GROUP'
               const timeAgo = formatChatListTimestamp(c.lastMessageTime)
 
@@ -296,9 +339,14 @@ export function Sidebar({
                     <div className="flex items-start gap-3">
                       <Avatar className="h-10 w-10 shrink-0">
                         <AvatarImage src={avatar || "/placeholder-user.jpg"} alt="" />
-                        <AvatarFallback aria-hidden className={isGroup ? "bg-muted border border-border flex items-center justify-center" : ""}>
+                        <AvatarFallback aria-hidden className={cn(
+                          isGroup ? "bg-muted border border-border flex items-center justify-center" : "",
+                          isDeletedUser ? "bg-red-100 text-red-600" : ""
+                        )}>
                           {isGroup ? (
                             <Users className="h-5 w-5 text-muted-foreground" />
+                          ) : isDeletedUser ? (
+                            'DU'
                           ) : (
                             name?.slice(0, 2).toUpperCase()
                           )}
