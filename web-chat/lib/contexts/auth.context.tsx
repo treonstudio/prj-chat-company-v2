@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
 import { User } from '@/types/models';
 import { getDeviceId, getDeviceInfo, clearDeviceId, clearTabId } from '@/lib/utils/device.utils';
@@ -29,9 +29,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const authRepositoryRef = useRef<any>(null);
   const userRepositoryRef = useRef<any>(null);
   const presenceRepositoryRef = useRef<any>(null);
+  const isLoggingOut = useRef(false);
+
+  // Callback to stop presence monitoring when session is deleted
+  const handleSessionDeleted = useCallback(async () => {
+    console.log('[Auth] Session deleted externally, stopping presence monitoring...');
+
+    // Set flag to prevent presence monitoring from restarting
+    isLoggingOut.current = true;
+
+    // Stop presence monitoring first
+    if (presenceRepositoryRef.current) {
+      try {
+        await presenceRepositoryRef.current.stopPresenceMonitoring();
+        console.log('[Auth] Presence monitoring stopped successfully');
+      } catch (error) {
+        console.error('[Auth] Error stopping presence monitoring:', error);
+      }
+    }
+
+    // Sign out from Firebase to trigger auth state change
+    if (authRepositoryRef.current) {
+      try {
+        await authRepositoryRef.current.signOut();
+        console.log('[Auth] Firebase signOut called successfully');
+      } catch (error) {
+        console.error('[Auth] Error during Firebase signOut:', error);
+      }
+    }
+
+    // Immediately clear user state to prevent any auth state listener from restarting presence
+    setCurrentUser(null);
+    setUserData(null);
+    setDeviceId(null);
+  }, []);
 
   // Monitor if device session has been kicked out
-  useSessionMonitor(currentUser?.uid || null, deviceId);
+  useSessionMonitor({
+    userId: currentUser?.uid || null,
+    deviceId,
+    onSessionDeleted: handleSessionDeleted
+  });
 
   // Monitor if tab should be kicked out (only 1 tab per browser)
   const { hasConflict, useHere, closeTab } = useTabLock(currentUser?.uid || null);
@@ -127,6 +165,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 await authRepositoryRef.current.signOut();
                 setUserData(null);
                 setCurrentUser(null);
+                setLoading(false);
+                return;
+              }
+
+              // Check if currently logging out (e.g., session deleted externally)
+              if (isLoggingOut.current) {
+                console.log('[Auth] Logging out in progress, skipping presence monitoring');
+                setCurrentUser(null);
+                setUserData(null);
                 setLoading(false);
                 return;
               }
@@ -234,6 +281,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setCurrentUser(null);
           setUserData(null);
           setLoading(false);
+
+          // Reset logout flag
+          isLoggingOut.current = false;
 
           // Stop presence monitoring
           if (presenceRepositoryRef.current) {
