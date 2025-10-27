@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils"
 import { sanitizeMessageText } from "@/lib/utils/text-sanitizer"
 import { Button } from "@/components/ui/button"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, memo } from "react"
 import Image from "next/image"
 import {
   Dialog,
@@ -28,6 +28,8 @@ import {
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { LinkPreviewCard } from "./link-preview-card"
 import { linkifyText } from "@/lib/utils/linkify"
+import { LazyImage } from "./lazy-image"
+import { downloadMediaWithCache } from "@/lib/utils/media-cache"
 
 type Base = {
   id: string
@@ -35,6 +37,7 @@ type Base = {
   senderName: string
   senderAvatar?: string
   timestamp: string
+  isEdited?: boolean
   editedAt?: string
   status?: MessageStatus
   error?: string
@@ -85,7 +88,7 @@ function isCallMessage(data: ChatMessageUnion): data is CallMsg {
   return data.type === "voice_call" || data.type === "video_call";
 }
 
-export function ChatMessage({
+const ChatMessageComponent = function ChatMessage({
   data,
   isMe,
   isGroupChat,
@@ -185,17 +188,8 @@ export function ChatMessage({
   const handleDownload = async (url: string, filename?: string, mimeType?: string) => {
     setDownloading(true)
     try {
-      // Fetch the file as blob
-      const response = await fetch(url, {
-        mode: 'cors',
-        credentials: 'include',
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const blob = await response.blob()
+      // Use cached download to avoid re-downloading
+      const blob = await downloadMediaWithCache(url, filename, mimeType)
 
       // Use downloadjs to trigger download
       download(blob, filename || `download-${Date.now()}`, mimeType || blob.type)
@@ -654,39 +648,13 @@ export function ChatMessage({
                 onClick={() => setShowImagePreview(true)}
               >
                 {data.content && (data.content.startsWith('http://') || data.content.startsWith('https://')) ? (
-                  <>
-                    {/* Skeleton loader - only show when valid URL but not loaded yet */}
-                    {!imageLoaded && (
-                      <div className="absolute inset-0 bg-muted rounded-md animate-pulse flex items-center justify-center">
-                        <svg
-                          className="w-12 h-12 text-muted-foreground/30"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.5}
-                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                          />
-                        </svg>
-                      </div>
-                    )}
-                    <Image
-                      src={data.content}
-                      alt="Shared image"
-                      fill
-                      sizes="(max-width: 330px) 100vw, 330px"
-                      className="object-contain rounded-md transition-opacity duration-200"
-                      style={{ opacity: imageLoaded ? 1 : 0 }}
-                      loading="lazy"
-                      onLoad={() => setImageLoaded(true)}
-                      onError={() => setImageLoaded(true)}
-                      priority={false}
-                      unoptimized={false}
-                    />
-                  </>
+                  <LazyImage
+                    src={data.content}
+                    alt="Shared image"
+                    fill
+                    className="object-contain rounded-md"
+                    onLoadEnd={() => setImageLoaded(true)}
+                  />
                 ) : (
                   <div className="relative flex flex-col items-center justify-center h-full text-muted-foreground bg-muted rounded-md">
                     {data.status === 'SENDING' ? (
@@ -775,32 +743,52 @@ export function ChatMessage({
             >
               {data.content && (data.content.startsWith('http://') || data.content.startsWith('https://')) ? (
                 <>
-                  <video
-                    className="h-auto w-full rounded-md pointer-events-none"
+                  {/*
+                    IMPORTANT: Server doesn't support HTTP Range Requests (returns 200 instead of 206)
+                    Using preload="none" to avoid downloading full video (2.8MB) on chat load
+                    Video will stream on-demand when user clicks to preview
+                  */}
+                  <div
+                    className="relative flex items-center justify-center rounded-md bg-muted"
                     style={{
+                      width: '320px',
+                      height: '240px',
                       maxHeight: '500px',
-                      objectFit: 'contain',
                     }}
-                    preload="metadata"
                   >
-                    <source src={data.content} type={data.mimeType || 'video/mp4'} />
-                    Your browser does not support the video tag.
-                  </video>
-
-                  {/* Play button overlay - only show when NOT uploading */}
-                  {data.status !== 'SENDING' && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
-                        <svg
-                          className="w-8 h-8 text-green-600 ml-1"
-                          fill="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path d="M8 5v14l11-7z" />
-                        </svg>
-                      </div>
+                    {/* Video placeholder - no actual video element to prevent auto-download */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                      <svg
+                        className="w-16 h-16"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.5}
+                          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
+                      </svg>
+                      <span className="text-sm font-medium">Video</span>
                     </div>
-                  )}
+
+                    {/* Play button overlay - click to open preview */}
+                    {data.status !== 'SENDING' && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg hover:bg-white transition-colors">
+                          <svg
+                            className="w-8 h-8 text-green-600 ml-1"
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </>
               ) : (
                 <div className="relative flex flex-col items-center justify-center h-[200px] w-full rounded-md bg-muted">
@@ -1026,7 +1014,7 @@ export function ChatMessage({
           )}
           <div className={cn("flex items-center gap-1", isMe ? "self-end flex-row-reverse" : "self-start")}>
             <span className={cn("text-[11px]", isMe ? "text-right" : "text-left text-muted-foreground")}>
-              {data.editedAt && "Diedit "}{data.timestamp}
+              {(data.isEdited || data.editedAt) && "Diedit "}{data.timestamp}
             </span>
             {isMe && data.status && (
               <MessageStatusIcon status={data.status} className={isMe ? "text-primary-foreground/70" : ""} />
@@ -1189,3 +1177,39 @@ export function ChatMessage({
     </>
   )
 }
+
+// Wrap in memo with custom comparison for better performance
+export const ChatMessage = memo(ChatMessageComponent, (prevProps, nextProps) => {
+  // Only re-render if critical props changed
+  if (
+    prevProps.data.id !== nextProps.data.id ||
+    prevProps.data.timestamp !== nextProps.data.timestamp ||
+    prevProps.data.status !== nextProps.data.status ||
+    prevProps.selectionMode !== nextProps.selectionMode ||
+    prevProps.isSelected !== nextProps.isSelected ||
+    prevProps.isMe !== nextProps.isMe
+  ) {
+    return false // Props changed, need to re-render
+  }
+
+  // Check content for messages that have it (text, image, video, doc)
+  if ('content' in prevProps.data && 'content' in nextProps.data) {
+    if (prevProps.data.content !== nextProps.data.content) {
+      return false // Content changed, need to re-render
+    }
+  }
+
+  // For call messages, check callMetadata
+  if (prevProps.data.type === 'voice_call' || prevProps.data.type === 'video_call') {
+    const prevCall = prevProps.data as CallMsg
+    const nextCall = nextProps.data as CallMsg
+    if (
+      prevCall.callMetadata.status !== nextCall.callMetadata.status ||
+      prevCall.callMetadata.duration !== nextCall.callMetadata.duration
+    ) {
+      return false // Call metadata changed, need to re-render
+    }
+  }
+
+  return true // No relevant changes, skip re-render
+})

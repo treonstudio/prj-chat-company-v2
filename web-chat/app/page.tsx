@@ -6,6 +6,8 @@ import { Sidebar } from '@/components/chat/sidebar';
 import { ChatRoom } from '@/components/chat/chat-room';
 import { useAuth } from '@/lib/contexts/auth.context';
 import { loadFFmpeg } from '@/lib/utils/media-compression';
+import { preloadStaticAssets } from '@/lib/utils/static-asset-cache';
+import { StaticImage } from '@/components/ui/static-image';
 import packageJson from '../package.json';
 
 // Get commit hash - will be set during build
@@ -33,6 +35,17 @@ export default function Page() {
     }
   }, [userData?.imageURL, userData?.imageUrl]);
 
+  // Pre-load static assets on mount (logos, icons, backgrounds)
+  useEffect(() => {
+    preloadStaticAssets()
+      .then(() => {
+        console.log('[Static Assets] Pre-loaded successfully');
+      })
+      .catch((error) => {
+        console.warn('[Static Assets] Pre-load failed:', error);
+      });
+  }, []);
+
   // Pre-load FFmpeg for faster video compression (runs in background)
   useEffect(() => {
     // Only pre-load if user is authenticated
@@ -53,11 +66,12 @@ export default function Page() {
         <div className="flex flex-col items-center gap-6">
           {/* Chatku logo */}
           <div className="relative">
-            <img
+            <StaticImage
               src="/logo-chatku.png"
               alt="Chatku Logo"
               width={160}
               height={60}
+              version="1.0"
               className="object-contain"
             />
           </div>
@@ -168,9 +182,10 @@ export default function Page() {
               <div className="flex flex-col items-center gap-4 px-8 py-12">
                 {/* Illustration */}
                 <div className="relative h-40 w-40">
-                  <img
+                  <StaticImage
                     src="/illus-start-message.webp"
                     alt="Start messaging illustration"
+                    version="1.0"
                     className="w-full h-full object-contain"
                   />
                 </div>

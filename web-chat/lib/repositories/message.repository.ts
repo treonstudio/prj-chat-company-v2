@@ -935,6 +935,7 @@ export class MessageRepository {
       // Update message text
       await updateDoc(messageRef, {
         text: newText.trim(),
+        isEdited: true,
         editedAt: timestamp,
         updatedAt: timestamp,
       });

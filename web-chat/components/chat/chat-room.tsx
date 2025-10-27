@@ -8,6 +8,7 @@ import { MessageComposer } from "./message-composer"
 import { useMessages } from "@/lib/hooks/use-messages"
 import { useUserStatus } from "@/lib/hooks/use-user-status"
 import { useOnlineStatus } from "@/lib/hooks/use-online-status"
+import { useStaticAsset } from "@/lib/hooks/use-static-asset"
 import { UserRepository } from "@/lib/repositories/user.repository"
 import { ChatRepository } from "@/lib/repositories/chat.repository"
 import { format } from "date-fns"
@@ -111,6 +112,9 @@ export function ChatRoom({
     editMessage,
     cancelUpload,
   } = useMessages(chatId, isGroupChat, currentUserId)
+
+  // Load tile pattern background from cache
+  const tilePatternUrl = useStaticAsset('/tile-pattern.png', '1.0')
 
   // CRITICAL: Use initialTitle/initialAvatar from props to prevent flicker
   const [roomTitle, setRoomTitle] = useState<string>(initialTitle || 'Chat')
@@ -821,7 +825,7 @@ export function ChatRoom({
     }
   }, [visibleMessageCount, messages.length, MESSAGES_PER_LOAD])
 
-  // Initial scroll to bottom when switching chatrooms - SIMPLE APPROACH
+  // Initial scroll to bottom when switching chatrooms or when messages finish loading
   useEffect(() => {
     // Only scroll if:
     // 1. Not loading
@@ -834,28 +838,39 @@ export function ChatRoom({
         // Mark as initial load
         isInitialLoad.current = true
 
-        // Simple direct scroll after a short delay to ensure DOM is ready
+        // Instant scroll to bottom - no smooth behavior
         const scrollToEnd = () => {
-          if (scrollContainer && scrollRef.current) {
-            // Use scrollIntoView for more reliable bottom positioning
-            scrollRef.current.scrollIntoView({ behavior: 'auto', block: 'end', inline: 'nearest' })
+          if (scrollContainer) {
+            // Direct scroll to bottom (instant, most reliable)
+            scrollContainer.scrollTop = scrollContainer.scrollHeight
+
+            // Also use scrollIntoView as backup (behavior: 'auto' = instant scroll)
+            if (scrollRef.current) {
+              scrollRef.current.scrollIntoView({ behavior: 'auto', block: 'end', inline: 'nearest' })
+            }
           }
         }
 
-        // Execute scroll multiple times with increasing delays
-        // This catches async content loading without being aggressive
+        // Execute scroll immediately and with retries to ensure it works
+        scrollToEnd() // Immediate execution
+
+        // Retry multiple times to catch async rendering
         const timeouts = [
-          setTimeout(scrollToEnd, 0),      // Immediate
+          setTimeout(scrollToEnd, 0),      // Next tick
+          setTimeout(scrollToEnd, 10),     // Very quick
           setTimeout(scrollToEnd, 50),     // Quick
           setTimeout(scrollToEnd, 100),    // Medium
-          setTimeout(scrollToEnd, 200),    // Slower
+          setTimeout(scrollToEnd, 200),    // Slower (for images)
+          setTimeout(scrollToEnd, 300),    // Even slower
         ]
 
         // Mark as scrolled and not initial load after final scroll
         const finalTimeout = setTimeout(() => {
+          scrollToEnd() // One final scroll
           hasScrolledToBottom.current = true // Prevent re-scrolling on this chat
           isInitialLoad.current = false
-        }, 250)
+          console.log('[ChatRoom] Scrolled to bottom for chat:', chatId)
+        }, 350)
 
         return () => {
           // Cleanup all timeouts
@@ -865,6 +880,19 @@ export function ChatRoom({
       }
     }
   }, [chatId, loading, messages.length, visibleMessages.length]) // Trigger when data is ready
+
+  // Additional useLayoutEffect for even earlier scroll (runs before browser paint)
+  useLayoutEffect(() => {
+    // Only run if messages just finished loading
+    if (!loading && messages.length > 0 && visibleMessages.length > 0 && !hasScrolledToBottom.current) {
+      const scrollContainer = scrollContainerRef.current?.querySelector('[data-radix-scroll-area-viewport]')
+
+      if (scrollContainer) {
+        // Instant scroll to bottom (synchronous, before paint)
+        scrollContainer.scrollTop = scrollContainer.scrollHeight
+      }
+    }
+  }, [loading, messages.length, visibleMessages.length])
 
   // Auto-scroll to bottom when new messages arrive (only for new messages, not initial load)
   const prevMessagesLengthRef = useRef(messages.length)
@@ -997,7 +1025,7 @@ export function ChatRoom({
   }
 
   // Handle avatar click to show user profile
-  const handleAvatarClick = async (userId: string) => {
+  const handleAvatarClick = useCallback(async (userId: string) => {
     // Don't show profile for system messages or current user
     if (userId === 'system' || userId === currentUserId) return
 
@@ -1025,7 +1053,7 @@ export function ChatRoom({
       console.error('Load user profile error:', error)
       // Don't show error toast for deleted users
     }
-  }
+  }, [currentUserId, userRepository])
 
   // Handle send message from user profile dialog
   const handleSendMessageToUser = async () => {
@@ -1135,18 +1163,18 @@ export function ChatRoom({
   ) as unknown as Message[]
 
   // Reply handlers
-  const handleReply = (messageId: string) => {
+  const handleReply = useCallback((messageId: string) => {
     const message = messages.find(m => m.messageId === messageId)
     if (message) {
       setReplyingTo(message)
     }
-  }
+  }, [messages])
 
-  const handleCancelReply = () => {
+  const handleCancelReply = useCallback(() => {
     setReplyingTo(null)
-  }
+  }, [])
 
-  const handleReplyClick = (messageId: string) => {
+  const handleReplyClick = useCallback((messageId: string) => {
     // Find message index in reversed list and scroll to it
     const reversedMessages = [...messages].reverse()
     const index = reversedMessages.findIndex(m => m.messageId === messageId)
@@ -1158,7 +1186,7 @@ export function ChatRoom({
         messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }
     }
-  }
+  }, [messages])
 
   // Handle click on header (name/avatar)
   const handleHeaderClick = async () => {
@@ -1329,7 +1357,10 @@ export function ChatRoom({
           <ScrollArea
             ref={scrollContainerRef}
             className="flex-1 min-h-0 smooth-scroll scroll-optimized"
-            style={{ backgroundImage: 'url(/tile-pattern.png)', backgroundRepeat: 'repeat' }}
+            style={{
+              backgroundImage: tilePatternUrl ? `url(${tilePatternUrl})` : 'none',
+              backgroundRepeat: 'repeat'
+            }}
             onContextMenu={(e) => {
               // Prevent context menu when any dialog is open
               if (hasOpenDialog) {
@@ -1451,6 +1482,7 @@ export function ChatRoom({
                           senderName: senderName,
                           senderAvatar: senderAvatar,
                           timestamp: timeStr,
+                          isEdited: m.isEdited,
                           editedAt: editedTimeStr,
                           status: computedStatus,
                           error: m.error,
