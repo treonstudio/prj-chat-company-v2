@@ -23,6 +23,7 @@ import { useUsageControls } from '@/lib/contexts/usage-controls.context';
 import { toast } from 'sonner';
 import { useDraftMessage } from '@/lib/hooks/use-draft-message';
 import { cn } from '@/lib/utils';
+import { MultipleUploadDialog } from './multiple-upload-dialog';
 
 interface MessageComposerProps {
   chatId: string;
@@ -91,6 +92,13 @@ function MessageComposerComponent({
   const [pendingVideoFile, setPendingVideoFile] = useState<File | null>(null);
   const [compressionFileType, setCompressionFileType] = useState<'image' | 'video'>('image');
   const [dropdownKey, setDropdownKey] = useState(0); // Force re-mount DropdownMenu
+
+  // Multiple file upload state
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [uploadQueue, setUploadQueue] = useState<{ file: File; type: 'image' | 'video' | 'document' }[]>([]);
+  const [currentUploadIndex, setCurrentUploadIndex] = useState(0);
+  const [showMultipleUploadDialog, setShowMultipleUploadDialog] = useState(false);
+
   const { featureFlags } = useFeatureFlags();
   const { usageControls } = useUsageControls();
 
@@ -250,22 +258,51 @@ function MessageComposerComponent({
   };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type.startsWith('image/')) {
-      // Validate file size
-      const maxSizeInBytes = usageControls.maxFileSizeUploadedInMB * 1024 * 1024;
-      if (file.size > maxSizeInBytes) {
-        toast.error(`Ukuran file tidak boleh lebih dari ${usageControls.maxFileSizeUploadedInMB}MB`);
-        if (imageInputRef.current) {
-          imageInputRef.current.value = '';
-        }
-        return;
-      }
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-      setPendingImageFile(file);
-      setCompressionFileType('image');
-      setShowCompressionDialog(true);
+    const maxSizeInBytes = usageControls.maxFileSizeUploadedInMB * 1024 * 1024;
+    const validFiles: File[] = [];
+    const invalidFiles: string[] = [];
+
+    // Validate all files
+    Array.from(files).forEach(file => {
+      if (!file.type.startsWith('image/')) {
+        invalidFiles.push(`${file.name} (bukan gambar)`);
+      } else if (file.size > maxSizeInBytes) {
+        invalidFiles.push(`${file.name} (lebih dari ${usageControls.maxFileSizeUploadedInMB}MB)`);
+      } else {
+        validFiles.push(file);
+      }
+    });
+
+    // Show errors for invalid files
+    if (invalidFiles.length > 0) {
+      toast.error(`File tidak valid: ${invalidFiles.join(', ')}`);
     }
+
+    // Handle valid files
+    if (validFiles.length > 0) {
+      // If dialog already open, merge with existing files (Add More functionality)
+      const isAddingMore = showMultipleUploadDialog && compressionFileType === 'image';
+
+      if (isAddingMore) {
+        // Merge with existing files
+        setPendingFiles(prev => [...prev, ...validFiles]);
+        toast.success(`${validFiles.length} gambar ditambahkan`);
+      } else if (validFiles.length === 1 && !isAddingMore) {
+        // Single file - use existing compression dialog
+        setPendingImageFile(validFiles[0]);
+        setCompressionFileType('image');
+        setShowCompressionDialog(true);
+      } else {
+        // Multiple files - show multiple upload dialog
+        setPendingFiles(validFiles);
+        setCompressionFileType('image');
+        setShowMultipleUploadDialog(true);
+      }
+    }
+
     // Reset input
     if (imageInputRef.current) {
       imageInputRef.current.value = '';
@@ -300,22 +337,51 @@ function MessageComposerComponent({
   };
 
   const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type.startsWith('video/')) {
-      // Validate file size
-      const maxSizeInBytes = usageControls.maxFileSizeUploadedInMB * 1024 * 1024;
-      if (file.size > maxSizeInBytes) {
-        toast.error(`Ukuran file tidak boleh lebih dari ${usageControls.maxFileSizeUploadedInMB}MB`);
-        if (videoInputRef.current) {
-          videoInputRef.current.value = '';
-        }
-        return;
-      }
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-      setPendingVideoFile(file);
-      setCompressionFileType('video');
-      setShowCompressionDialog(true);
+    const maxSizeInBytes = usageControls.maxFileSizeUploadedInMB * 1024 * 1024;
+    const validFiles: File[] = [];
+    const invalidFiles: string[] = [];
+
+    // Validate all files
+    Array.from(files).forEach(file => {
+      if (!file.type.startsWith('video/')) {
+        invalidFiles.push(`${file.name} (bukan video)`);
+      } else if (file.size > maxSizeInBytes) {
+        invalidFiles.push(`${file.name} (lebih dari ${usageControls.maxFileSizeUploadedInMB}MB)`);
+      } else {
+        validFiles.push(file);
+      }
+    });
+
+    // Show errors for invalid files
+    if (invalidFiles.length > 0) {
+      toast.error(`File tidak valid: ${invalidFiles.join(', ')}`);
     }
+
+    // Handle valid files
+    if (validFiles.length > 0) {
+      // If dialog already open, merge with existing files (Add More functionality)
+      const isAddingMore = showMultipleUploadDialog && compressionFileType === 'video';
+
+      if (isAddingMore) {
+        // Merge with existing files
+        setPendingFiles(prev => [...prev, ...validFiles]);
+        toast.success(`${validFiles.length} video ditambahkan`);
+      } else if (validFiles.length === 1 && !isAddingMore) {
+        // Single file - use existing compression dialog
+        setPendingVideoFile(validFiles[0]);
+        setCompressionFileType('video');
+        setShowCompressionDialog(true);
+      } else {
+        // Multiple files - show multiple upload dialog
+        setPendingFiles(validFiles);
+        setCompressionFileType('video');
+        setShowMultipleUploadDialog(true);
+      }
+    }
+
     // Reset input
     if (videoInputRef.current) {
       videoInputRef.current.value = '';
@@ -350,62 +416,163 @@ function MessageComposerComponent({
   };
 
   const handleDocumentSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Allowed document file extensions
-      const allowedExtensions = [
-        // Documents
-        '.doc', '.docx', '.pdf', '.rtf', '.odt',
-        // Spreadsheets
-        '.xls', '.xlsx', '.csv', '.ods',
-        // Presentations
-        '.ppt', '.pptx', '.odp'
-      ];
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-      // Get file extension
+    const allowedExtensions = [
+      // Documents
+      '.doc', '.docx', '.pdf', '.rtf', '.odt',
+      // Spreadsheets
+      '.xls', '.xlsx', '.csv', '.ods',
+      // Presentations
+      '.ppt', '.pptx', '.odp'
+    ];
+
+    const maxSizeInBytes = usageControls.maxFileSizeUploadedInMB * 1024 * 1024;
+    const validFiles: File[] = [];
+    const invalidFiles: string[] = [];
+
+    // Validate all files
+    Array.from(files).forEach(file => {
       const fileName = file.name.toLowerCase();
       const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
 
-      // Validate file type
       if (!allowedExtensions.includes(fileExtension)) {
-        toast.error(
-          'Format file tidak didukung. Hanya dokumen (PDF, Word, Text), spreadsheet (Excel, CSV), dan presentasi (PowerPoint) yang diperbolehkan.',
-          { duration: 5000 }
-        );
-        if (documentInputRef.current) {
-          documentInputRef.current.value = '';
-        }
-        return;
+        invalidFiles.push(`${file.name} (format tidak didukung)`);
+      } else if (file.size > maxSizeInBytes) {
+        invalidFiles.push(`${file.name} (lebih dari ${usageControls.maxFileSizeUploadedInMB}MB)`);
+      } else {
+        validFiles.push(file);
       }
+    });
 
-      // Validate file size
-      const maxSizeInBytes = usageControls.maxFileSizeUploadedInMB * 1024 * 1024;
-      if (file.size > maxSizeInBytes) {
-        toast.error(`Ukuran file tidak boleh lebih dari ${usageControls.maxFileSizeUploadedInMB}MB`);
-        if (documentInputRef.current) {
-          documentInputRef.current.value = '';
-        }
-        return;
-      }
+    // Show errors for invalid files
+    if (invalidFiles.length > 0) {
+      toast.error(`File tidak valid: ${invalidFiles.join(', ')}`);
+    }
 
-      flushSync(() => {
-        setInternalUploading(true);
-      });
-      console.log('[MessageComposer] Setting internal uploading=true for document');
+    // Handle valid files
+    if (validFiles.length > 0) {
+      // If dialog already open, merge with existing files (Add More functionality)
+      const isAddingMore = showMultipleUploadDialog && uploadQueue.length > 0;
 
-      try {
-        await onSendDocument(file);
-      } finally {
-        console.log('[MessageComposer] Setting internal uploading=false for document');
+      if (isAddingMore) {
+        // Merge with existing files
+        setUploadQueue(prev => [...prev, ...validFiles.map(file => ({ file, type: 'document' as const }))]);
+        toast.success(`${validFiles.length} dokumen ditambahkan`);
+      } else if (validFiles.length === 1 && !isAddingMore) {
+        // Single file - upload directly
+        const file = validFiles[0];
         flushSync(() => {
-          setInternalUploading(false);
+          setInternalUploading(true);
         });
+        console.log('[MessageComposer] Setting internal uploading=true for document');
+
+        try {
+          await onSendDocument(file);
+        } finally {
+          console.log('[MessageComposer] Setting internal uploading=false for document');
+          flushSync(() => {
+            setInternalUploading(false);
+          });
+        }
+      } else {
+        // Multiple files - queue for upload
+        setPendingFiles(validFiles);
+        setUploadQueue(validFiles.map(file => ({ file, type: 'document' })));
+        setShowMultipleUploadDialog(true);
       }
     }
+
     // Reset input
     if (documentInputRef.current) {
       documentInputRef.current.value = '';
     }
+  };
+
+  // Handle multiple file upload with compression option (WhatsApp-style)
+  const handleMultipleUpload = async (files: File[], _caption: string, shouldCompress: boolean) => {
+    if (files.length === 0) return;
+
+    const fileType = compressionFileType;
+
+    flushSync(() => {
+      setInternalUploading(true);
+    });
+
+    console.log(`[MessageComposer] Uploading ${files.length} ${fileType}(s) with compression=${shouldCompress}`);
+
+    // Upload files sequentially
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setCurrentUploadIndex(i);
+
+      try {
+        console.log(`[MessageComposer] Uploading file ${i + 1}/${files.length}: ${file.name}`);
+
+        if (fileType === 'image') {
+          await onSendImage(file, shouldCompress);
+        } else if (fileType === 'video') {
+          await onSendVideo(file, shouldCompress);
+        }
+
+        // Small delay between uploads
+        if (i < files.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      } catch (error) {
+        console.error(`[MessageComposer] Error uploading file ${file.name}:`, error);
+        toast.error(`Gagal mengupload ${file.name}`);
+      }
+    }
+
+    // Reset state
+    flushSync(() => {
+      setInternalUploading(false);
+      setCurrentUploadIndex(0);
+    });
+
+    console.log('[MessageComposer] All files uploaded successfully');
+    toast.success(`${files.length} file berhasil diupload`);
+  };
+
+  // Handle multiple document upload (no compression needed, WhatsApp-style)
+  const handleMultipleDocumentUpload = async (files: File[], _caption: string, _shouldCompress: boolean) => {
+    if (files.length === 0) return;
+
+    flushSync(() => {
+      setInternalUploading(true);
+    });
+
+    console.log(`[MessageComposer] Uploading ${files.length} document(s)`);
+
+    // Upload files sequentially
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setCurrentUploadIndex(i);
+
+      try {
+        console.log(`[MessageComposer] Uploading document ${i + 1}/${files.length}: ${file.name}`);
+        await onSendDocument(file);
+
+        // Small delay between uploads
+        if (i < files.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      } catch (error) {
+        console.error(`[MessageComposer] Error uploading document ${file.name}:`, error);
+        toast.error(`Gagal mengupload ${file.name}`);
+      }
+    }
+
+    // Reset state
+    flushSync(() => {
+      setInternalUploading(false);
+      setCurrentUploadIndex(0);
+    });
+
+    console.log('[MessageComposer] All documents uploaded successfully');
+    toast.success(`${files.length} dokumen berhasil diupload`);
   };
 
   console.log("[MessageComposer] uploading state:", uploading);
@@ -462,6 +629,7 @@ function MessageComposerComponent({
             ref={imageInputRef}
             type="file"
             accept="image/*"
+            multiple
             onChange={handleImageSelect}
             className="hidden"
           />
@@ -469,6 +637,7 @@ function MessageComposerComponent({
             ref={videoInputRef}
             type="file"
             accept="video/*"
+            multiple
             onChange={handleVideoSelect}
             className="hidden"
           />
@@ -476,6 +645,7 @@ function MessageComposerComponent({
             ref={documentInputRef}
             type="file"
             accept=".doc,.docx,.pdf,.rtf,.odt,.xls,.xlsx,.csv,.ods,.ppt,.pptx,.odp"
+            multiple
             onChange={handleDocumentSelect}
             className="hidden"
           />
@@ -581,6 +751,31 @@ function MessageComposerComponent({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* WhatsApp-style multiple file upload dialog */}
+      <MultipleUploadDialog
+        open={showMultipleUploadDialog}
+        onOpenChange={(open) => {
+          setShowMultipleUploadDialog(open);
+          if (!open) {
+            setPendingFiles([]);
+            setUploadQueue([]);
+          }
+        }}
+        files={uploadQueue.length > 0 ? uploadQueue.map(item => item.file) : pendingFiles}
+        fileType={uploadQueue.length > 0 ? 'document' : compressionFileType}
+        onUpload={uploadQueue.length > 0 ? handleMultipleDocumentUpload : handleMultipleUpload}
+        onAddMore={() => {
+          // Trigger file input again to add more files
+          if (compressionFileType === 'image') {
+            imageInputRef.current?.click();
+          } else if (compressionFileType === 'video') {
+            videoInputRef.current?.click();
+          } else {
+            documentInputRef.current?.click();
+          }
+        }}
+      />
     </>
   );
 }
