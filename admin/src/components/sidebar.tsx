@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { LayoutDashboard, BarChart3, LogOut } from "lucide-react"
+import { LayoutDashboard, BarChart3, Settings, LogOut } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useSidebar } from "@/context/SidebarContext"
 import { getAuth, signOut } from "firebase/auth"
@@ -21,6 +21,11 @@ const menuItems = [
     title: "Usage Control",
     icon: BarChart3,
     href: "/dashboard/usage-control",
+  },
+  {
+    title: "Settings",
+    icon: Settings,
+    href: "/dashboard/settings",
   },
 ]
 

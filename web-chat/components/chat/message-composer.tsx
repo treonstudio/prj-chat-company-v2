@@ -425,7 +425,36 @@ function MessageComposerComponent({
       // Spreadsheets
       '.xls', '.xlsx', '.csv', '.ods',
       // Presentations
-      '.ppt', '.pptx', '.odp'
+      '.ppt', '.pptx', '.odp',
+      // Archives
+      '.tar', '.gz', '.tar.gz', '.tgz', '.zip', '.rar', '.7z', '.bz2', '.tar.bz2'
+    ];
+
+    const allowedMimeTypes = [
+      // Documents
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/pdf',
+      'application/rtf',
+      'application/vnd.oasis.opendocument.text',
+      // Spreadsheets
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/csv',
+      'application/vnd.oasis.opendocument.spreadsheet',
+      // Presentations
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/vnd.oasis.opendocument.presentation',
+      // Archives
+      'application/zip',
+      'application/vnd.rar',
+      'application/x-7z-compressed',
+      'application/x-tar',
+      'application/gzip',
+      'application/x-gzip',
+      'application/x-bzip2',
+      'application/x-compressed-tar'
     ];
 
     const maxSizeInBytes = usageControls.maxFileSizeUploadedInMB * 1024 * 1024;
@@ -436,8 +465,13 @@ function MessageComposerComponent({
     Array.from(files).forEach(file => {
       const fileName = file.name.toLowerCase();
       const fileExtension = fileName.substring(fileName.lastIndexOf('.'));
+      const fileMimeType = file.type;
 
-      if (!allowedExtensions.includes(fileExtension)) {
+      // Check if file is allowed by either extension or MIME type
+      const isAllowedExtension = allowedExtensions.includes(fileExtension);
+      const isAllowedMimeType = allowedMimeTypes.includes(fileMimeType);
+
+      if (!isAllowedExtension && !isAllowedMimeType) {
         invalidFiles.push(`${file.name} (format tidak didukung)`);
       } else if (file.size > maxSizeInBytes) {
         invalidFiles.push(`${file.name} (lebih dari ${usageControls.maxFileSizeUploadedInMB}MB)`);
@@ -644,7 +678,7 @@ function MessageComposerComponent({
           <input
             ref={documentInputRef}
             type="file"
-            accept=".doc,.docx,.pdf,.rtf,.odt,.xls,.xlsx,.csv,.ods,.ppt,.pptx,.odp"
+            accept=".doc,.docx,.pdf,.rtf,.odt,.xls,.xlsx,.csv,.ods,.ppt,.pptx,.odp,.tar,.gz,.tar.gz,.tgz,.zip,.rar,.7z,.bz2,.tar.bz2,application/zip,application/vnd.rar,application/x-7z-compressed,application/x-tar,application/gzip,application/x-bzip2"
             multiple
             onChange={handleDocumentSelect}
             className="hidden"
