@@ -126,38 +126,57 @@ export function GroupInfoDialog({
     return null;
   }
 
-  // Fetch group metadata (createdAt, createdBy)
+  // Listen to group metadata and participants in real-time
   useEffect(() => {
-    const fetchGroupMetadata = async () => {
-      if (!open || !chatId) return;
+    if (!open || !chatId) return;
 
-      try {
-        const result = await chatRepository.getGroupChat(chatId);
-        if (result.status === 'success') {
-          const groupData = result.data;
+    const unsubscribe = chatRepository.listenToGroupChat(
+      chatId,
+      async (groupData) => {
+        // Set createdAt
+        if (groupData.createdAt) {
+          setCreatedAt(timestampToDate(groupData.createdAt));
+        }
 
-          // Set createdAt
-          if (groupData.createdAt) {
-            setCreatedAt(timestampToDate(groupData.createdAt));
-          }
+        // Set createdBy and fetch creator name
+        if (groupData.createdBy) {
+          setCreatedBy(groupData.createdBy);
 
-          // Set createdBy and fetch creator name
-          if (groupData.createdBy) {
-            setCreatedBy(groupData.createdBy);
-
-            // Fetch creator user data
-            const creatorResult = await userRepository.getUserById(groupData.createdBy);
-            if (creatorResult.status === 'success') {
-              setCreatorName(creatorResult.data.displayName);
-            }
+          // Fetch creator user data
+          const creatorResult = await userRepository.getUserById(groupData.createdBy);
+          if (creatorResult.status === 'success') {
+            setCreatorName(creatorResult.data.displayName);
           }
         }
-      } catch (error) {
-        console.error('Error fetching group metadata:', error);
-      }
-    };
 
-    fetchGroupMetadata();
+        // Update participants in real-time
+        if (groupData.participants) {
+          // Fetch full user data for all participants
+          const participantPromises = groupData.participants.map(userId =>
+            userRepository.getUserById(userId)
+          );
+          const participantResults = await Promise.all(participantPromises);
+          const updatedMembers = participantResults
+            .filter(r => r.status === 'success')
+            .map(r => r.data);
+
+          onMembersUpdate(updatedMembers);
+        }
+
+        // Update admins in real-time
+        if (groupData.admins && onAdminsUpdate) {
+          onAdminsUpdate(groupData.admins);
+        }
+      },
+      (error) => {
+        console.error('Error listening to group metadata:', error);
+      }
+    );
+
+    // Cleanup listener on unmount or when dialog closes
+    return () => {
+      unsubscribe();
+    };
   }, [open, chatId]);
 
   const handleKickMember = async (userId: string, userName: string) => {

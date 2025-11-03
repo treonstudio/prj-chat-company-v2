@@ -76,6 +76,34 @@ export class ChatRepository {
   }
 
   /**
+   * Listen to group chat with real-time updates
+   */
+  listenToGroupChat(
+    chatId: string,
+    onUpdate: (groupChat: GroupChat) => void,
+    onError: (error: string) => void
+  ): () => void {
+    const chatRef = doc(db(), this.GROUP_CHATS_COLLECTION, chatId);
+
+    const unsubscribe = onSnapshot(
+      chatRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data() as GroupChat;
+          onUpdate({ ...data, chatId });
+        } else {
+          onError('Group chat not found');
+        }
+      },
+      (error) => {
+        onError(error.message || 'Failed to fetch group chat');
+      }
+    );
+
+    return unsubscribe;
+  }
+
+  /**
    * Create a new group chat
    */
   async createGroupChat(
