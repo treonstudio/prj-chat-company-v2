@@ -44,8 +44,8 @@ import {
 const chatRepository = new ChatRepository()
 const userRepository = new UserRepository()
 
-// Max participants that can be added per action (default: 5)
-const MAX_PARTICIPANTS_PER_ACTION = parseInt(process.env.NEXT_PUBLIC_MAX_PARTICIPANTS_PER_ACTION || '5')
+// Max participants that can be added per action (unlimited by default)
+const MAX_PARTICIPANTS_PER_ACTION = parseInt(process.env.NEXT_PUBLIC_MAX_PARTICIPANTS_PER_ACTION || '999')
 
 interface GroupInfoDialogProps {
   open: boolean
