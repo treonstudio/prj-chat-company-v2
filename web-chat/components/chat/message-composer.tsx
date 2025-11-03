@@ -29,6 +29,7 @@ interface MessageComposerProps {
   chatId: string;
   onSendText: (text: string) => void;
   onSendImage: (file: File, shouldCompress: boolean) => void | Promise<void>;
+  onSendImageGroup: (files: File[], shouldCompress: boolean) => void | Promise<void>;
   onSendVideo: (file: File, shouldCompress: boolean) => void | Promise<void>;
   onSendDocument: (file: File) => void | Promise<void>;
   disabled?: boolean;
@@ -40,6 +41,7 @@ function MessageComposerComponent({
   chatId,
   onSendText,
   onSendImage,
+  onSendImageGroup,
   onSendVideo,
   onSendDocument,
   disabled = false,
@@ -536,38 +538,42 @@ function MessageComposerComponent({
 
     console.log(`[MessageComposer] Uploading ${files.length} ${fileType}(s) with compression=${shouldCompress}`);
 
-    // Upload files sequentially
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      setCurrentUploadIndex(i);
+    try {
+      if (fileType === 'image') {
+        // For images, use IMAGE_GROUP (single message with multiple images)
+        await onSendImageGroup(files, shouldCompress);
+        toast.success(`${files.length} gambar berhasil diupload`);
+      } else if (fileType === 'video') {
+        // For videos, upload sequentially (separate messages)
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          setCurrentUploadIndex(i);
 
-      try {
-        console.log(`[MessageComposer] Uploading file ${i + 1}/${files.length}: ${file.name}`);
+          try {
+            console.log(`[MessageComposer] Uploading video ${i + 1}/${files.length}: ${file.name}`);
+            await onSendVideo(file, shouldCompress);
 
-        if (fileType === 'image') {
-          await onSendImage(file, shouldCompress);
-        } else if (fileType === 'video') {
-          await onSendVideo(file, shouldCompress);
+            // Small delay between uploads
+            if (i < files.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 300));
+            }
+          } catch (error) {
+            console.error(`[MessageComposer] Error uploading video ${file.name}:`, error);
+            toast.error(`Gagal mengupload ${file.name}`);
+          }
         }
-
-        // Small delay between uploads
-        if (i < files.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
-      } catch (error) {
-        console.error(`[MessageComposer] Error uploading file ${file.name}:`, error);
-        toast.error(`Gagal mengupload ${file.name}`);
+        toast.success(`${files.length} video berhasil diupload`);
       }
+    } catch (error) {
+      console.error('[MessageComposer] Bulk upload error:', error);
+      toast.error('Gagal mengupload file');
+    } finally {
+      // Reset state
+      flushSync(() => {
+        setInternalUploading(false);
+        setCurrentUploadIndex(0);
+      });
     }
-
-    // Reset state
-    flushSync(() => {
-      setInternalUploading(false);
-      setCurrentUploadIndex(0);
-    });
-
-    console.log('[MessageComposer] All files uploaded successfully');
-    toast.success(`${files.length} file berhasil diupload`);
   };
 
   // Handle multiple document upload (no compression needed, WhatsApp-style)

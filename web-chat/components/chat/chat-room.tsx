@@ -104,6 +104,7 @@ export function ChatRoom({
     uploadingMessage,
     sendTextMessage,
     sendImage,
+    sendImageGroup,
     sendVideo,
     sendDocument,
     markAsRead,
@@ -1477,6 +1478,7 @@ export function ChatRoom({
                           fileName: m.mediaMetadata?.fileName,
                           fileSize: m.mediaMetadata?.fileSize ? `${(m.mediaMetadata.fileSize / 1024 / 1024).toFixed(2)} MB` : undefined,
                           mimeType: m.mediaMetadata?.mimeType,
+                          mediaItems: m.mediaItems, // For IMAGE_GROUP
                           callMetadata: m.callMetadata,
                           senderId: m.senderId,
                           senderName: senderName,
@@ -1684,6 +1686,7 @@ export function ChatRoom({
                 setReplyingTo(null) // Clear reply state after sending
               }}
               onSendImage={(file, shouldCompress) => sendImage(currentUserId, currentUserName, file, shouldCompress, currentUserAvatar)}
+              onSendImageGroup={(files, shouldCompress) => sendImageGroup(currentUserId, currentUserName, files, shouldCompress, currentUserAvatar)}
               onSendVideo={(file, shouldCompress) => sendVideo(currentUserId, currentUserName, file, shouldCompress, currentUserAvatar)}
               onSendDocument={(file) => sendDocument(currentUserId, currentUserName, file, currentUserAvatar)}
               disabled={false}

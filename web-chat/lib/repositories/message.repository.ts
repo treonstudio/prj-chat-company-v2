@@ -13,7 +13,7 @@ import {
   setDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
-import { Message, MessageType, MediaMetadata, MessageStatus } from '@/types/models';
+import { Message, MessageType, MediaMetadata, MediaItem, MessageStatus } from '@/types/models';
 import { Resource } from '@/types/resource';
 import { compressImage, compressVideo } from '@/lib/utils/media-compression';
 import { uploadFileToChatkuAPI } from '@/lib/utils/file-upload.utils';
@@ -285,6 +285,99 @@ export class MessageRepository {
     } catch (error: any) {
       console.error('Error sending message:', error);
       return Resource.error(error.message || 'Failed to send message');
+    }
+  }
+
+  /**
+   * Upload and send image group message (bulk upload)
+   */
+  async uploadAndSendImageGroup(
+    chatId: string,
+    currentUserId: string,
+    currentUserName: string,
+    imageFiles: File[],
+    isGroupChat: boolean,
+    shouldCompress: boolean,
+    currentUserAvatar?: string,
+    onProgress?: (current: number, total: number) => void,
+    abortSignal?: AbortSignal,
+    tempId?: string
+  ): Promise<Resource<void>> {
+    try {
+      const mediaItems: MediaItem[] = [];
+      const totalFiles = imageFiles.length;
+
+      // Upload all images first
+      for (let i = 0; i < imageFiles.length; i++) {
+        const imageFile = imageFiles[i];
+        let fileToUpload = imageFile;
+
+        // Report progress
+        onProgress?.(i + 1, totalFiles);
+
+        // Check for cancellation
+        if (abortSignal?.aborted) {
+          return Resource.error('Upload cancelled');
+        }
+
+        // Compress image if requested
+        if (shouldCompress && imageFile.type.startsWith('image/')) {
+          try {
+            fileToUpload = await compressImage(imageFile, 0.8, 1920);
+          } catch (error) {
+            console.error('Compression failed for image', i, '- using original:', error);
+          }
+        }
+
+        // Generate filename
+        const extension = this.getFileExtension(fileToUpload);
+        const fileName = `IMG_${Date.now()}_${i}.${extension}`;
+
+        // Upload to server
+        const uploadResult = await uploadFileToChatkuAPI(fileToUpload, undefined, abortSignal);
+
+        if (uploadResult.status !== 'success' || !uploadResult.data) {
+          return Resource.error(`Failed to upload image ${i + 1}`);
+        }
+
+        const downloadUrl = uploadResult.data;
+
+        // Create media item
+        mediaItems.push({
+          url: downloadUrl,
+          metadata: {
+            fileName,
+            fileSize: fileToUpload.size,
+            mimeType: fileToUpload.type,
+            thumbnailUrl: downloadUrl,
+          },
+          order: i,
+        });
+
+        // Small delay between uploads to avoid overwhelming the server
+        if (i < imageFiles.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+
+      // Create single message with all images
+      const message: Message = {
+        messageId: '',
+        senderId: currentUserId,
+        senderName: currentUserName,
+        ...(currentUserAvatar && { senderAvatar: currentUserAvatar }),
+        text: `📷 ${mediaItems.length} Photos`,
+        type: MessageType.IMAGE_GROUP,
+        mediaItems,
+        readBy: {},
+        deliveredTo: {},
+        ...(tempId && { tempId }),
+      };
+
+      return await this.sendMessage(chatId, message, isGroupChat);
+    } catch (error: any) {
+      console.error('Error uploading image group:', error);
+      return Resource.error(error.message || 'Failed to upload images');
     }
   }
 

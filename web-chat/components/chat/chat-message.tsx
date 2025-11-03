@@ -29,6 +29,7 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { LinkPreviewCard } from "./link-preview-card"
 import { linkifyText } from "@/lib/utils/linkify"
 import { LazyImage } from "./lazy-image"
+import { ImageGroup } from "./image-group"
 import { downloadMediaWithCache } from "@/lib/utils/media-cache"
 
 type Base = {
@@ -63,6 +64,20 @@ type Base = {
 
 type TextMsg = Base & { type: "text"; content: string }
 type ImageMsg = Base & { type: "image"; content: string }
+type ImageGroupMsg = Base & {
+  type: "image_group"
+  content: string
+  mediaItems: Array<{
+    url: string
+    metadata: {
+      fileName: string
+      fileSize: number
+      mimeType: string
+      thumbnailUrl?: string
+    }
+    order: number
+  }>
+}
 type VideoMsg = Base & { type: "video"; content: string; mimeType?: string }
 type DocMsg = Base & {
   type: "doc"
@@ -81,7 +96,7 @@ type CallMsg = Base & {
   }
 }
 
-export type ChatMessageUnion = TextMsg | ImageMsg | VideoMsg | DocMsg | CallMsg
+export type ChatMessageUnion = TextMsg | ImageMsg | ImageGroupMsg | VideoMsg | DocMsg | CallMsg
 
 // Type guard to check if message is a call message
 function isCallMessage(data: ChatMessageUnion): data is CallMsg {
@@ -730,6 +745,26 @@ const ChatMessageComponent = function ChatMessage({
                   )}
                 </button>
               )}
+            </div>
+          )}
+
+          {data.type === "image_group" && data.mediaItems && data.mediaItems.length > 0 && (
+            <div className="relative">
+              <ImageGroup
+                messages={data.mediaItems.map((item, index) => ({
+                  messageId: `${data.id}_${index}`,
+                  senderId: data.senderId,
+                  senderName: data.senderName,
+                  text: '',
+                  type: 'IMAGE' as any,
+                  mediaUrl: item.url,
+                  mediaMetadata: item.metadata,
+                  readBy: {},
+                  deliveredTo: {},
+                  timestamp: undefined,
+                }))}
+                isMe={isMe}
+              />
             </div>
           )}
 

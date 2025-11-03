@@ -684,6 +684,117 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     [chatId, isGroupChat, uploadAbortControllers, pendingUploads]
   );
 
+  const sendImageGroup = useCallback(
+    async (
+      currentUserId: string,
+      currentUserName: string,
+      imageFiles: File[],
+      shouldCompress: boolean,
+      currentUserAvatar?: string
+    ) => {
+      if (!chatId || imageFiles.length === 0) return;
+
+      // Create optimistic message
+      const tempId = `temp_${Date.now()}_${Math.random()}`;
+
+      const optimisticMessage: Message = {
+        messageId: tempId,
+        senderId: currentUserId,
+        senderName: currentUserName,
+        senderAvatar: currentUserAvatar,
+        text: `📷 ${imageFiles.length} Photos`,
+        type: MessageType.IMAGE_GROUP,
+        readBy: {},
+        deliveredTo: {},
+        timestamp: Timestamp.now(),
+        status: MessageStatus.SENDING,
+      };
+
+      setOptimisticMessages(prev => [optimisticMessage, ...prev]);
+
+      // OFFLINE QUEUE: If offline, show pending status
+      if (!navigator.onLine) {
+        console.log('[UploadQueue] User offline - bulk upload not supported offline');
+        setOptimisticMessages(prev =>
+          prev.map(msg =>
+            msg.messageId === tempId
+              ? { ...msg, status: MessageStatus.FAILED, error: 'Bulk upload not available offline' }
+              : msg
+          )
+        );
+        return;
+      }
+
+      // Create abort controller
+      const abortController = new AbortController();
+      uploadAbortControllers.set(tempId, abortController);
+
+      console.log('[IMAGE_GROUP UPLOAD] Started -', imageFiles.length, 'images');
+
+      try {
+        const result = await messageRepository.uploadAndSendImageGroup(
+          chatId,
+          currentUserId,
+          currentUserName,
+          imageFiles,
+          isGroupChat,
+          shouldCompress,
+          currentUserAvatar,
+          (current, total) => {
+            // Update message with upload progress
+            setOptimisticMessages(prev =>
+              prev.map(msg =>
+                msg.messageId === tempId
+                  ? { ...msg, text: `📷 Uploading ${current}/${total}...` }
+                  : msg
+              )
+            );
+          },
+          abortController.signal,
+          tempId
+        );
+
+        console.log('[IMAGE_GROUP UPLOAD] Repository result:', result.status);
+
+        // Clean up abort controller
+        uploadAbortControllers.delete(tempId);
+
+        if (result.status === 'error') {
+          console.log('[IMAGE_GROUP UPLOAD] Error:', result.message);
+
+          const isCancelled = result.message?.includes('cancelled');
+          setOptimisticMessages(prev =>
+            prev.map(msg =>
+              msg.messageId === tempId
+                ? { ...msg, status: MessageStatus.FAILED, error: isCancelled ? 'Upload cancelled' : result.message }
+                : msg
+            )
+          );
+          if (!isCancelled) {
+            setError(result.message);
+          }
+        } else {
+          console.log('[IMAGE_GROUP UPLOAD] Success - removing optimistic message');
+          // SUCCESS: Remove optimistic message
+          setOptimisticMessages(prev =>
+            prev.filter(msg => msg.messageId !== tempId)
+          );
+        }
+      } catch (error) {
+        console.error('[IMAGE_GROUP UPLOAD] Unexpected error:', error);
+        uploadAbortControllers.delete(tempId);
+        setOptimisticMessages(prev =>
+          prev.map(msg =>
+            msg.messageId === tempId
+              ? { ...msg, status: MessageStatus.FAILED, error: 'Upload failed' }
+              : msg
+          )
+        );
+      }
+    },
+    [chatId, isGroupChat, uploadAbortControllers]
+  );
+
   const sendVideo = useCallback(
     async (currentUserId: string, currentUserName: string, videoFile: File, shouldCompress: boolean, currentUserAvatar?: string) => {
       if (!chatId) return;
@@ -1058,6 +1169,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     uploadingMessage,
     sendTextMessage,
     sendImage,
+    sendImageGroup,
     sendVideo,
     sendDocument,
     markAsRead,
