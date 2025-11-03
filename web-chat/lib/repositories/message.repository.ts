@@ -710,6 +710,8 @@ export class MessageRepository {
           // Mark as read if not already
           if (!readBy[userId]) {
             updates[`readBy.${userId}`] = timestamp;
+            // IMPORTANT: Update status to READ when marking as read
+            updates['status'] = MessageStatus.READ;
           }
 
           if (Object.keys(updates).length > 0) {
@@ -727,6 +729,44 @@ export class MessageRepository {
     } catch (error: any) {
       console.error('Error marking messages as read:', error);
       return Resource.error(error.message || 'Failed to mark messages as read');
+    }
+  }
+
+  /**
+   * Mark a single message as delivered
+   * This is called automatically when a user receives a message
+   */
+  async markMessageAsDelivered(
+    chatId: string,
+    messageId: string,
+    userId: string,
+    isGroupChat: boolean
+  ): Promise<Resource<void>> {
+    try {
+      const collection_name = isGroupChat
+        ? this.GROUP_CHATS_COLLECTION
+        : this.DIRECT_CHATS_COLLECTION;
+
+      const messageRef = doc(
+        db(),
+        collection_name,
+        chatId,
+        this.MESSAGES_SUBCOLLECTION,
+        messageId
+      );
+
+      // Update message with delivered status
+      await updateDoc(messageRef, {
+        status: MessageStatus.DELIVERED,
+        [`deliveredTo.${userId}`]: Timestamp.now()
+      });
+
+      console.log(`[MessageRepository] ✅ Message ${messageId} marked as DELIVERED for user ${userId}`);
+
+      return Resource.success(undefined);
+    } catch (error: any) {
+      console.error('[MessageRepository] Error marking message as delivered:', error);
+      return Resource.error(error.message || 'Failed to mark message as delivered');
     }
   }
 

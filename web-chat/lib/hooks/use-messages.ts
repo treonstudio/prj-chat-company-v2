@@ -1032,6 +1032,24 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     [chatId, isGroupChat]
   );
 
+  /**
+   * Mark message as delivered
+   * Called automatically when receiving a new message (not from self)
+   */
+  const markAsDelivered = useCallback(
+    async (messageId: string, userId: string) => {
+      if (!chatId || !messageId || !userId) return;
+
+      try {
+        await messageRepository.markMessageAsDelivered(chatId, messageId, userId, isGroupChat);
+        console.log(`[useMessages] ✅ Message ${messageId} marked as DELIVERED for user ${userId}`);
+      } catch (error) {
+        console.error('[useMessages] Error marking message as delivered:', error);
+      }
+    },
+    [chatId, isGroupChat]
+  );
+
   const retryMessage = useCallback(
     async (messageId: string) => {
       const failedMessage = optimisticMessages.find(msg => msg.messageId === messageId);
@@ -1173,6 +1191,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     sendVideo,
     sendDocument,
     markAsRead,
+    markAsDelivered,
     retryMessage,
     deleteMessage,
     editMessage,
