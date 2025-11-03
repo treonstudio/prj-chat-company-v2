@@ -221,10 +221,13 @@ export class PresenceRepository {
           disconnectedAt: rtdbServerTimestamp(),
         });
 
-        // Also remove session on disconnect
-        await onDisconnect(this.sessionDatabaseRef).remove();
+        // NOTE: We DON'T remove session on disconnect anymore
+        // Sessions should only be deleted on:
+        // 1. Manual logout (stopPresenceMonitoring)
+        // 2. Kicked by another device (kickOutDevice)
+        // This prevents auto-logout when user temporarily loses connection
 
-        console.log('[Presence] onDisconnect handlers set for:', userId);
+        console.log('[Presence] onDisconnect handler set for status (session kept alive):', userId);
 
         // Set the user as ONLINE in Realtime Database
         await set(this.userStatusDatabaseRef, {
@@ -271,15 +274,13 @@ export class PresenceRepository {
       }
     }
 
-    // Cancel onDisconnect handlers
+    // Cancel onDisconnect handler for status
+    // (No need to cancel session onDisconnect since we don't set it anymore)
     if (this.userStatusDatabaseRef) {
       onDisconnect(this.userStatusDatabaseRef).cancel();
     }
-    if (this.sessionDatabaseRef) {
-      onDisconnect(this.sessionDatabaseRef).cancel();
-    }
 
-    console.log('[Presence] onDisconnect handlers cancelled for:', this.currentUserId);
+    console.log('[Presence] onDisconnect handler cancelled for:', this.currentUserId);
 
     // Unsubscribe from listeners
     if (this.unsubscribeConnected) {
