@@ -161,12 +161,11 @@ export class MessageRepository {
             return messageData;
           })
           .filter((message) => {
-            // Filter out messages deleted for everyone
-            if (message.isDeleted) {
-              return false;
-            }
+            // Keep messages deleted for everyone (isDeleted: true)
+            // These will show "Pesan ini dihapus" placeholder in UI
 
             // Filter out messages hidden from current user (Delete for Me)
+            // These messages should be completely hidden from this user
             if (currentUserId && message.hideFrom && message.hideFrom[currentUserId]) {
               return false;
             }
