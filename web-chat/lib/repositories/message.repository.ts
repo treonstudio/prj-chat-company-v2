@@ -75,7 +75,23 @@ export class MessageRepository {
     isGroupChat: boolean,
     allParticipants?: string[]
   ): MessageStatus {
+    console.log('[calculateMessageStatus] Called for message:', message.messageId, {
+      hasStatus: !!message.status,
+      statusValue: message.status,
+      statusType: typeof message.status,
+      senderId: message.senderId,
+      currentUserId: currentUserId
+    });
+
+    // IMPORTANT: If message already has a status field from Firestore, use it
+    // This ensures we respect the status set by delivery receipt service and markAsRead
+    if (message.status) {
+      console.log('[calculateMessageStatus] ✅ Using existing status from Firestore:', message.status);
+      return message.status;
+    }
+
     // Only calculate status for messages sent by current user
+    // (for backward compatibility with old messages without status field)
     if (message.senderId !== currentUserId) {
       return MessageStatus.SENT;
     }
@@ -143,19 +159,47 @@ export class MessageRepository {
 
         const messages = snapshot.docs
           .map((doc) => {
+            const rawData = doc.data();
             const messageData = {
-              ...doc.data(),
+              ...rawData,
               messageId: doc.id,
             } as Message;
 
+            console.log('[MessageRepository] Raw message data from Firestore:', {
+              messageId: doc.id,
+              senderId: rawData.senderId,
+              statusFromFirestore: rawData.status,
+              deliveredTo: rawData.deliveredTo,
+              readBy: rawData.readBy
+            });
+
             // Calculate status if currentUserId is provided
+            console.log('[MessageRepository] Checking if should calculate status:', {
+              hasCurrentUserId: !!currentUserId,
+              currentUserId: currentUserId,
+              hasAllParticipants: !!allParticipants,
+              allParticipants: allParticipants
+            });
+
             if (currentUserId && allParticipants) {
-              messageData.status = this.calculateMessageStatus(
+              console.log('[MessageRepository] 🔄 Calculating status for message:', doc.id);
+
+              const calculatedStatus = this.calculateMessageStatus(
                 messageData,
                 currentUserId,
                 isGroupChat,
                 allParticipants
               );
+
+              console.log('[MessageRepository] Status after calculation:', {
+                messageId: doc.id,
+                before: messageData.status,
+                after: calculatedStatus
+              });
+
+              messageData.status = calculatedStatus;
+            } else {
+              console.log('[MessageRepository] ⚠️ Skipping status calculation - missing currentUserId or allParticipants');
             }
 
             return messageData;
@@ -709,6 +753,7 @@ export class MessageRepository {
             updates[`readBy.${userId}`] = timestamp;
             // IMPORTANT: Update status to READ when marking as read
             updates['status'] = MessageStatus.READ;
+            console.log('[MessageRepository] Marking message as READ:', doc.id, 'Updates:', updates);
           }
 
           if (Object.keys(updates).length > 0) {

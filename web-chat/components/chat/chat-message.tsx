@@ -1088,7 +1088,7 @@ const ChatMessageComponent = function ChatMessage({
                   {(data.isEdited || data.editedAt) && "Diedit "}{data.timestamp}
                 </span>
                 {isMe && data.status && (
-                  <MessageStatusIcon status={data.status} className={isMe ? "text-primary-foreground/70" : ""} />
+                  <MessageStatusIcon status={data.status} messageId={data.id} />
                 )}
                 {isMe && data.status === MessageStatus.FAILED && onRetry && (
                   <button

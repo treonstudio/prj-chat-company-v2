@@ -1143,7 +1143,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     });
 
     // Convert to array and sort
-    return Array.from(messageMap.values()).sort((a, b) => {
+    const sortedMessages = Array.from(messageMap.values()).sort((a, b) => {
       // Use timestamp, fallback to createdAt, then messageId for consistent ordering
       const timeA = getTimestampMillis(a.timestamp) || getTimestampMillis(a.createdAt) || 0;
       const timeB = getTimestampMillis(b.timestamp) || getTimestampMillis(b.createdAt) || 0;
@@ -1155,6 +1155,15 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
 
       return timeB - timeA; // Descending order (newest first)
     });
+
+    // Debug: Log message statuses
+    sortedMessages.forEach(msg => {
+      if (msg.messageId === 'WoXa3T93IQLWFURZtk20') {
+        console.log(`[useMessages] allMessages - Message ${msg.messageId} has status:`, msg.status);
+      }
+    });
+
+    return sortedMessages;
   }, [messages, optimisticMessages]);
 
   /**

@@ -247,7 +247,9 @@ export function ChatRoom({
     }
 
     const readBy = message.readBy || {}
+    const deliveredTo = message.deliveredTo || {}
     const readByUserIds = Object.keys(readBy)
+    const deliveredToUserIds = Object.keys(deliveredTo)
 
     if (isGroupChat) {
       // Group chat: READ if all other participants have read it
@@ -267,6 +269,8 @@ export function ChatRoom({
         return MessageStatus.READ // Blue double check
       } else if (readByUserIds.length > 0) {
         return MessageStatus.DELIVERED // Gray double check (some read, not all)
+      } else if (deliveredToUserIds.length > 0) {
+        return MessageStatus.DELIVERED // Gray double check (delivered but not read)
       } else {
         return MessageStatus.SENT // Single check
       }
@@ -276,6 +280,8 @@ export function ChatRoom({
         return MessageStatus.READ // Blue double check
       } else if (readByUserIds.length > 0) {
         return MessageStatus.DELIVERED // Gray double check
+      } else if (otherUserId && deliveredToUserIds.includes(otherUserId)) {
+        return MessageStatus.DELIVERED // Gray double check (delivered but not read)
       } else {
         return MessageStatus.SENT // Single check
       }
