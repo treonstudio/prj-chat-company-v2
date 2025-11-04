@@ -62,8 +62,8 @@ export function GroupChatDialog({
 
   // Max character limits
   const MAX_GROUP_NAME_LENGTH = 100
-  // Max participants that can be selected per action (default: 5)
-  const MAX_PARTICIPANTS_PER_ACTION = parseInt(process.env.NEXT_PUBLIC_MAX_PARTICIPANTS_PER_ACTION || '5')
+  // Max participants that can be selected per action (unlimited by default)
+  const MAX_PARTICIPANTS_PER_ACTION = parseInt(process.env.NEXT_PUBLIC_MAX_PARTICIPANTS_PER_ACTION || '999')
   // Minimum participants required to create a group (must be more than 1)
   const MIN_PARTICIPANTS_REQUIRED = 2
 

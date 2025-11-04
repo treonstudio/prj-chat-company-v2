@@ -26,6 +26,7 @@ export interface User {
 export enum MessageType {
   TEXT = 'TEXT',
   IMAGE = 'IMAGE',
+  IMAGE_GROUP = 'IMAGE_GROUP', // Bulk image upload (multiple images in one message)
   VIDEO = 'VIDEO',
   DOCUMENT = 'DOCUMENT',
   VOICE_CALL = 'VOICE_CALL',
@@ -46,6 +47,12 @@ export interface MediaMetadata {
   fileSize: number;
   mimeType: string;
   thumbnailUrl?: string;
+}
+
+export interface MediaItem {
+  url: string;
+  metadata: MediaMetadata;
+  order: number;
 }
 
 export interface ReplyTo {
@@ -80,8 +87,9 @@ export interface Message {
   senderAvatar?: string;
   text: string;
   type: MessageType;
-  mediaUrl?: string;
-  mediaMetadata?: MediaMetadata;
+  mediaUrl?: string; // For single IMAGE/VIDEO/DOCUMENT
+  mediaMetadata?: MediaMetadata; // For single IMAGE/VIDEO/DOCUMENT
+  mediaItems?: MediaItem[]; // For IMAGE_GROUP (bulk image upload)
   callMetadata?: CallMetadata; // For call history messages
   readBy: Record<string, Timestamp>;
   deliveredTo?: Record<string, Timestamp>;

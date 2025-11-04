@@ -9,6 +9,7 @@ import { loadFFmpeg } from '@/lib/utils/media-compression';
 import { preloadStaticAssets } from '@/lib/utils/static-asset-cache';
 import { StaticImage } from '@/components/ui/static-image';
 import packageJson from '../package.json';
+import { getDeliveryReceiptService } from '@/lib/services/delivery-receipt.service';
 
 // Get commit hash - will be set during build
 const COMMIT_HASH = process.env.NEXT_PUBLIC_COMMIT_HASH || '539132f';
@@ -58,6 +59,22 @@ export default function Page() {
           console.warn('[FFmpeg] Pre-load failed (will load on first use):', error);
         });
     }
+  }, [currentUser, userData]);
+
+  // Start delivery receipt service (listens to userChats for new messages)
+  useEffect(() => {
+    if (!currentUser || !userData) return;
+
+    const deliveryReceiptService = getDeliveryReceiptService();
+    deliveryReceiptService.startListening(userData.userId);
+
+    console.log('[DeliveryReceipt] Service started for user:', userData.userId);
+
+    // Cleanup on unmount
+    return () => {
+      deliveryReceiptService.stopListening();
+      console.log('[DeliveryReceipt] Service stopped');
+    };
   }, [currentUser, userData]);
 
   if (loading) {

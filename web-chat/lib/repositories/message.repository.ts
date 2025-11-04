@@ -13,7 +13,7 @@ import {
   setDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
-import { Message, MessageType, MediaMetadata, MessageStatus } from '@/types/models';
+import { Message, MessageType, MediaMetadata, MediaItem, MessageStatus } from '@/types/models';
 import { Resource } from '@/types/resource';
 import { compressImage, compressVideo } from '@/lib/utils/media-compression';
 import { uploadFileToChatkuAPI } from '@/lib/utils/file-upload.utils';
@@ -161,12 +161,11 @@ export class MessageRepository {
             return messageData;
           })
           .filter((message) => {
-            // Filter out messages deleted for everyone
-            if (message.isDeleted) {
-              return false;
-            }
+            // Keep messages deleted for everyone (isDeleted: true)
+            // These will show "Pesan ini dihapus" placeholder in UI
 
             // Filter out messages hidden from current user (Delete for Me)
+            // These messages should be completely hidden from this user
             if (currentUserId && message.hideFrom && message.hideFrom[currentUserId]) {
               return false;
             }
@@ -285,6 +284,99 @@ export class MessageRepository {
     } catch (error: any) {
       console.error('Error sending message:', error);
       return Resource.error(error.message || 'Failed to send message');
+    }
+  }
+
+  /**
+   * Upload and send image group message (bulk upload)
+   */
+  async uploadAndSendImageGroup(
+    chatId: string,
+    currentUserId: string,
+    currentUserName: string,
+    imageFiles: File[],
+    isGroupChat: boolean,
+    shouldCompress: boolean,
+    currentUserAvatar?: string,
+    onProgress?: (current: number, total: number) => void,
+    abortSignal?: AbortSignal,
+    tempId?: string
+  ): Promise<Resource<void>> {
+    try {
+      const mediaItems: MediaItem[] = [];
+      const totalFiles = imageFiles.length;
+
+      // Upload all images first
+      for (let i = 0; i < imageFiles.length; i++) {
+        const imageFile = imageFiles[i];
+        let fileToUpload = imageFile;
+
+        // Report progress
+        onProgress?.(i + 1, totalFiles);
+
+        // Check for cancellation
+        if (abortSignal?.aborted) {
+          return Resource.error('Upload cancelled');
+        }
+
+        // Compress image if requested
+        if (shouldCompress && imageFile.type.startsWith('image/')) {
+          try {
+            fileToUpload = await compressImage(imageFile, 0.8, 1920);
+          } catch (error) {
+            console.error('Compression failed for image', i, '- using original:', error);
+          }
+        }
+
+        // Generate filename
+        const extension = this.getFileExtension(fileToUpload);
+        const fileName = `IMG_${Date.now()}_${i}.${extension}`;
+
+        // Upload to server
+        const uploadResult = await uploadFileToChatkuAPI(fileToUpload, undefined, abortSignal);
+
+        if (uploadResult.status !== 'success' || !uploadResult.data) {
+          return Resource.error(`Failed to upload image ${i + 1}`);
+        }
+
+        const downloadUrl = uploadResult.data;
+
+        // Create media item
+        mediaItems.push({
+          url: downloadUrl,
+          metadata: {
+            fileName,
+            fileSize: fileToUpload.size,
+            mimeType: fileToUpload.type,
+            thumbnailUrl: downloadUrl,
+          },
+          order: i,
+        });
+
+        // Small delay between uploads to avoid overwhelming the server
+        if (i < imageFiles.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+
+      // Create single message with all images
+      const message: Message = {
+        messageId: '',
+        senderId: currentUserId,
+        senderName: currentUserName,
+        ...(currentUserAvatar && { senderAvatar: currentUserAvatar }),
+        text: `📷 ${mediaItems.length} Photos`,
+        type: MessageType.IMAGE_GROUP,
+        mediaItems,
+        readBy: {},
+        deliveredTo: {},
+        ...(tempId && { tempId }),
+      };
+
+      return await this.sendMessage(chatId, message, isGroupChat);
+    } catch (error: any) {
+      console.error('Error uploading image group:', error);
+      return Resource.error(error.message || 'Failed to upload images');
     }
   }
 
@@ -618,6 +710,8 @@ export class MessageRepository {
           // Mark as read if not already
           if (!readBy[userId]) {
             updates[`readBy.${userId}`] = timestamp;
+            // IMPORTANT: Update status to READ when marking as read
+            updates['status'] = MessageStatus.READ;
           }
 
           if (Object.keys(updates).length > 0) {
@@ -635,6 +729,44 @@ export class MessageRepository {
     } catch (error: any) {
       console.error('Error marking messages as read:', error);
       return Resource.error(error.message || 'Failed to mark messages as read');
+    }
+  }
+
+  /**
+   * Mark a single message as delivered
+   * This is called automatically when a user receives a message
+   */
+  async markMessageAsDelivered(
+    chatId: string,
+    messageId: string,
+    userId: string,
+    isGroupChat: boolean
+  ): Promise<Resource<void>> {
+    try {
+      const collection_name = isGroupChat
+        ? this.GROUP_CHATS_COLLECTION
+        : this.DIRECT_CHATS_COLLECTION;
+
+      const messageRef = doc(
+        db(),
+        collection_name,
+        chatId,
+        this.MESSAGES_SUBCOLLECTION,
+        messageId
+      );
+
+      // Update message with delivered status
+      await updateDoc(messageRef, {
+        status: MessageStatus.DELIVERED,
+        [`deliveredTo.${userId}`]: Timestamp.now()
+      });
+
+      console.log(`[MessageRepository] ✅ Message ${messageId} marked as DELIVERED for user ${userId}`);
+
+      return Resource.success(undefined);
+    } catch (error: any) {
+      console.error('[MessageRepository] Error marking message as delivered:', error);
+      return Resource.error(error.message || 'Failed to mark message as delivered');
     }
   }
 
