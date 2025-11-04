@@ -43,7 +43,7 @@ export function MessageStatusIcon({ status, className = '', messageId }: Message
     case 'READ':
     case MessageStatus.READ:
       console.log(`[MessageStatusIcon][${messageId || 'unknown'}] ✅ Rendering BLUE double checkmark for READ status`);
-      return <DoneAllIcon sx={iconStyle} className={`text-blue-400 ${className}`} />;
+      return <DoneAllIcon sx={iconStyle} className={`text-cyan-400 ${className}`} />;
 
     case 'FAILED':
     case MessageStatus.FAILED:
