@@ -14,7 +14,7 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "Chatku Web",
+  title: "BC Web",
   description: "Real-time chat application",
 };
 

@@ -22,7 +22,7 @@ import { uploadFileToChatkuAPI } from '@/lib/utils/file-upload.utils';
  * Generate a UUID compatible with all browsers
  */
 function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
     const r = Math.random() * 16 | 0;
     const v = c === 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
@@ -413,7 +413,6 @@ export class MessageRepository {
       const extension = this.getFileExtension(fileToUpload);
       const fileName = `IMG_${Date.now()}.${extension}`;
 
-      // Upload to Chatku Asset Server with progress tracking and cancel support
       const uploadResult = await uploadFileToChatkuAPI(fileToUpload, onProgress, abortSignal);
 
       if (uploadResult.status !== 'success' || !uploadResult.data) {
@@ -492,7 +491,6 @@ export class MessageRepository {
       const extension = this.getFileExtension(fileToUpload);
       const fileName = `VID_${Date.now()}.${extension}`;
 
-      // Upload to Chatku Asset Server with progress tracking and cancel support
       const uploadResult = await uploadFileToChatkuAPI(fileToUpload, onProgress, abortSignal);
 
       if (uploadResult.status !== 'success' || !uploadResult.data) {
@@ -550,7 +548,6 @@ export class MessageRepository {
       const originalName = documentFile.name;
       const fileName = `DOC_${Date.now()}_${originalName}`;
 
-      // Upload to Chatku Asset Server with cancel support
       const uploadResult = await uploadFileToChatkuAPI(documentFile, onProgress, abortSignal);
 
       if (uploadResult.status !== 'success' || !uploadResult.data) {
@@ -836,12 +833,12 @@ export class MessageRepository {
                 : chat
             )
             : [{
-                chatId,
-                chatType: 'DIRECT',
-                otherUserId,
-                otherUserName,
-                ...chatItemUpdate,
-              }, ...existingChats];
+              chatId,
+              chatType: 'DIRECT',
+              otherUserId,
+              otherUserName,
+              ...chatItemUpdate,
+            }, ...existingChats];
 
         await updateDoc(userChatRef, {
           chats: updatedChats,
@@ -921,12 +918,12 @@ export class MessageRepository {
                 : chat
             )
             : [{
-                chatId,
-                chatType: 'GROUP',
-                groupName,
-                ...(groupAvatar && { groupAvatar }),
-                ...chatItemUpdate,
-              }, ...existingChats];
+              chatId,
+              chatType: 'GROUP',
+              groupName,
+              ...(groupAvatar && { groupAvatar }),
+              ...chatItemUpdate,
+            }, ...existingChats];
 
         await updateDoc(userChatRef, {
           chats: updatedChats,

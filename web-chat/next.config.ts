@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
         hostname: 'chatku-asset.treonstudio.com',
         pathname: '**',
       },
+      {
+        protocol: 'https',
+        hostname: 'bc-asset.chatbcs.com',
+        pathname: '**',
+      },
     ],
     // Optimize images with better caching
     minimumCacheTTL: 31536000, // Cache for 1 year (images are immutable with Firebase Storage URLs)
