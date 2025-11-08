@@ -10,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
 import { User } from '@/types/models'
-import { UserMinus, UserPlus, Camera, Users as UsersIcon, Loader2, Pencil, Search, X, LogOut, ChevronDown, UserCog, ZoomIn, ZoomOut } from 'lucide-react'
+import { UserMinus, UserPlus, Camera, Users as UsersIcon, Loader2, Pencil, Search, X, LogOut, ChevronDown, UserCog, ZoomIn, ZoomOut, Trash2 } from 'lucide-react'
 import { ChatRepository } from '@/lib/repositories/chat.repository'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
@@ -95,6 +95,8 @@ export function GroupInfoDialog({
   const [updatingName, setUpdatingName] = useState(false)
   const [showLeaveDialog, setShowLeaveDialog] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  const [showDeleteGroupDialog, setShowDeleteGroupDialog] = useState(false)
+  const [deletingGroup, setDeletingGroup] = useState(false)
   const [hoveredMemberId, setHoveredMemberId] = useState<string | null>(null)
   const [showImageViewer, setShowImageViewer] = useState(false)
   const [showUserProfile, setShowUserProfile] = useState(false)
@@ -282,6 +284,27 @@ export function GroupInfoDialog({
 
   const handleLeaveGroup = () => {
     setShowLeaveDialog(true)
+  }
+
+  const handleDeleteGroup = () => {
+    setShowDeleteGroupDialog(true)
+  }
+
+  const confirmDeleteGroup = async () => {
+    setDeletingGroup(true)
+    const result = await chatRepository.deleteGroup(currentUserId, chatId)
+    setDeletingGroup(false)
+
+    if (result.status === 'success') {
+      toast.success('Grup berhasil dihapus')
+      setShowDeleteGroupDialog(false)
+      onOpenChange(false)
+      if (onLeaveGroup) {
+        onLeaveGroup() // Trigger close/navigation
+      }
+    } else {
+      toast.error(result.message || 'Gagal menghapus grup')
+    }
   }
 
   const confirmLeaveGroup = async () => {
@@ -764,6 +787,27 @@ export function GroupInfoDialog({
 
               <Separator />
 
+              {/* Delete Group Button (Admin Only) */}
+              {groupAdmins.includes(currentUserId) && (
+                <div className="px-6 py-4">
+                  <Button
+                    variant="ghost"
+                    onClick={handleDeleteGroup}
+                    className="w-full justify-start gap-3 h-auto py-3 text-white hover:text-white transition-colors"
+                    style={{ backgroundColor: '#E54C38' }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#D43D28'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#E54C38'
+                    }}
+                  >
+                    <Trash2 className="h-5 w-5" />
+                    <span className="text-sm font-medium">Hapus Grup</span>
+                  </Button>
+                </div>
+              )}
+
               {/* Leave Group Button */}
               <div className="px-6 py-4">
                 <Button
@@ -1031,6 +1075,52 @@ export function GroupInfoDialog({
       </Dialog>
 
       {/* Leave Group Confirmation Dialog */}
+      {/* Delete Group Dialog */}
+      <AlertDialog open={showDeleteGroupDialog} onOpenChange={setShowDeleteGroupDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Grup?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin menghapus grup "{groupName}"?
+              <br /><br />
+              <strong>Tindakan ini tidak dapat dibatalkan</strong> dan semua pesan akan dihapus permanen untuk semua anggota.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingGroup}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                confirmDeleteGroup()
+              }}
+              disabled={deletingGroup}
+              className="text-white hover:text-white transition-colors"
+              style={{ backgroundColor: '#E54C38' }}
+              onMouseEnter={(e) => {
+                if (!deletingGroup) {
+                  e.currentTarget.style.backgroundColor = '#D43D28'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!deletingGroup) {
+                  e.currentTarget.style.backgroundColor = '#E54C38'
+                }
+              }}
+            >
+              {deletingGroup ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Menghapus...
+                </>
+              ) : (
+                "Hapus Grup"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Leave Group Dialog */}
       <AlertDialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>

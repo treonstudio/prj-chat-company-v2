@@ -10,7 +10,10 @@ import {
   updateDoc,
   arrayUnion,
   arrayRemove,
-  writeBatch
+  writeBatch,
+  getDocs,
+  limit,
+  deleteDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { DirectChat, UserChats, ChatItem, GroupChat, ChatType } from '@/types/models';
@@ -1086,5 +1089,111 @@ export class ChatRepository {
       console.error('Delete history error:', error);
       return Resource.error(error.message || 'Failed to delete history');
     }
+  }
+
+  /**
+   * Delete group permanently (admin only)
+   * Based on mobile implementation - DELETE_GROUP_FEATURE.md
+   * Deletes group document, all messages, and removes from all participants' userChats
+   */
+  async deleteGroup(
+    adminId: string,
+    chatId: string
+  ): Promise<Resource<void>> {
+    try {
+      const cleanChatId = chatId.replace('direct_', '').replace('group_', '');
+
+      // 1. Get group chat document
+      const groupChatRef = doc(db(), this.GROUP_CHATS_COLLECTION, cleanChatId);
+      const groupSnapshot = await getDoc(groupChatRef);
+
+      if (!groupSnapshot.exists()) {
+        return Resource.error('Group chat not found');
+      }
+
+      const groupData = groupSnapshot.data() as GroupChat;
+      const participants = groupData.participants || [];
+      const admins = groupData.admins || [];
+
+      // 2. Verify admin permission
+      if (!admins.includes(adminId)) {
+        return Resource.error('Only admins can delete the group');
+      }
+
+      // 3. Delete all messages in subcollection (in batches)
+      await this.deleteMessagesInBatches(groupChatRef);
+
+      // 4. Remove group from all participants' userChats
+      const batch = writeBatch(db());
+
+      for (const participantId of participants) {
+        const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, participantId);
+        const userChatsDoc = await getDoc(userChatsRef);
+
+        if (userChatsDoc.exists()) {
+          const userChats = userChatsDoc.data() as UserChats;
+          const updatedChats = userChats.chats.filter(
+            chat => chat.chatId !== cleanChatId && chat.chatId !== `group_${cleanChatId}`
+          );
+
+          batch.update(userChatsRef, {
+            chats: updatedChats,
+            updatedAt: Timestamp.now()
+          });
+        }
+      }
+
+      // 5. Delete the group document
+      batch.delete(groupChatRef);
+
+      // 6. Commit all changes
+      await batch.commit();
+
+      console.log(`Group ${cleanChatId} deleted successfully by admin ${adminId}`);
+
+      return Resource.success(undefined);
+    } catch (error: any) {
+      console.error('Delete group error:', error);
+      return Resource.error(error.message || 'Failed to delete group');
+    }
+  }
+
+  /**
+   * Delete messages in batches (Firestore batch limit: 500 operations)
+   * Helper method for deleteGroup
+   */
+  private async deleteMessagesInBatches(
+    groupChatRef: ReturnType<typeof doc>
+  ): Promise<void> {
+    const messagesRef = collection(groupChatRef, 'messages');
+
+    let deletedCount = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      // Get batch of messages (max 500)
+      const messagesQuery = query(messagesRef, limit(500));
+      const messagesSnapshot = await getDocs(messagesQuery);
+
+      if (messagesSnapshot.empty) {
+        hasMore = false;
+        break;
+      }
+
+      // Delete in batch
+      const batch = writeBatch(db());
+      messagesSnapshot.docs.forEach(messageDoc => {
+        batch.delete(messageDoc.ref);
+      });
+      await batch.commit();
+
+      deletedCount += messagesSnapshot.size;
+      console.log(`Deleted ${deletedCount} messages so far...`);
+
+      // Check if we need to continue
+      hasMore = messagesSnapshot.size >= 500;
+    }
+
+    console.log(`Total messages deleted: ${deletedCount}`);
   }
 }
