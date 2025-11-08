@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo, useLayoutEffect } from 'reac
 import { flushSync } from 'react-dom';
 import { MessageRepository } from '@/lib/repositories/message.repository';
 import { Message, MessageType, MessageStatus, ReplyTo } from '@/types/models';
-import { Timestamp, doc, getDoc } from 'firebase/firestore';
+import { Timestamp, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { useMessageCache } from '@/lib/stores/message-cache.store';
 import { extractUrls, fetchLinkPreview, LinkPreviewData } from '@/lib/utils/link-preview';
@@ -242,6 +242,42 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
     return () => {
       unsubscribePromise.then(unsubscribe => unsubscribe());
     };
+  }, [chatId, isGroupChat, currentUserId]);
+
+  // REAL-TIME: Listen to deleteHistory changes
+  useEffect(() => {
+    if (!chatId || !currentUserId) return;
+
+    const collection = isGroupChat ? 'groupChats' : 'directChats';
+    const chatRef = doc(db(), collection, chatId);
+
+    // Set up real-time listener for chat document changes
+    const unsubscribe = onSnapshot(chatRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const chatData = snapshot.data();
+        const deleteHistory = chatData?.deleteHistory || {};
+        const newDeleteHistoryTs = deleteHistory[currentUserId] || null;
+
+        // Update state if deleteHistory timestamp changed
+        setDeleteHistoryTimestamp(newDeleteHistoryTs);
+
+        // Re-filter messages based on new timestamp
+        setMessages((currentMessages) => {
+          if (!newDeleteHistoryTs) return currentMessages;
+
+          const filteredMessages = currentMessages.filter(msg => {
+            if (!msg.timestamp) return true;
+            return getTimestampMillis(msg.timestamp) > getTimestampMillis(newDeleteHistoryTs);
+          });
+
+          // Update cache with filtered messages
+          setCachedMessages(chatId, filteredMessages);
+          return filteredMessages;
+        });
+      }
+    });
+
+    return () => unsubscribe();
   }, [chatId, isGroupChat, currentUserId]);
 
   // RESTORE: Load pending messages from localStorage on mount

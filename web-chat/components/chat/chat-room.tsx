@@ -165,14 +165,14 @@ export function ChatRoom({
 
   // Check if any dialog, menu, or media viewer is open - disable context menu when true
   const hasOpenDialog = showGroupInfoDialog ||
-                        showLeaveDialog ||
-                        showDeleteChatDialog ||
-                        showDeleteHistoryDialog ||
-                        showForwardDialog ||
-                        showUserProfileDialog ||
-                        showDeleteDialog ||
-                        showDropdownMenu ||
-                        hasMediaViewerOpen
+    showLeaveDialog ||
+    showDeleteChatDialog ||
+    showDeleteHistoryDialog ||
+    showForwardDialog ||
+    showUserProfileDialog ||
+    showDeleteDialog ||
+    showDropdownMenu ||
+    hasMediaViewerOpen
 
   // Reply mode
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
@@ -217,7 +217,7 @@ export function ChatRoom({
   }, [replyingTo])
 
   // User cache for looking up sender names and avatars
-  const [userCache, setUserCache] = useState<Map<string, {name: string, avatar?: string}>>(new Map())
+  const [userCache, setUserCache] = useState<Map<string, { name: string, avatar?: string }>>(new Map())
 
   // Monitor other user's status (for direct chat only)
   const { status: otherUserStatus, lastSeenText } = useUserStatus(
@@ -241,8 +241,8 @@ export function ChatRoom({
     // If message has explicit PENDING, SENDING, or FAILED status, respect it
     // Don't compute based on readBy for these statuses
     if (message.status === MessageStatus.PENDING ||
-        message.status === MessageStatus.SENDING ||
-        message.status === MessageStatus.FAILED) {
+      message.status === MessageStatus.SENDING ||
+      message.status === MessageStatus.FAILED) {
       return message.status
     }
 
@@ -469,11 +469,11 @@ export function ChatRoom({
 
                   // CRITICAL: Skip update if data hasn't changed (prevent unnecessary re-renders)
                   if (existingMember &&
-                      existingMember.displayName === displayName &&
-                      existingMember.email === newEmail &&
-                      existingMember.status === userData.status &&
-                      existingMember.imageURL === userData.imageURL &&
-                      existingMember.imageUrl === userData.imageUrl) {
+                    existingMember.displayName === displayName &&
+                    existingMember.email === newEmail &&
+                    existingMember.status === userData.status &&
+                    existingMember.imageURL === userData.imageURL &&
+                    existingMember.imageUrl === userData.imageUrl) {
                     return prevMembers // No change, return same reference to prevent re-render
                   }
 
@@ -539,8 +539,8 @@ export function ChatRoom({
 
               // CRITICAL: Skip update if data hasn't changed (prevent unnecessary re-renders)
               if (prevData.displayName === displayName &&
-                  prevData.avatar === avatar &&
-                  prevData.isDeleted === isDeleted) {
+                prevData.avatar === avatar &&
+                prevData.isDeleted === isDeleted) {
                 return // No change, skip state updates
               }
 
@@ -961,9 +961,7 @@ export function ChatRoom({
     if (result.status === 'success') {
       toast.success('Chat berhasil dibersihkan')
       setShowDeleteHistoryDialog(false)
-      if (onCloseChat) {
-        onCloseChat()
-      }
+      // Note: Chat stays open and remains in sidebar
     } else if (result.status === 'error') {
       toast.error(result.message || 'Gagal menghapus riwayat chat')
     }
@@ -1229,7 +1227,7 @@ export function ChatRoom({
 
   return (
     <div className="flex h-full w-full min-h-0 flex-col relative">
-      <header className="flex items-center justify-between border-b py-3 shadow-sm z-10" style={{ backgroundColor: '#fafafa' }}>
+      <header className="flex items-center justify-between border-b py-3 shadow-sm z-10 px-3" style={{ backgroundColor: '#fafafa' }}>
         <button
           onClick={handleHeaderClick}
           className="flex items-center gap-3 flex-1 min-w-0 hover:bg-muted/50 transition-colors rounded-lg px-2 py-1 -ml-2 disabled:hover:bg-transparent"
@@ -1377,161 +1375,161 @@ export function ChatRoom({
             }}
           >
             {loading ? (
-          <div className="mx-auto w-full space-y-3 p-4">
-            {/* Enhanced Message skeleton loader with varied heights */}
-            {[
-              { lines: 2, widths: ['w-64', 'w-48'] },
-              { lines: 1, widths: ['w-32'] },
-              { lines: 3, widths: ['w-56', 'w-64', 'w-40'] },
-              { lines: 2, widths: ['w-48', 'w-36'] },
-              { lines: 1, widths: ['w-44'] },
-              { lines: 2, widths: ['w-52', 'w-60'] },
-              { lines: 3, widths: ['w-64', 'w-56', 'w-32'] },
-              { lines: 1, widths: ['w-40'] },
-            ].map((skeleton, i) => (
-              <div key={i} className={`flex w-full ${i % 2 === 0 ? 'justify-end' : 'justify-start'} animate-in fade-in duration-200`} style={{ animationDelay: `${i * 25}ms` }}>
-                <div className={`flex flex-col gap-2 rounded-xl px-4 py-2 ${i % 2 === 0 ? 'max-w-[80%] ml-auto items-end bg-primary/10' : 'max-w-[80%] mr-auto items-start bg-muted'}`}>
-                  {skeleton.widths.map((width, j) => (
-                    <div key={j} className={`h-4 ${width} bg-muted-foreground/20 rounded animate-pulse`} style={{ animationDuration: '1.5s' }} />
-                  ))}
-                  <div className="h-3 w-16 bg-muted-foreground/20 rounded animate-pulse mt-1" style={{ animationDuration: '1.5s' }} />
-                </div>
+              <div className="mx-auto w-full space-y-3 p-4">
+                {/* Enhanced Message skeleton loader with varied heights */}
+                {[
+                  { lines: 2, widths: ['w-64', 'w-48'] },
+                  { lines: 1, widths: ['w-32'] },
+                  { lines: 3, widths: ['w-56', 'w-64', 'w-40'] },
+                  { lines: 2, widths: ['w-48', 'w-36'] },
+                  { lines: 1, widths: ['w-44'] },
+                  { lines: 2, widths: ['w-52', 'w-60'] },
+                  { lines: 3, widths: ['w-64', 'w-56', 'w-32'] },
+                  { lines: 1, widths: ['w-40'] },
+                ].map((skeleton, i) => (
+                  <div key={i} className={`flex w-full ${i % 2 === 0 ? 'justify-end' : 'justify-start'} animate-in fade-in duration-200`} style={{ animationDelay: `${i * 25}ms` }}>
+                    <div className={`flex flex-col gap-2 rounded-xl px-4 py-2 ${i % 2 === 0 ? 'max-w-[80%] ml-auto items-end bg-primary/10' : 'max-w-[80%] mr-auto items-start bg-muted'}`}>
+                      {skeleton.widths.map((width, j) => (
+                        <div key={j} className={`h-4 ${width} bg-muted-foreground/20 rounded animate-pulse`} style={{ animationDuration: '1.5s' }} />
+                      ))}
+                      <div className="h-3 w-16 bg-muted-foreground/20 rounded animate-pulse mt-1" style={{ animationDuration: '1.5s' }} />
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        ) : error ? (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-sm text-destructive">{error}</p>
-          </div>
-        ) : (
-          <div
-            className="mx-auto w-full space-y-3 p-4"
-            style={{ paddingBottom: replyBarHeight > 0 ? `${replyBarHeight + 16}px` : '16px' }}
-          >
-            {messages.length === 0 ? (
+            ) : error ? (
               <div className="flex h-full items-center justify-center">
-                <p className="text-sm text-muted-foreground">No messages yet. Start the conversation!</p>
+                <p className="text-sm text-destructive">{error}</p>
               </div>
             ) : (
-              <>
-                {/* Invisible trigger for IntersectionObserver - positioned at top */}
-                {visibleMessageCount < messages.length && (
-                  <div ref={loadMoreTriggerRef} className="h-px" />
-                )}
+              <div
+                className="mx-auto w-full space-y-3 p-4"
+                style={{ paddingBottom: replyBarHeight > 0 ? `${replyBarHeight + 16}px` : '16px' }}
+              >
+                {messages.length === 0 ? (
+                  <div className="flex h-full items-center justify-center">
+                    <p className="text-sm text-muted-foreground">No messages yet. Start the conversation!</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Invisible trigger for IntersectionObserver - positioned at top */}
+                    {visibleMessageCount < messages.length && (
+                      <div ref={loadMoreTriggerRef} className="h-px" />
+                    )}
 
-                {visibleMessages.map((m, index) => {
-                  // Filter messages: if user left, only show messages before leftAt
-                  if (leftAt && m.timestamp) {
-                    const messageTime = timestampToDate(m.timestamp)
-                    if (messageTime && messageTime > leftAt) {
-                      // Skip messages after user left
-                      return null
-                    }
-                  }
+                    {visibleMessages.map((m, index) => {
+                      // Filter messages: if user left, only show messages before leftAt
+                      if (leftAt && m.timestamp) {
+                        const messageTime = timestampToDate(m.timestamp)
+                        if (messageTime && messageTime > leftAt) {
+                          // Skip messages after user left
+                          return null
+                        }
+                      }
 
-                  // Check if this is a system message
-                  if (m.senderId === 'system') {
-                    return (
-                      <div key={m.messageId} className="flex justify-center my-2">
-                        <div className="bg-muted/50 px-3 py-1.5 rounded-lg">
-                          <p className="text-xs text-muted-foreground">{m.text}</p>
+                      // Check if this is a system message
+                      if (m.senderId === 'system') {
+                        return (
+                          <div key={m.messageId} className="flex justify-center my-2">
+                            <div className="bg-muted/50 px-3 py-1.5 rounded-lg">
+                              <p className="text-xs text-muted-foreground">{m.text}</p>
+                            </div>
+                          </div>
+                        )
+                      }
+
+                      const timestamp = timestampToDate(m.timestamp)
+                      const timeStr = timestamp ? format(timestamp, 'HH:mm') : ''
+
+                      // Format edited timestamp if exists
+                      const editedAt = timestampToDate(m.editedAt)
+                      const editedTimeStr = editedAt ? format(editedAt, 'HH:mm') : undefined
+
+                      // Map message type to ChatMessage type format
+                      const messageType = m.type === 'DOCUMENT' ? 'doc'
+                        : m.type === 'VOICE_CALL' ? 'voice_call'
+                          : m.type === 'VIDEO_CALL' ? 'video_call'
+                            : m.type.toLowerCase()
+
+                      // Get user info from cache (name and avatar fetched by senderId)
+                      const cachedUser = userCache.get(m.senderId)
+
+                      // If user not in cache yet, skip rendering to avoid flicker
+                      if (!cachedUser) {
+                        return null
+                      }
+
+                      const senderName = m.senderName && m.senderName.trim() !== ''
+                        ? m.senderName
+                        : cachedUser.name
+                      const senderAvatar = cachedUser.avatar
+
+                      // Compute actual message status based on readBy
+                      const isMe = m.senderId === currentUserId
+                      const computedStatus = computeMessageStatus(m, isMe, isGroupChat, otherUserId, groupMembers)
+
+                      return (
+                        <div
+                          key={m.messageId}
+                          data-message-id={m.messageId}
+                          className="chat-message-container"
+                        >
+                          <ChatMessage
+                            data={{
+                              id: m.messageId,
+                              type: messageType as any,
+                              content: m.mediaUrl || m.text,
+                              fileName: m.mediaMetadata?.fileName,
+                              fileSize: m.mediaMetadata?.fileSize ? `${(m.mediaMetadata.fileSize / 1024 / 1024).toFixed(2)} MB` : undefined,
+                              mimeType: m.mediaMetadata?.mimeType,
+                              mediaItems: m.mediaItems, // For IMAGE_GROUP
+                              callMetadata: m.callMetadata,
+                              senderId: m.senderId,
+                              senderName: senderName,
+                              senderAvatar: senderAvatar,
+                              timestamp: timeStr,
+                              isEdited: m.isEdited,
+                              editedAt: editedTimeStr,
+                              status: computedStatus,
+                              error: m.error,
+                              isDeleted: m.isDeleted,
+                              isForwarded: m.isForwarded,
+                              replyTo: m.replyTo ? {
+                                messageId: m.replyTo.messageId,
+                                senderId: m.replyTo.senderId,
+                                senderName: m.replyTo.senderName,
+                                text: m.replyTo.text,
+                                type: m.replyTo.type,
+                                mediaUrl: m.replyTo.mediaUrl
+                              } : null
+                            }}
+                            isMe={m.senderId === currentUserId}
+                            isGroupChat={isGroupChat}
+                            userCache={userCache}
+                            onRetry={retryMessage}
+                            onForward={handleForwardClick}
+                            onDelete={deleteMessage}
+                            onEdit={editMessage}
+                            onAvatarClick={handleAvatarClick}
+                            selectionMode={selectionMode}
+                            isSelected={selectedMessageIds.has(m.messageId)}
+                            onToggleSelect={handleToggleSelect}
+                            onLongPress={handleLongPress}
+                            onReply={handleReply}
+                            onReplyClick={handleReplyClick}
+                            onCancel={cancelUpload}
+                            onMediaViewerChange={setHasMediaViewerOpen}
+                          />
                         </div>
-                      </div>
-                    )
-                  }
+                      )
+                    })}
 
-                  const timestamp = timestampToDate(m.timestamp)
-                  const timeStr = timestamp ? format(timestamp, 'HH:mm') : ''
-
-                  // Format edited timestamp if exists
-                  const editedAt = timestampToDate(m.editedAt)
-                  const editedTimeStr = editedAt ? format(editedAt, 'HH:mm') : undefined
-
-                  // Map message type to ChatMessage type format
-                  const messageType = m.type === 'DOCUMENT' ? 'doc'
-                    : m.type === 'VOICE_CALL' ? 'voice_call'
-                    : m.type === 'VIDEO_CALL' ? 'video_call'
-                    : m.type.toLowerCase()
-
-                  // Get user info from cache (name and avatar fetched by senderId)
-                  const cachedUser = userCache.get(m.senderId)
-
-                  // If user not in cache yet, skip rendering to avoid flicker
-                  if (!cachedUser) {
-                    return null
-                  }
-
-                  const senderName = m.senderName && m.senderName.trim() !== ''
-                    ? m.senderName
-                    : cachedUser.name
-                  const senderAvatar = cachedUser.avatar
-
-                  // Compute actual message status based on readBy
-                  const isMe = m.senderId === currentUserId
-                  const computedStatus = computeMessageStatus(m, isMe, isGroupChat, otherUserId, groupMembers)
-
-                  return (
-                    <div
-                      key={m.messageId}
-                      data-message-id={m.messageId}
-                      className="chat-message-container"
-                    >
-                      <ChatMessage
-                        data={{
-                          id: m.messageId,
-                          type: messageType as any,
-                          content: m.mediaUrl || m.text,
-                          fileName: m.mediaMetadata?.fileName,
-                          fileSize: m.mediaMetadata?.fileSize ? `${(m.mediaMetadata.fileSize / 1024 / 1024).toFixed(2)} MB` : undefined,
-                          mimeType: m.mediaMetadata?.mimeType,
-                          mediaItems: m.mediaItems, // For IMAGE_GROUP
-                          callMetadata: m.callMetadata,
-                          senderId: m.senderId,
-                          senderName: senderName,
-                          senderAvatar: senderAvatar,
-                          timestamp: timeStr,
-                          isEdited: m.isEdited,
-                          editedAt: editedTimeStr,
-                          status: computedStatus,
-                          error: m.error,
-                          isDeleted: m.isDeleted,
-                          isForwarded: m.isForwarded,
-                          replyTo: m.replyTo ? {
-                            messageId: m.replyTo.messageId,
-                            senderId: m.replyTo.senderId,
-                            senderName: m.replyTo.senderName,
-                            text: m.replyTo.text,
-                            type: m.replyTo.type,
-                            mediaUrl: m.replyTo.mediaUrl
-                          } : null
-                        }}
-                        isMe={m.senderId === currentUserId}
-                        isGroupChat={isGroupChat}
-                        userCache={userCache}
-                        onRetry={retryMessage}
-                        onForward={handleForwardClick}
-                        onDelete={deleteMessage}
-                        onEdit={editMessage}
-                        onAvatarClick={handleAvatarClick}
-                        selectionMode={selectionMode}
-                        isSelected={selectedMessageIds.has(m.messageId)}
-                        onToggleSelect={handleToggleSelect}
-                        onLongPress={handleLongPress}
-                        onReply={handleReply}
-                        onReplyClick={handleReplyClick}
-                        onCancel={cancelUpload}
-                        onMediaViewerChange={setHasMediaViewerOpen}
-                      />
-                    </div>
-                  )
-                })}
-
-                <div ref={scrollRef} />
-              </>
+                    <div ref={scrollRef} />
+                  </>
+                )}
+              </div>
             )}
-          </div>
-        )}
-        <div className="h-16" />
+            <div className="h-16" />
           </ScrollArea>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-56">
@@ -1669,12 +1667,12 @@ export function ChatRoom({
           <div className="flex flex-col">
             {/* Reply preview bar - mepet dengan message composer */}
             {replyingTo && (
-                <div ref={replyBarRef}>
-                  <ReplyPreviewBar
-                    replyingTo={replyingTo}
-                    onCancel={handleCancelReply}
-                  />
-                </div>
+              <div ref={replyBarRef}>
+                <ReplyPreviewBar
+                  replyingTo={replyingTo}
+                  onCancel={handleCancelReply}
+                />
+              </div>
             )}
             <MessageComposer
               isReplying={replyingTo !== null}
@@ -1789,9 +1787,7 @@ export function ChatRoom({
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus Chat?</AlertDialogTitle>
             <AlertDialogDescription>
-              {isGroupChat
-                ? 'Apakah Anda yakin ingin menghapus chat grup ini? Semua pesan dalam chat ini akan dihapus dari perangkat Anda.'
-                : 'Apakah Anda yakin ingin menghapus chat ini? Semua pesan dalam chat ini akan dihapus dari perangkat Anda.'}
+              Semua pesan dalam chat ini akan dihapus dari perangkat Anda. Chat akan hilang dari daftar, namun akan muncul kembali jika ada pesan baru. User lain tetap dapat melihat semua pesan.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1834,7 +1830,7 @@ export function ChatRoom({
           <AlertDialogHeader>
             <AlertDialogTitle>Bersihkan Chat?</AlertDialogTitle>
             <AlertDialogDescription>
-              Semua pesan dalam chat ini akan dihapus dari perangkat Anda. Chat akan hilang dari daftar, namun akan muncul kembali jika ada pesan baru. User lain tetap dapat melihat semua pesan.
+              Semua pesan dalam chat ini akan dihapus dari perangkat Anda. Chat tetap berada di daftar. User lain tetap dapat melihat semua pesan.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

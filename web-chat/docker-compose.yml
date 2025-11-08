@@ -28,20 +28,12 @@ services:
 
     restart: unless-stopped
 
-    # Health check
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
     # Resource limits (optional, adjust as needed)
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 2G
+          cpus: '1'
+          memory: 1G
         reservations:
           cpus: '0.5'
           memory: 512M

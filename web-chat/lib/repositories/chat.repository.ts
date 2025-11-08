@@ -976,7 +976,7 @@ export class ChatRepository {
 
   /**
    * Delete chat from user's chat list
-   * Note: This only removes the chat from user's list, doesn't delete actual chat or messages
+   * Sets deleteHistory timestamp, removes from sidebar, but will reappear on new messages
    */
   async deleteChat(
     chatId: string,
@@ -986,6 +986,16 @@ export class ChatRepository {
     try {
       // Remove any prefix from chatId if exists
       const cleanChatId = chatId.replace('direct_', '').replace('group_', '');
+      const timestamp = Timestamp.now();
+
+      // Update chat document with deleteHistory timestamp
+      const collection = isGroupChat ? this.GROUP_CHATS_COLLECTION : this.DIRECT_CHATS_COLLECTION;
+      const chatRef = doc(db(), collection, cleanChatId);
+
+      await updateDoc(chatRef, {
+        [`deleteHistory.${userId}`]: timestamp,
+        updatedAt: timestamp
+      });
 
       // Get user's chats
       const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, userId);
@@ -1008,7 +1018,7 @@ export class ChatRepository {
       // Update user's chats
       await updateDoc(userChatsRef, {
         chats: updatedChats,
-        updatedAt: Timestamp.now()
+        updatedAt: timestamp
       });
 
       return Resource.success(undefined);
@@ -1021,6 +1031,7 @@ export class ChatRepository {
   /**
    * Delete chat history for current user only
    * Sets deleteHistory timestamp - messages before this time will be hidden
+   * Chat remains in sidebar
    */
   async deleteHistory(
     chatId: string,
@@ -1040,7 +1051,7 @@ export class ChatRepository {
         updatedAt: timestamp
       });
 
-      // Remove chat from user's chat list
+      // Clear lastMessage in user's ChatItem (sidebar)
       const userChatsRef = doc(db(), this.USER_CHATS_COLLECTION, userId);
       const userChatsDoc = await getDoc(userChatsRef);
 
@@ -1049,15 +1060,26 @@ export class ChatRepository {
         const chatPrefix = isGroupChat ? 'group_' : 'direct_';
         const fullChatId = `${chatPrefix}${cleanChatId}`;
 
-        const updatedChats = userChats.chats.filter(
-          chat => chat.chatId !== fullChatId && chat.chatId !== cleanChatId
-        );
+        // Update the ChatItem to clear lastMessage
+        const updatedChats = userChats.chats.map(chat => {
+          if (chat.chatId === fullChatId || chat.chatId === cleanChatId) {
+            return {
+              ...chat,
+              lastMessage: '', // Clear the last message text
+              lastMessageTime: timestamp // Update time to now
+            };
+          }
+          return chat;
+        });
 
         await updateDoc(userChatsRef, {
           chats: updatedChats,
           updatedAt: timestamp
         });
       }
+
+      // Note: Chat is NOT removed from sidebar (userChats) anymore
+      // User can still see the chat, but all old messages are hidden and lastMessage is cleared
 
       return Resource.success(undefined);
     } catch (error: any) {
