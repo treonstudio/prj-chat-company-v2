@@ -379,14 +379,27 @@ const ChatMessageComponent = function ChatMessage({
                       </DropdownMenuItem>
                     )}
 
-                    {/* Hapus - untuk semua user (akan trigger delete dialog) */}
-                    <DropdownMenuItem
-                      className="flex items-center gap-2 text-destructive"
-                      onClick={() => onLongPress?.(data.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span>Hapus</span>
-                    </DropdownMenuItem>
+                    {/* Pilih untuk forward/delete - enters selection mode */}
+                    {onToggleSelect && (
+                      <DropdownMenuItem
+                        className="flex items-center gap-2"
+                        onClick={() => onLongPress?.(data.id)}
+                      >
+                        <Check className="h-4 w-4" />
+                        <span>Pilih</span>
+                      </DropdownMenuItem>
+                    )}
+
+                    {/* Hapus - untuk semua user (akan trigger delete dialog) - DEPRECATED, use selection mode */}
+                    {!onToggleSelect && (
+                      <DropdownMenuItem
+                        className="flex items-center gap-2 text-destructive"
+                        onClick={() => onLongPress?.(data.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span>Hapus</span>
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}

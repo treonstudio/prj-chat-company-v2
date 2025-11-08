@@ -1225,6 +1225,138 @@ export class MessageRepository {
   }
 
   /**
+   * Forward multiple messages in batch (maintains order)
+   * More efficient than forwarding one by one
+   */
+  async forwardMessages(
+    messageIds: string[],
+    sourceChatId: string,
+    targetChatId: string,
+    currentUserId: string,
+    currentUserName: string
+  ): Promise<Resource<{ successCount: number; failedCount: number }>> {
+    try {
+      if (messageIds.length === 0) {
+        return Resource.error('No messages to forward');
+      }
+
+      const sourceDirectCollection = collection(db(), this.DIRECT_CHATS_COLLECTION, sourceChatId, this.MESSAGES_SUBCOLLECTION);
+      const sourceGroupCollection = collection(db(), this.GROUP_CHATS_COLLECTION, sourceChatId, this.MESSAGES_SUBCOLLECTION);
+
+      // Check if target is a group chat
+      const targetGroupChatDoc = await getDoc(doc(db(), this.GROUP_CHATS_COLLECTION, targetChatId));
+      const isTargetGroupChat = targetGroupChatDoc.exists();
+
+      const targetCollection = isTargetGroupChat
+        ? this.GROUP_CHATS_COLLECTION
+        : this.DIRECT_CHATS_COLLECTION;
+
+      // Fetch all original messages in parallel
+      const messagePromises = messageIds.map(async (messageId) => {
+        // Try direct chat first
+        let messageDoc = await getDoc(doc(sourceDirectCollection, messageId));
+
+        // If not found, try group chat
+        if (!messageDoc.exists()) {
+          messageDoc = await getDoc(doc(sourceGroupCollection, messageId));
+        }
+
+        return {
+          messageId,
+          exists: messageDoc.exists(),
+          data: messageDoc.exists() ? messageDoc.data() as Message : null
+        };
+      });
+
+      const messageResults = await Promise.all(messagePromises);
+
+      // Filter out messages that don't exist
+      const validMessages = messageResults.filter(m => m.exists && m.data);
+
+      if (validMessages.length === 0) {
+        return Resource.error('No valid messages found');
+      }
+
+      // Sort messages by their original timestamp to maintain chronological order
+      validMessages.sort((a, b) => {
+        const aTime = a.data?.timestamp;
+        const bTime = b.data?.timestamp;
+
+        if (!aTime || !bTime) return 0;
+
+        // Compare timestamps (older first)
+        if (aTime.seconds !== bTime.seconds) {
+          return aTime.seconds - bTime.seconds;
+        }
+        return aTime.nanoseconds - bTime.nanoseconds;
+      });
+
+      // Create batch (Firestore limit: 500 operations)
+      const batch = writeBatch(db());
+      const baseTimestamp = Timestamp.now();
+      let batchCount = 0;
+      const batches: any[] = [batch];
+
+      // Create forwarded messages maintaining order
+      // Add 50ms to each message to ensure proper ordering
+      for (let i = 0; i < validMessages.length; i++) {
+        const { data: originalMessage } = validMessages[i];
+        if (!originalMessage) continue;
+
+        // Check batch limit (500 operations per batch)
+        if (batchCount >= 500) {
+          batches.push(writeBatch(db()));
+          batchCount = 0;
+        }
+
+        const currentBatch = batches[batches.length - 1];
+
+        // Create new message reference
+        const messagesRef = collection(db(), targetCollection, targetChatId, this.MESSAGES_SUBCOLLECTION);
+        const newMessageRef = doc(messagesRef);
+
+        // Create timestamp with incremental offset (50ms per message)
+        const messageTimestamp = new Timestamp(
+          baseTimestamp.seconds,
+          baseTimestamp.nanoseconds + (i * 50000000) // 50ms = 50,000,000 nanoseconds
+        );
+
+        // Create forwarded message
+        const forwardedMessage: Message = {
+          messageId: newMessageRef.id,
+          text: originalMessage.text || '',
+          senderId: currentUserId,
+          senderName: currentUserName,
+          timestamp: messageTimestamp,
+          createdAt: messageTimestamp,
+          status: MessageStatus.SENT,
+          type: originalMessage.type,
+          readBy: {},
+          deliveredTo: {},
+          isForwarded: true,
+          ...(originalMessage.mediaUrl && { mediaUrl: originalMessage.mediaUrl }),
+          ...(originalMessage.mediaMetadata && { mediaMetadata: originalMessage.mediaMetadata }),
+          ...(originalMessage.mediaItems && { mediaItems: originalMessage.mediaItems }),
+        };
+
+        currentBatch.set(newMessageRef, forwardedMessage);
+        batchCount++;
+      }
+
+      // Commit all batches
+      await Promise.all(batches.map(b => b.commit()));
+
+      const successCount = validMessages.length;
+      const failedCount = messageIds.length - successCount;
+
+      return Resource.success({ successCount, failedCount });
+    } catch (error: any) {
+      console.error('Error forwarding messages:', error);
+      return Resource.error(error.message || 'Failed to forward messages');
+    }
+  }
+
+  /**
    * Delete message for current user only (soft delete)
    * Adds user to hideFrom map - message remains visible to others
    * Restriction: Only messages < 48 hours old can be deleted

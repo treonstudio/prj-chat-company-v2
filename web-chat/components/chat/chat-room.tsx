@@ -16,7 +16,7 @@ import { useState } from "react"
 import { ChatType, User, UserStatus, Message, MessageStatus } from "@/types/models"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { LogOut, Loader2, Users, Trash2, X, MoreVertical, Info, Eraser, CheckSquare, User as UserIcon } from "lucide-react"
+import { LogOut, Loader2, Users, Trash2, X, MoreVertical, Info, Eraser, CheckSquare, User as UserIcon, Share2 } from "lucide-react"
 import { doc, onSnapshot, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase/config"
 import {
@@ -1012,7 +1012,7 @@ export function ChatRoom({
 
   // Handle forward message
   const handleForwardClick = (messageId: string) => {
-    // Reset selection mode when opening forward dialog
+    // When forwarding single message (from context menu), reset selection
     setSelectionMode(false)
     setSelectedMessageIds(new Set())
     setForwardMessageId(messageId)
@@ -1020,11 +1020,13 @@ export function ChatRoom({
   }
 
   const handleForwardMessage = async (targetChatId: string, isGroup: boolean) => {
-    if (!forwardMessageId) return
+    // Get message IDs to forward (either from selection or single message)
+    const messageIdsToForward = selectionMode && selectedMessageIds.size > 0
+      ? Array.from(selectedMessageIds)
+      : forwardMessageId ? [forwardMessageId] : []
 
-    const message = messages.find(m => m.messageId === forwardMessageId)
-    if (!message) {
-      toast.error('Message not found')
+    if (messageIdsToForward.length === 0) {
+      toast.error('No messages selected')
       return
     }
 
@@ -1033,22 +1035,50 @@ export function ChatRoom({
       onChatSelect(targetChatId, isGroup)
     }
 
-    // Forward message in background
-    try {
-      const result = await messageRepository.forwardMessage(
-        forwardMessageId,
-        chatId,
-        targetChatId,
-        currentUserId
-      )
+    // Reset selection mode
+    setSelectionMode(false)
+    setSelectedMessageIds(new Set())
+    setShowForwardDialog(false)
 
-      if (result.status === 'error') {
-        toast.error(result.message || 'Failed to forward message')
+    // Forward messages in background
+    try {
+      if (messageIdsToForward.length === 1) {
+        // Single message - use existing method
+        const result = await messageRepository.forwardMessage(
+          messageIdsToForward[0],
+          chatId,
+          targetChatId,
+          currentUserId
+        )
+
+        if (result.status === 'error') {
+          toast.error('Failed to forward message')
+        }
+      } else {
+        // Multiple messages - use batch method
+        const result = await messageRepository.forwardMessages(
+          messageIdsToForward,
+          chatId,
+          targetChatId,
+          currentUserId,
+          currentUserName
+        )
+
+        if (result.status === 'success') {
+          const { successCount, failedCount } = result.data
+
+          // Show summary toast only if there were errors
+          if (failedCount > 0) {
+            toast.error(`${failedCount} message(s) failed to forward`)
+          }
+        } else {
+          toast.error('Failed to forward messages')
+        }
       }
-      // Don't show success toast - user will see the message appear in the chat
+      // Don't show success toast - user will see the messages appear in the chat
     } catch (error) {
       console.error('Forward error:', error)
-      toast.error('Failed to forward message')
+      toast.error('Failed to forward messages')
     }
   }
 
@@ -1665,14 +1695,30 @@ export function ChatRoom({
               </Button>
               <span className="text-sm font-medium">{selectedMessageIds.size} terpilih</span>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleOpenDeleteDialog}
-              disabled={selectedMessageIds.size === 0}
-            >
-              <Trash2 className="h-5 w-5" />
-            </Button>
+            <div className="flex items-center gap-2 px-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  if (selectedMessageIds.size > 0) {
+                    setShowForwardDialog(true)
+                  }
+                }}
+                disabled={selectedMessageIds.size === 0}
+                title="Forward messages"
+              >
+                <Share2 className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleOpenDeleteDialog}
+                disabled={selectedMessageIds.size === 0}
+                title="Delete messages"
+              >
+                <Trash2 className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
         ) : isDeletedUser ? (
           <div className="flex items-center justify-center px-4 py-3 bg-muted">
