@@ -302,8 +302,10 @@ export function GroupInfoDialog({
       if (onLeaveGroup) {
         onLeaveGroup() // Trigger close/navigation
       }
-    } else {
+    } else if (result.status === 'error') {
       toast.error(result.message || 'Gagal menghapus grup')
+    } else {
+      toast.error('Gagal menghapus grup')
     }
   }
 

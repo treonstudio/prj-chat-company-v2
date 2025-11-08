@@ -736,7 +736,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
           if (!isCancelled) {
             setError(result.message);
           }
-        } else {
+        } else if (result.status === 'success') {
           console.log('[IMAGE UPLOAD] Success - removing optimistic message');
 
           // Update upload manager
@@ -744,7 +744,6 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
             status: 'completed',
             progress: 100,
             completedAt: Date.now(),
-            uploadedUrl: result.data,
           });
 
           // SUCCESS: Remove optimistic message immediately
