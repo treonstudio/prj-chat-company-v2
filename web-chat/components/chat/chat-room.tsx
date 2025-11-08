@@ -732,24 +732,14 @@ export function ChatRoom({
     }
   }, [messages.length, loading, currentUserId, markAsRead])
 
-  // Scroll to bottom with smooth behavior
+  // Scroll to bottom
   const scrollToBottom = (instant = false) => {
     const scrollContainer = scrollContainerRef.current?.querySelector('[data-radix-scroll-area-viewport]')
-
     if (!scrollContainer) return
 
-    if (instant) {
-      // Force immediate scroll to bottom
-      scrollContainer.scrollTop = scrollContainer.scrollHeight
-    } else {
-      // Smooth scroll using scrollIntoView
-      if (scrollRef.current) {
-        scrollRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
-      } else {
-        // Fallback: direct scroll if ref not available
-        scrollContainer.scrollTop = scrollContainer.scrollHeight
-      }
-    }
+    // Direct scroll to bottom (instant and reliable)
+    // Using scrollIntoView with smooth behavior can be unreliable for small scroll distances
+    scrollContainer.scrollTop = scrollContainer.scrollHeight
   }
 
   // Reset visible message count and scroll flag when switching chatrooms
@@ -903,13 +893,46 @@ export function ChatRoom({
 
   // Auto-scroll to bottom when new messages arrive (only for new messages, not initial load)
   const prevMessagesLengthRef = useRef(messages.length)
+  const lastMessageIdRef = useRef<string | null>(null)
+
   useEffect(() => {
-    // Only scroll if new messages were added (length increased) and not initial load
-    if (!isInitialLoad.current && messages.length > prevMessagesLengthRef.current) {
-      scrollToBottom(false)
+    // Skip if initial load or no messages
+    if (isInitialLoad.current || messages.length === 0) {
+      prevMessagesLengthRef.current = messages.length
+      return
     }
+
+    // Get the newest message (first in array, sorted descending by timestamp)
+    const newestMessage = messages[0]
+
+    // Check if we have a new message (either length increased OR messageId changed)
+    const hasNewMessage = messages.length > prevMessagesLengthRef.current ||
+                         (newestMessage && newestMessage.messageId !== lastMessageIdRef.current)
+
+    if (hasNewMessage && newestMessage && newestMessage.senderId === currentUserId) {
+      // Scroll to bottom for messages sent by current user
+      // Use double RAF to wait for layout, then one delayed attempt for slow renders
+      let rafId1: number, rafId2: number, timeoutId: ReturnType<typeof setTimeout>
+
+      rafId1 = requestAnimationFrame(() => {
+        rafId2 = requestAnimationFrame(() => {
+          scrollToBottom(false)
+          // Single delayed retry for cases where images/media take time to render
+          timeoutId = setTimeout(() => scrollToBottom(false), 100)
+        })
+      })
+
+      // Cleanup function
+      return () => {
+        if (rafId1) cancelAnimationFrame(rafId1)
+        if (rafId2) cancelAnimationFrame(rafId2)
+        if (timeoutId) clearTimeout(timeoutId)
+      }
+    }
+
     prevMessagesLengthRef.current = messages.length
-  }, [messages])
+    lastMessageIdRef.current = newestMessage?.messageId || null
+  }, [messages, currentUserId])
 
   // Format member names for display
   const getMemberNamesDisplay = () => {

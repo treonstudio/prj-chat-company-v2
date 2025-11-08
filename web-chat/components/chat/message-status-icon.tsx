@@ -14,12 +14,6 @@ export function MessageStatusIcon({ status, className = '', messageId }: Message
   if (!status) return null;
 
   const iconStyle = { fontSize: 16 };
-
-  // Debug: Log the status being rendered with messageId
-  console.log(`[MessageStatusIcon][${messageId || 'unknown'}] Rendering status:`, status, 'Type:', typeof status);
-  console.log(`[MessageStatusIcon][${messageId || 'unknown'}] Comparing:`, status, '===', MessageStatus.READ, '?', status === MessageStatus.READ);
-  console.log(`[MessageStatusIcon][${messageId || 'unknown'}] String compare:`, status, '=== "READ" ?', status === 'READ');
-
   // Normalize status to handle both string and enum
   const normalizedStatus = status as string;
 
@@ -42,7 +36,6 @@ export function MessageStatusIcon({ status, className = '', messageId }: Message
 
     case 'READ':
     case MessageStatus.READ:
-      console.log(`[MessageStatusIcon][${messageId || 'unknown'}] ✅ Rendering BLUE double checkmark for READ status`);
       return <DoneAllIcon sx={iconStyle} className={`text-cyan-400 ${className}`} />;
 
     case 'FAILED':
@@ -50,7 +43,6 @@ export function MessageStatusIcon({ status, className = '', messageId }: Message
       return <ErrorOutlineIcon sx={iconStyle} className={`text-red-500 ${className}`} />;
 
     default:
-      console.warn('[MessageStatusIcon] Unknown status:', status);
       return null;
   }
 }
