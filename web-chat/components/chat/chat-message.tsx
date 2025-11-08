@@ -31,6 +31,7 @@ import { linkifyText } from "@/lib/utils/linkify"
 import { LazyImage } from "./lazy-image"
 import { ImageGroup } from "./image-group"
 import { downloadMediaWithCache } from "@/lib/utils/media-cache"
+import { MediaPreviewModal } from "./media-preview-modal"
 
 type Base = {
   id: string
@@ -1138,94 +1139,32 @@ const ChatMessageComponent = function ChatMessage({
         </div>
       </div>
 
-      {/* Image Preview Dialog */}
+      {/* Image Preview Modal */}
       {data.type === "image" && (
-        <Dialog open={showImagePreview} onOpenChange={setShowImagePreview}>
-          <DialogContent className="max-w-4xl p-0 overflow-hidden">
-            <DialogTitle asChild>
-              <VisuallyHidden>Image Preview</VisuallyHidden>
-            </DialogTitle>
-            <DialogHeader className="absolute top-0 right-0 z-10 p-4 bg-gradient-to-b from-black/50 to-transparent">
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleDownload(data.content, `image-${data.id}.jpg`, 'image/jpeg')
-                  }}
-                  disabled={downloading}
-                  className="p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors disabled:opacity-50"
-                >
-                  {downloading ? (
-                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  ) : (
-                    <Download className="h-5 w-5 text-white" />
-                  )}
-                </button>
-                <button
-                  onClick={() => setShowImagePreview(false)}
-                  className="p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
-                >
-                  <X className="h-5 w-5 text-white" />
-                </button>
-              </div>
-            </DialogHeader>
-            <div className="relative w-full h-[80vh] flex items-center justify-center bg-black">
-              <Image
-                src={data.content}
-                alt="Preview"
-                fill
-                sizes="100vw"
-                className="object-contain"
-                priority
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
+        <MediaPreviewModal
+          isOpen={showImagePreview}
+          onClose={() => setShowImagePreview(false)}
+          mediaUrl={data.content}
+          mediaType="image"
+          fileName={`image-${data.id}.jpg`}
+          mimeType="image/jpeg"
+          onDownload={() => handleDownload(data.content, `image-${data.id}.jpg`, 'image/jpeg')}
+          downloading={downloading}
+        />
       )}
 
-      {/* Video Preview Dialog */}
+      {/* Video Preview Modal */}
       {data.type === "video" && (
-        <Dialog open={showVideoPreview} onOpenChange={setShowVideoPreview}>
-          <DialogContent className="max-w-4xl p-0 overflow-hidden">
-            <DialogTitle asChild>
-              <VisuallyHidden>Video Preview</VisuallyHidden>
-            </DialogTitle>
-            <DialogHeader className="absolute top-0 right-0 z-10 p-4 bg-gradient-to-b from-black/50 to-transparent">
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleDownload(data.content, `video-${data.id}.mp4`, data.mimeType || 'video/mp4')
-                  }}
-                  disabled={downloading}
-                  className="p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors disabled:opacity-50"
-                >
-                  {downloading ? (
-                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  ) : (
-                    <Download className="h-5 w-5 text-white" />
-                  )}
-                </button>
-                <button
-                  onClick={() => setShowVideoPreview(false)}
-                  className="p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
-                >
-                  <X className="h-5 w-5 text-white" />
-                </button>
-              </div>
-            </DialogHeader>
-            <div className="relative w-full h-full flex items-center justify-center bg-black">
-              <video
-                controls
-                autoPlay
-                className="max-w-full max-h-[80vh] object-contain"
-              >
-                <source src={data.content} type={data.mimeType || 'video/mp4'} />
-                Your browser does not support the video tag.
-              </video>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <MediaPreviewModal
+          isOpen={showVideoPreview}
+          onClose={() => setShowVideoPreview(false)}
+          mediaUrl={data.content}
+          mediaType="video"
+          fileName={`video-${data.id}.mp4`}
+          mimeType={data.mimeType || 'video/mp4'}
+          onDownload={() => handleDownload(data.content, `video-${data.id}.mp4`, data.mimeType || 'video/mp4')}
+          downloading={downloading}
+        />
       )}
 
       {/* Edit Message Dialog */}
