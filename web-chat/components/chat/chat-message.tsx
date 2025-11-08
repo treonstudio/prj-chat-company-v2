@@ -585,7 +585,7 @@ const ChatMessageComponent = function ChatMessage({
                       } else if (status === "declined") {
                         return <PhoneOff className={`${iconSize} ${isMe ? 'text-white' : 'text-red-500'}`} />
                       } else if (status === "cancelled") {
-                        return <PhoneOff className={`${iconSize} text-muted-foreground`} />
+                        return <PhoneOff className={`${iconSize} ${isMe ? 'text-white' : 'text-muted-foreground'}`} />
                       } else if (status === "completed") {
                         if (callType === "video") {
                           return <Video className={`${iconSize} text-primary`} />
@@ -607,7 +607,7 @@ const ChatMessageComponent = function ChatMessage({
                         (data as CallMsg).callMetadata?.status === "missed" || (data as CallMsg).callMetadata?.status === "declined"
                           ? isMe ? "text-white" : "text-red-500"
                           : (data as CallMsg).callMetadata?.status === "cancelled"
-                            ? "text-muted-foreground"
+                            ? ""
                             : ""
                       )}>
                         {(() => {
