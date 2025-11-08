@@ -127,6 +127,32 @@ export function ChatRoom({
     if (initialTitle) setRoomTitle(initialTitle)
     if (initialAvatar !== undefined) setRoomAvatar(initialAvatar)
   }, [chatId, initialTitle, initialAvatar])
+
+  // ESC key listener to close chat room
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check if ESC key is pressed and no modal is open
+      if (event.key === 'Escape' && onCloseChat) {
+        // Don't close if user is typing in an input or textarea
+        const activeElement = document.activeElement
+        const isInputFocused = activeElement?.tagName === 'INPUT' ||
+                              activeElement?.tagName === 'TEXTAREA' ||
+                              activeElement?.getAttribute('contenteditable') === 'true'
+
+        // Don't close if any dialog/modal is open
+        const isDialogOpen = document.querySelector('[role="dialog"]') !== null
+
+        if (!isInputFocused && !isDialogOpen) {
+          event.preventDefault()
+          onCloseChat()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onCloseChat])
+
   const [groupMembers, setGroupMembers] = useState<User[]>([])
   const [groupAdmins, setGroupAdmins] = useState<string[]>([])
   const [showGroupInfoDialog, setShowGroupInfoDialog] = useState(false)
