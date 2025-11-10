@@ -80,7 +80,6 @@ export class StorageRepository {
    * @returns Resource indicating success or failure
    */
   async deleteAvatar(imageUrl: string): Promise<Resource<void>> {
-    // Chatku Asset Server doesn't support file deletion via API
     // Files are managed on the server side
     // Return success to maintain backward compatibility
     return Resource.success(undefined);

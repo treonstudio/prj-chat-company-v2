@@ -29,7 +29,7 @@ export default function LoadingScreen() {
           <div className="relative">
             <Image
               src="/logo.png"
-              alt="Chatku Logo"
+              alt="BC Logo"
               width={128}
               height={128}
               className="drop-shadow-2xl"
@@ -39,7 +39,7 @@ export default function LoadingScreen() {
         </div>
 
         {/* App Name */}
-        <h1 className="mb-8 text-3xl font-semibold text-gray-800">Chatku Web</h1>
+        <h1 className="mb-8 text-3xl font-semibold text-gray-800">BC Admin</h1>
 
         {/* Progress Bar */}
         <div className="mx-auto mb-6 w-64">

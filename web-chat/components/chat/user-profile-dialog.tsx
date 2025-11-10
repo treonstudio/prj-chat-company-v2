@@ -82,7 +82,7 @@ export function UserProfileDialog({
             <Separator />
 
             {/* Send Message Button */}
-            {onSendMessage && (
+            {/* {onSendMessage && (
               <div className="px-6 py-6">
                 <Button
                   onClick={onSendMessage}
@@ -93,38 +93,38 @@ export function UserProfileDialog({
                   <span className="text-base">Kirim pesan</span>
                 </Button>
               </div>
-            )}
+            )} */}
           </div>
         </SheetContent>
       </Sheet>
 
-    {/* Image Viewer Dialog */}
-    <Dialog open={showImageViewer} onOpenChange={setShowImageViewer}>
-      <DialogContent className="max-w-4xl w-full p-0 bg-black/95 border-0">
-        <DialogTitle asChild>
-          <VisuallyHidden>View Profile Picture</VisuallyHidden>
-        </DialogTitle>
-        <div className="relative w-full h-[80vh] flex items-center justify-center">
-          {/* Close Button */}
-          <button
-            onClick={() => setShowImageViewer(false)}
-            className="absolute top-4 right-4 z-50 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
-            aria-label="Close"
-          >
-            <X className="h-6 w-6 text-white" />
-          </button>
+      {/* Image Viewer Dialog */}
+      <Dialog open={showImageViewer} onOpenChange={setShowImageViewer}>
+        <DialogContent className="max-w-4xl w-full p-0 bg-black/95 border-0">
+          <DialogTitle asChild>
+            <VisuallyHidden>View Profile Picture</VisuallyHidden>
+          </DialogTitle>
+          <div className="relative w-full h-[80vh] flex items-center justify-center">
+            {/* Close Button */}
+            <button
+              onClick={() => setShowImageViewer(false)}
+              className="absolute top-4 right-4 z-50 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
+              aria-label="Close"
+            >
+              <X className="h-6 w-6 text-white" />
+            </button>
 
-          {/* Image */}
-          {avatar && (
-            <img
-              src={avatar}
-              alt={displayName}
-              className="max-w-full max-h-full object-contain"
-            />
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+            {/* Image */}
+            {avatar && (
+              <img
+                src={avatar}
+                alt={displayName}
+                className="max-w-full max-h-full object-contain"
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Enable standalone output for Docker deployment
+  output: 'standalone',
   images: {
     // Allow images from Firebase Storage and Chatku Asset Server
     remotePatterns: [
@@ -12,6 +14,11 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'chatku-asset.treonstudio.com',
+        pathname: '**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'bc-asset.chatbcs.com',
         pathname: '**',
       },
     ],

@@ -33,13 +33,34 @@ export function getDeviceId(): string {
 
 /**
  * Get browser name from user agent
+ * Order matters: Check specific browsers BEFORE generic Chrome
  */
 function getBrowserName(userAgent: string): string {
+  // Check for Brave first (Chromium-based, doesn't include 'Brave' in UA)
+  // Brave detection requires checking navigator.brave API
+  if (typeof navigator !== 'undefined' && (navigator as any).brave !== undefined) {
+    return 'Brave';
+  }
+
+  // Check Edge before Chrome (Edge is Chromium-based and includes 'Chrome')
+  if (userAgent.includes('Edg/') || userAgent.includes('Edge/')) return 'Edge';
+
+  // Check Opera before Chrome (Opera is Chromium-based and includes 'Chrome')
+  if (userAgent.includes('OPR/') || userAgent.includes('Opera')) return 'Opera';
+
+  // Check Vivaldi before Chrome (Vivaldi is Chromium-based)
+  if (userAgent.includes('Vivaldi')) return 'Vivaldi';
+
+  // Firefox (not Chromium-based)
   if (userAgent.includes('Firefox')) return 'Firefox';
+
+  // Safari (check before Chrome, as Chrome UA includes Safari)
+  // But only return Safari if it's NOT Chrome
+  if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) return 'Safari';
+
+  // Chrome and other Chromium browsers (check last)
   if (userAgent.includes('Chrome')) return 'Chrome';
-  if (userAgent.includes('Safari')) return 'Safari';
-  if (userAgent.includes('Edge')) return 'Edge';
-  if (userAgent.includes('Opera')) return 'Opera';
+
   return 'Unknown';
 }
 

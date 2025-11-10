@@ -47,7 +47,7 @@ export default async function uploadPhoto(file: File, userId?: string) {
     console.log('Uploading to Chatku Asset Server...');
 
     // Upload to Chatku asset server
-    const response = await fetch('https://chatku-asset.treonstudio.com/upload', {
+    const response = await fetch('https://bc-asset.chatbcs.com/upload', {
       method: 'POST',
       body: formData
       // Note: Do NOT set Content-Type header - browser will set it automatically with boundary

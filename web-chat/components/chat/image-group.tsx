@@ -6,11 +6,8 @@ import { LazyImage } from './lazy-image';
 import { Download, Eye } from 'lucide-react';
 import { getImageGridClass, getImageAspectRatio } from '@/lib/utils/message-grouping';
 import { cn } from '@/lib/utils';
-import {
-  Dialog,
-  DialogContent,
-} from '@/components/ui/dialog';
 import download from 'downloadjs';
+import { MediaPreviewModal } from './media-preview-modal';
 
 interface ImageGroupProps {
   messages: Message[];
@@ -20,6 +17,7 @@ interface ImageGroupProps {
 export function ImageGroup({ messages, isMe }: ImageGroupProps) {
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const [loadedImages, setLoadedImages] = useState<Set<number>>(new Set());
+  const [downloading, setDownloading] = useState(false);
 
   const imageCount = messages.length;
   const gridClass = getImageGridClass(imageCount);
@@ -29,12 +27,15 @@ export function ImageGroup({ messages, isMe }: ImageGroupProps) {
   };
 
   const handleDownload = async (url: string, index: number) => {
+    setDownloading(true);
     try {
       const response = await fetch(url);
       const blob = await response.blob();
       download(blob, `image-${index + 1}.jpg`, blob.type);
     } catch (error) {
       console.error('Download failed:', error);
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -152,75 +153,22 @@ export function ImageGroup({ messages, isMe }: ImageGroupProps) {
         })}
       </div>
 
-      {/* Full screen image preview dialog */}
-      <Dialog open={selectedImageIndex !== null} onOpenChange={closePreview}>
-        <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 overflow-hidden bg-black/95">
-          {selectedImageIndex !== null && (
-            <div className="relative w-full h-full flex items-center justify-center">
-              {/* Main image */}
-              <div className="relative w-full h-full max-h-[90vh] flex items-center justify-center">
-                <img
-                  src={messages[selectedImageIndex].mediaUrl || ''}
-                  alt={`Image ${selectedImageIndex + 1}`}
-                  className="max-w-full max-h-full object-contain"
-                />
-              </div>
-
-              {/* Navigation buttons */}
-              {selectedImageIndex > 0 && (
-                <button
-                  onClick={() => navigateImage('prev')}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-black/60 hover:bg-black/80 rounded-full transition-colors"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={2}
-                    stroke="white"
-                    className="w-6 h-6"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                  </svg>
-                </button>
-              )}
-              {selectedImageIndex < imageCount - 1 && (
-                <button
-                  onClick={() => navigateImage('next')}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-black/60 hover:bg-black/80 rounded-full transition-colors"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={2}
-                    stroke="white"
-                    className="w-6 h-6"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                  </svg>
-                </button>
-              )}
-
-              {/* Image counter */}
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/60 text-white px-4 py-2 rounded-full text-sm">
-                {selectedImageIndex + 1} / {imageCount}
-              </div>
-
-              {/* Download button */}
-              <button
-                onClick={() =>
-                  handleDownload(messages[selectedImageIndex].mediaUrl || '', selectedImageIndex)
-                }
-                className="absolute top-4 right-4 p-3 bg-black/60 hover:bg-black/80 rounded-full transition-colors"
-                title="Download"
-              >
-                <Download className="h-5 w-5 text-white" />
-              </button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Full screen image preview modal with zoom and pan */}
+      {selectedImageIndex !== null && (
+        <MediaPreviewModal
+          isOpen={true}
+          onClose={closePreview}
+          mediaUrl={messages[selectedImageIndex].mediaUrl || ''}
+          mediaType="image"
+          fileName={`image-${selectedImageIndex + 1}.jpg`}
+          mimeType="image/jpeg"
+          onDownload={() => handleDownload(messages[selectedImageIndex].mediaUrl || '', selectedImageIndex)}
+          downloading={downloading}
+          totalImages={imageCount}
+          currentImageIndex={selectedImageIndex}
+          onNavigate={navigateImage}
+        />
+      )}
     </>
   );
 }

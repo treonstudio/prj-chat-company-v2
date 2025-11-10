@@ -16,7 +16,7 @@ import { useState } from "react"
 import { ChatType, User, UserStatus, Message, MessageStatus } from "@/types/models"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { LogOut, Loader2, Users, Trash2, X, MoreVertical, Info, Eraser, CheckSquare, User as UserIcon } from "lucide-react"
+import { LogOut, Loader2, Users, Trash2, X, MoreVertical, Info, Eraser, CheckSquare, User as UserIcon, Share2 } from "lucide-react"
 import { doc, onSnapshot, getDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase/config"
 import {
@@ -127,6 +127,32 @@ export function ChatRoom({
     if (initialTitle) setRoomTitle(initialTitle)
     if (initialAvatar !== undefined) setRoomAvatar(initialAvatar)
   }, [chatId, initialTitle, initialAvatar])
+
+  // ESC key listener to close chat room
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Check if ESC key is pressed and no modal is open
+      if (event.key === 'Escape' && onCloseChat) {
+        // Don't close if user is typing in an input or textarea
+        const activeElement = document.activeElement
+        const isInputFocused = activeElement?.tagName === 'INPUT' ||
+                              activeElement?.tagName === 'TEXTAREA' ||
+                              activeElement?.getAttribute('contenteditable') === 'true'
+
+        // Don't close if any dialog/modal is open
+        const isDialogOpen = document.querySelector('[role="dialog"]') !== null
+
+        if (!isInputFocused && !isDialogOpen) {
+          event.preventDefault()
+          onCloseChat()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onCloseChat])
+
   const [groupMembers, setGroupMembers] = useState<User[]>([])
   const [groupAdmins, setGroupAdmins] = useState<string[]>([])
   const [showGroupInfoDialog, setShowGroupInfoDialog] = useState(false)
@@ -165,14 +191,14 @@ export function ChatRoom({
 
   // Check if any dialog, menu, or media viewer is open - disable context menu when true
   const hasOpenDialog = showGroupInfoDialog ||
-                        showLeaveDialog ||
-                        showDeleteChatDialog ||
-                        showDeleteHistoryDialog ||
-                        showForwardDialog ||
-                        showUserProfileDialog ||
-                        showDeleteDialog ||
-                        showDropdownMenu ||
-                        hasMediaViewerOpen
+    showLeaveDialog ||
+    showDeleteChatDialog ||
+    showDeleteHistoryDialog ||
+    showForwardDialog ||
+    showUserProfileDialog ||
+    showDeleteDialog ||
+    showDropdownMenu ||
+    hasMediaViewerOpen
 
   // Reply mode
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
@@ -217,7 +243,7 @@ export function ChatRoom({
   }, [replyingTo])
 
   // User cache for looking up sender names and avatars
-  const [userCache, setUserCache] = useState<Map<string, {name: string, avatar?: string}>>(new Map())
+  const [userCache, setUserCache] = useState<Map<string, { name: string, avatar?: string }>>(new Map())
 
   // Monitor other user's status (for direct chat only)
   const { status: otherUserStatus, lastSeenText } = useUserStatus(
@@ -241,13 +267,15 @@ export function ChatRoom({
     // If message has explicit PENDING, SENDING, or FAILED status, respect it
     // Don't compute based on readBy for these statuses
     if (message.status === MessageStatus.PENDING ||
-        message.status === MessageStatus.SENDING ||
-        message.status === MessageStatus.FAILED) {
+      message.status === MessageStatus.SENDING ||
+      message.status === MessageStatus.FAILED) {
       return message.status
     }
 
     const readBy = message.readBy || {}
+    const deliveredTo = message.deliveredTo || {}
     const readByUserIds = Object.keys(readBy)
+    const deliveredToUserIds = Object.keys(deliveredTo)
 
     if (isGroupChat) {
       // Group chat: READ if all other participants have read it
@@ -267,6 +295,8 @@ export function ChatRoom({
         return MessageStatus.READ // Blue double check
       } else if (readByUserIds.length > 0) {
         return MessageStatus.DELIVERED // Gray double check (some read, not all)
+      } else if (deliveredToUserIds.length > 0) {
+        return MessageStatus.DELIVERED // Gray double check (delivered but not read)
       } else {
         return MessageStatus.SENT // Single check
       }
@@ -276,6 +306,8 @@ export function ChatRoom({
         return MessageStatus.READ // Blue double check
       } else if (readByUserIds.length > 0) {
         return MessageStatus.DELIVERED // Gray double check
+      } else if (otherUserId && deliveredToUserIds.includes(otherUserId)) {
+        return MessageStatus.DELIVERED // Gray double check (delivered but not read)
       } else {
         return MessageStatus.SENT // Single check
       }
@@ -463,11 +495,11 @@ export function ChatRoom({
 
                   // CRITICAL: Skip update if data hasn't changed (prevent unnecessary re-renders)
                   if (existingMember &&
-                      existingMember.displayName === displayName &&
-                      existingMember.email === newEmail &&
-                      existingMember.status === userData.status &&
-                      existingMember.imageURL === userData.imageURL &&
-                      existingMember.imageUrl === userData.imageUrl) {
+                    existingMember.displayName === displayName &&
+                    existingMember.email === newEmail &&
+                    existingMember.status === userData.status &&
+                    existingMember.imageURL === userData.imageURL &&
+                    existingMember.imageUrl === userData.imageUrl) {
                     return prevMembers // No change, return same reference to prevent re-render
                   }
 
@@ -533,8 +565,8 @@ export function ChatRoom({
 
               // CRITICAL: Skip update if data hasn't changed (prevent unnecessary re-renders)
               if (prevData.displayName === displayName &&
-                  prevData.avatar === avatar &&
-                  prevData.isDeleted === isDeleted) {
+                prevData.avatar === avatar &&
+                prevData.isDeleted === isDeleted) {
                 return // No change, skip state updates
               }
 
@@ -726,24 +758,14 @@ export function ChatRoom({
     }
   }, [messages.length, loading, currentUserId, markAsRead])
 
-  // Scroll to bottom with smooth behavior
+  // Scroll to bottom
   const scrollToBottom = (instant = false) => {
     const scrollContainer = scrollContainerRef.current?.querySelector('[data-radix-scroll-area-viewport]')
-
     if (!scrollContainer) return
 
-    if (instant) {
-      // Force immediate scroll to bottom
-      scrollContainer.scrollTop = scrollContainer.scrollHeight
-    } else {
-      // Smooth scroll using scrollIntoView
-      if (scrollRef.current) {
-        scrollRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
-      } else {
-        // Fallback: direct scroll if ref not available
-        scrollContainer.scrollTop = scrollContainer.scrollHeight
-      }
-    }
+    // Direct scroll to bottom (instant and reliable)
+    // Using scrollIntoView with smooth behavior can be unreliable for small scroll distances
+    scrollContainer.scrollTop = scrollContainer.scrollHeight
   }
 
   // Reset visible message count and scroll flag when switching chatrooms
@@ -897,13 +919,46 @@ export function ChatRoom({
 
   // Auto-scroll to bottom when new messages arrive (only for new messages, not initial load)
   const prevMessagesLengthRef = useRef(messages.length)
+  const lastMessageIdRef = useRef<string | null>(null)
+
   useEffect(() => {
-    // Only scroll if new messages were added (length increased) and not initial load
-    if (!isInitialLoad.current && messages.length > prevMessagesLengthRef.current) {
-      scrollToBottom(false)
+    // Skip if initial load or no messages
+    if (isInitialLoad.current || messages.length === 0) {
+      prevMessagesLengthRef.current = messages.length
+      return
     }
+
+    // Get the newest message (first in array, sorted descending by timestamp)
+    const newestMessage = messages[0]
+
+    // Check if we have a new message (either length increased OR messageId changed)
+    const hasNewMessage = messages.length > prevMessagesLengthRef.current ||
+                         (newestMessage && newestMessage.messageId !== lastMessageIdRef.current)
+
+    if (hasNewMessage && newestMessage && newestMessage.senderId === currentUserId) {
+      // Scroll to bottom for messages sent by current user
+      // Use double RAF to wait for layout, then one delayed attempt for slow renders
+      let rafId1: number, rafId2: number, timeoutId: ReturnType<typeof setTimeout>
+
+      rafId1 = requestAnimationFrame(() => {
+        rafId2 = requestAnimationFrame(() => {
+          scrollToBottom(false)
+          // Single delayed retry for cases where images/media take time to render
+          timeoutId = setTimeout(() => scrollToBottom(false), 100)
+        })
+      })
+
+      // Cleanup function
+      return () => {
+        if (rafId1) cancelAnimationFrame(rafId1)
+        if (rafId2) cancelAnimationFrame(rafId2)
+        if (timeoutId) clearTimeout(timeoutId)
+      }
+    }
+
     prevMessagesLengthRef.current = messages.length
-  }, [messages])
+    lastMessageIdRef.current = newestMessage?.messageId || null
+  }, [messages, currentUserId])
 
   // Format member names for display
   const getMemberNamesDisplay = () => {
@@ -955,9 +1010,7 @@ export function ChatRoom({
     if (result.status === 'success') {
       toast.success('Chat berhasil dibersihkan')
       setShowDeleteHistoryDialog(false)
-      if (onCloseChat) {
-        onCloseChat()
-      }
+      // Note: Chat stays open and remains in sidebar
     } else if (result.status === 'error') {
       toast.error(result.message || 'Gagal menghapus riwayat chat')
     }
@@ -985,7 +1038,7 @@ export function ChatRoom({
 
   // Handle forward message
   const handleForwardClick = (messageId: string) => {
-    // Reset selection mode when opening forward dialog
+    // When forwarding single message (from context menu), reset selection
     setSelectionMode(false)
     setSelectedMessageIds(new Set())
     setForwardMessageId(messageId)
@@ -993,11 +1046,13 @@ export function ChatRoom({
   }
 
   const handleForwardMessage = async (targetChatId: string, isGroup: boolean) => {
-    if (!forwardMessageId) return
+    // Get message IDs to forward (either from selection or single message)
+    const messageIdsToForward = selectionMode && selectedMessageIds.size > 0
+      ? Array.from(selectedMessageIds)
+      : forwardMessageId ? [forwardMessageId] : []
 
-    const message = messages.find(m => m.messageId === forwardMessageId)
-    if (!message) {
-      toast.error('Message not found')
+    if (messageIdsToForward.length === 0) {
+      toast.error('No messages selected')
       return
     }
 
@@ -1006,22 +1061,50 @@ export function ChatRoom({
       onChatSelect(targetChatId, isGroup)
     }
 
-    // Forward message in background
-    try {
-      const result = await messageRepository.forwardMessage(
-        forwardMessageId,
-        chatId,
-        targetChatId,
-        currentUserId
-      )
+    // Reset selection mode
+    setSelectionMode(false)
+    setSelectedMessageIds(new Set())
+    setShowForwardDialog(false)
 
-      if (result.status === 'error') {
-        toast.error(result.message || 'Failed to forward message')
+    // Forward messages in background
+    try {
+      if (messageIdsToForward.length === 1) {
+        // Single message - use existing method
+        const result = await messageRepository.forwardMessage(
+          messageIdsToForward[0],
+          chatId,
+          targetChatId,
+          currentUserId
+        )
+
+        if (result.status === 'error') {
+          toast.error('Failed to forward message')
+        }
+      } else {
+        // Multiple messages - use batch method
+        const result = await messageRepository.forwardMessages(
+          messageIdsToForward,
+          chatId,
+          targetChatId,
+          currentUserId,
+          currentUserName
+        )
+
+        if (result.status === 'success') {
+          const { successCount, failedCount } = result.data
+
+          // Show summary toast only if there were errors
+          if (failedCount > 0) {
+            toast.error(`${failedCount} message(s) failed to forward`)
+          }
+        } else {
+          toast.error('Failed to forward messages')
+        }
       }
-      // Don't show success toast - user will see the message appear in the chat
+      // Don't show success toast - user will see the messages appear in the chat
     } catch (error) {
       console.error('Forward error:', error)
-      toast.error('Failed to forward message')
+      toast.error('Failed to forward messages')
     }
   }
 
@@ -1223,7 +1306,7 @@ export function ChatRoom({
 
   return (
     <div className="flex h-full w-full min-h-0 flex-col relative">
-      <header className="flex items-center justify-between border-b py-3 shadow-sm z-10" style={{ backgroundColor: '#fafafa' }}>
+      <header className="flex items-center justify-between border-b py-3 shadow-sm z-10 px-3" style={{ backgroundColor: '#fafafa' }}>
         <button
           onClick={handleHeaderClick}
           className="flex items-center gap-3 flex-1 min-w-0 hover:bg-muted/50 transition-colors rounded-lg px-2 py-1 -ml-2 disabled:hover:bg-transparent"
@@ -1371,161 +1454,161 @@ export function ChatRoom({
             }}
           >
             {loading ? (
-          <div className="mx-auto w-full space-y-3 p-4">
-            {/* Enhanced Message skeleton loader with varied heights */}
-            {[
-              { lines: 2, widths: ['w-64', 'w-48'] },
-              { lines: 1, widths: ['w-32'] },
-              { lines: 3, widths: ['w-56', 'w-64', 'w-40'] },
-              { lines: 2, widths: ['w-48', 'w-36'] },
-              { lines: 1, widths: ['w-44'] },
-              { lines: 2, widths: ['w-52', 'w-60'] },
-              { lines: 3, widths: ['w-64', 'w-56', 'w-32'] },
-              { lines: 1, widths: ['w-40'] },
-            ].map((skeleton, i) => (
-              <div key={i} className={`flex w-full ${i % 2 === 0 ? 'justify-end' : 'justify-start'} animate-in fade-in duration-200`} style={{ animationDelay: `${i * 25}ms` }}>
-                <div className={`flex flex-col gap-2 rounded-xl px-4 py-2 ${i % 2 === 0 ? 'max-w-[80%] ml-auto items-end bg-primary/10' : 'max-w-[80%] mr-auto items-start bg-muted'}`}>
-                  {skeleton.widths.map((width, j) => (
-                    <div key={j} className={`h-4 ${width} bg-muted-foreground/20 rounded animate-pulse`} style={{ animationDuration: '1.5s' }} />
-                  ))}
-                  <div className="h-3 w-16 bg-muted-foreground/20 rounded animate-pulse mt-1" style={{ animationDuration: '1.5s' }} />
-                </div>
+              <div className="mx-auto w-full space-y-3 p-4">
+                {/* Enhanced Message skeleton loader with varied heights */}
+                {[
+                  { lines: 2, widths: ['w-64', 'w-48'] },
+                  { lines: 1, widths: ['w-32'] },
+                  { lines: 3, widths: ['w-56', 'w-64', 'w-40'] },
+                  { lines: 2, widths: ['w-48', 'w-36'] },
+                  { lines: 1, widths: ['w-44'] },
+                  { lines: 2, widths: ['w-52', 'w-60'] },
+                  { lines: 3, widths: ['w-64', 'w-56', 'w-32'] },
+                  { lines: 1, widths: ['w-40'] },
+                ].map((skeleton, i) => (
+                  <div key={i} className={`flex w-full ${i % 2 === 0 ? 'justify-end' : 'justify-start'} animate-in fade-in duration-200`} style={{ animationDelay: `${i * 25}ms` }}>
+                    <div className={`flex flex-col gap-2 rounded-xl px-4 py-2 ${i % 2 === 0 ? 'max-w-[80%] ml-auto items-end bg-primary/10' : 'max-w-[80%] mr-auto items-start bg-muted'}`}>
+                      {skeleton.widths.map((width, j) => (
+                        <div key={j} className={`h-4 ${width} bg-muted-foreground/20 rounded animate-pulse`} style={{ animationDuration: '1.5s' }} />
+                      ))}
+                      <div className="h-3 w-16 bg-muted-foreground/20 rounded animate-pulse mt-1" style={{ animationDuration: '1.5s' }} />
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        ) : error ? (
-          <div className="flex h-full items-center justify-center">
-            <p className="text-sm text-destructive">{error}</p>
-          </div>
-        ) : (
-          <div
-            className="mx-auto w-full space-y-3 p-4"
-            style={{ paddingBottom: replyBarHeight > 0 ? `${replyBarHeight + 16}px` : '16px' }}
-          >
-            {messages.length === 0 ? (
+            ) : error ? (
               <div className="flex h-full items-center justify-center">
-                <p className="text-sm text-muted-foreground">No messages yet. Start the conversation!</p>
+                <p className="text-sm text-destructive">{error}</p>
               </div>
             ) : (
-              <>
-                {/* Invisible trigger for IntersectionObserver - positioned at top */}
-                {visibleMessageCount < messages.length && (
-                  <div ref={loadMoreTriggerRef} className="h-px" />
-                )}
+              <div
+                className="mx-auto w-full space-y-3 p-4"
+                style={{ paddingBottom: replyBarHeight > 0 ? `${replyBarHeight + 16}px` : '16px' }}
+              >
+                {messages.length === 0 ? (
+                  <div className="flex h-full items-center justify-center">
+                    <p className="text-sm text-muted-foreground">No messages yet. Start the conversation!</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Invisible trigger for IntersectionObserver - positioned at top */}
+                    {visibleMessageCount < messages.length && (
+                      <div ref={loadMoreTriggerRef} className="h-px" />
+                    )}
 
-                {visibleMessages.map((m, index) => {
-                  // Filter messages: if user left, only show messages before leftAt
-                  if (leftAt && m.timestamp) {
-                    const messageTime = timestampToDate(m.timestamp)
-                    if (messageTime && messageTime > leftAt) {
-                      // Skip messages after user left
-                      return null
-                    }
-                  }
+                    {visibleMessages.map((m, index) => {
+                      // Filter messages: if user left, only show messages before leftAt
+                      if (leftAt && m.timestamp) {
+                        const messageTime = timestampToDate(m.timestamp)
+                        if (messageTime && messageTime > leftAt) {
+                          // Skip messages after user left
+                          return null
+                        }
+                      }
 
-                  // Check if this is a system message
-                  if (m.senderId === 'system') {
-                    return (
-                      <div key={m.messageId} className="flex justify-center my-2">
-                        <div className="bg-muted/50 px-3 py-1.5 rounded-lg">
-                          <p className="text-xs text-muted-foreground">{m.text}</p>
+                      // Check if this is a system message
+                      if (m.senderId === 'system') {
+                        return (
+                          <div key={m.messageId} className="flex justify-center my-2">
+                            <div className="bg-muted/50 px-3 py-1.5 rounded-lg">
+                              <p className="text-xs text-muted-foreground">{m.text}</p>
+                            </div>
+                          </div>
+                        )
+                      }
+
+                      const timestamp = timestampToDate(m.timestamp)
+                      const timeStr = timestamp ? format(timestamp, 'HH:mm') : ''
+
+                      // Format edited timestamp if exists
+                      const editedAt = timestampToDate(m.editedAt)
+                      const editedTimeStr = editedAt ? format(editedAt, 'HH:mm') : undefined
+
+                      // Map message type to ChatMessage type format
+                      const messageType = m.type === 'DOCUMENT' ? 'doc'
+                        : m.type === 'VOICE_CALL' ? 'voice_call'
+                          : m.type === 'VIDEO_CALL' ? 'video_call'
+                            : m.type.toLowerCase()
+
+                      // Get user info from cache (name and avatar fetched by senderId)
+                      const cachedUser = userCache.get(m.senderId)
+
+                      // If user not in cache yet, skip rendering to avoid flicker
+                      if (!cachedUser) {
+                        return null
+                      }
+
+                      const senderName = m.senderName && m.senderName.trim() !== ''
+                        ? m.senderName
+                        : cachedUser.name
+                      const senderAvatar = cachedUser.avatar
+
+                      // Compute actual message status based on readBy
+                      const isMe = m.senderId === currentUserId
+                      const computedStatus = computeMessageStatus(m, isMe, isGroupChat, otherUserId, groupMembers)
+
+                      return (
+                        <div
+                          key={m.messageId}
+                          data-message-id={m.messageId}
+                          className="chat-message-container"
+                        >
+                          <ChatMessage
+                            data={{
+                              id: m.messageId,
+                              type: messageType as any,
+                              content: m.mediaUrl || m.text,
+                              fileName: m.mediaMetadata?.fileName,
+                              fileSize: m.mediaMetadata?.fileSize ? `${(m.mediaMetadata.fileSize / 1024 / 1024).toFixed(2)} MB` : undefined,
+                              mimeType: m.mediaMetadata?.mimeType,
+                              mediaItems: m.mediaItems, // For IMAGE_GROUP
+                              callMetadata: m.callMetadata,
+                              senderId: m.senderId,
+                              senderName: senderName,
+                              senderAvatar: senderAvatar,
+                              timestamp: timeStr,
+                              isEdited: m.isEdited,
+                              editedAt: editedTimeStr,
+                              status: computedStatus,
+                              error: m.error,
+                              isDeleted: m.isDeleted,
+                              isForwarded: m.isForwarded,
+                              replyTo: m.replyTo ? {
+                                messageId: m.replyTo.messageId,
+                                senderId: m.replyTo.senderId,
+                                senderName: m.replyTo.senderName,
+                                text: m.replyTo.text,
+                                type: m.replyTo.type,
+                                mediaUrl: m.replyTo.mediaUrl
+                              } : null
+                            }}
+                            isMe={m.senderId === currentUserId}
+                            isGroupChat={isGroupChat}
+                            userCache={userCache}
+                            onRetry={retryMessage}
+                            onForward={handleForwardClick}
+                            onDelete={deleteMessage}
+                            onEdit={editMessage}
+                            onAvatarClick={handleAvatarClick}
+                            selectionMode={selectionMode}
+                            isSelected={selectedMessageIds.has(m.messageId)}
+                            onToggleSelect={handleToggleSelect}
+                            onLongPress={handleLongPress}
+                            onReply={handleReply}
+                            onReplyClick={handleReplyClick}
+                            onCancel={cancelUpload}
+                            onMediaViewerChange={setHasMediaViewerOpen}
+                          />
                         </div>
-                      </div>
-                    )
-                  }
+                      )
+                    })}
 
-                  const timestamp = timestampToDate(m.timestamp)
-                  const timeStr = timestamp ? format(timestamp, 'HH:mm') : ''
-
-                  // Format edited timestamp if exists
-                  const editedAt = timestampToDate(m.editedAt)
-                  const editedTimeStr = editedAt ? format(editedAt, 'HH:mm') : undefined
-
-                  // Map message type to ChatMessage type format
-                  const messageType = m.type === 'DOCUMENT' ? 'doc'
-                    : m.type === 'VOICE_CALL' ? 'voice_call'
-                    : m.type === 'VIDEO_CALL' ? 'video_call'
-                    : m.type.toLowerCase()
-
-                  // Get user info from cache (name and avatar fetched by senderId)
-                  const cachedUser = userCache.get(m.senderId)
-
-                  // If user not in cache yet, skip rendering to avoid flicker
-                  if (!cachedUser) {
-                    return null
-                  }
-
-                  const senderName = m.senderName && m.senderName.trim() !== ''
-                    ? m.senderName
-                    : cachedUser.name
-                  const senderAvatar = cachedUser.avatar
-
-                  // Compute actual message status based on readBy
-                  const isMe = m.senderId === currentUserId
-                  const computedStatus = computeMessageStatus(m, isMe, isGroupChat, otherUserId, groupMembers)
-
-                  return (
-                    <div
-                      key={m.messageId}
-                      data-message-id={m.messageId}
-                      className="chat-message-container"
-                    >
-                      <ChatMessage
-                        data={{
-                          id: m.messageId,
-                          type: messageType as any,
-                          content: m.mediaUrl || m.text,
-                          fileName: m.mediaMetadata?.fileName,
-                          fileSize: m.mediaMetadata?.fileSize ? `${(m.mediaMetadata.fileSize / 1024 / 1024).toFixed(2)} MB` : undefined,
-                          mimeType: m.mediaMetadata?.mimeType,
-                          mediaItems: m.mediaItems, // For IMAGE_GROUP
-                          callMetadata: m.callMetadata,
-                          senderId: m.senderId,
-                          senderName: senderName,
-                          senderAvatar: senderAvatar,
-                          timestamp: timeStr,
-                          isEdited: m.isEdited,
-                          editedAt: editedTimeStr,
-                          status: computedStatus,
-                          error: m.error,
-                          isDeleted: m.isDeleted,
-                          isForwarded: m.isForwarded,
-                          replyTo: m.replyTo ? {
-                            messageId: m.replyTo.messageId,
-                            senderId: m.replyTo.senderId,
-                            senderName: m.replyTo.senderName,
-                            text: m.replyTo.text,
-                            type: m.replyTo.type,
-                            mediaUrl: m.replyTo.mediaUrl
-                          } : null
-                        }}
-                        isMe={m.senderId === currentUserId}
-                        isGroupChat={isGroupChat}
-                        userCache={userCache}
-                        onRetry={retryMessage}
-                        onForward={handleForwardClick}
-                        onDelete={deleteMessage}
-                        onEdit={editMessage}
-                        onAvatarClick={handleAvatarClick}
-                        selectionMode={selectionMode}
-                        isSelected={selectedMessageIds.has(m.messageId)}
-                        onToggleSelect={handleToggleSelect}
-                        onLongPress={handleLongPress}
-                        onReply={handleReply}
-                        onReplyClick={handleReplyClick}
-                        onCancel={cancelUpload}
-                        onMediaViewerChange={setHasMediaViewerOpen}
-                      />
-                    </div>
-                  )
-                })}
-
-                <div ref={scrollRef} />
-              </>
+                    <div ref={scrollRef} />
+                  </>
+                )}
+              </div>
             )}
-          </div>
-        )}
-        <div className="h-16" />
+            <div className="h-16" />
           </ScrollArea>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-56">
@@ -1638,14 +1721,30 @@ export function ChatRoom({
               </Button>
               <span className="text-sm font-medium">{selectedMessageIds.size} terpilih</span>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleOpenDeleteDialog}
-              disabled={selectedMessageIds.size === 0}
-            >
-              <Trash2 className="h-5 w-5" />
-            </Button>
+            <div className="flex items-center gap-2 px-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  if (selectedMessageIds.size > 0) {
+                    setShowForwardDialog(true)
+                  }
+                }}
+                disabled={selectedMessageIds.size === 0}
+                title="Forward messages"
+              >
+                <Share2 className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleOpenDeleteDialog}
+                disabled={selectedMessageIds.size === 0}
+                title="Delete messages"
+              >
+                <Trash2 className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
         ) : isDeletedUser ? (
           <div className="flex items-center justify-center px-4 py-3 bg-muted">
@@ -1663,12 +1762,12 @@ export function ChatRoom({
           <div className="flex flex-col">
             {/* Reply preview bar - mepet dengan message composer */}
             {replyingTo && (
-                <div ref={replyBarRef}>
-                  <ReplyPreviewBar
-                    replyingTo={replyingTo}
-                    onCancel={handleCancelReply}
-                  />
-                </div>
+              <div ref={replyBarRef}>
+                <ReplyPreviewBar
+                  replyingTo={replyingTo}
+                  onCancel={handleCancelReply}
+                />
+              </div>
             )}
             <MessageComposer
               isReplying={replyingTo !== null}
@@ -1783,9 +1882,7 @@ export function ChatRoom({
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus Chat?</AlertDialogTitle>
             <AlertDialogDescription>
-              {isGroupChat
-                ? 'Apakah Anda yakin ingin menghapus chat grup ini? Semua pesan dalam chat ini akan dihapus dari perangkat Anda.'
-                : 'Apakah Anda yakin ingin menghapus chat ini? Semua pesan dalam chat ini akan dihapus dari perangkat Anda.'}
+              Semua pesan dalam chat ini akan dihapus dari perangkat Anda. Chat akan hilang dari daftar, namun akan muncul kembali jika ada pesan baru. User lain tetap dapat melihat semua pesan.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1828,7 +1925,7 @@ export function ChatRoom({
           <AlertDialogHeader>
             <AlertDialogTitle>Bersihkan Chat?</AlertDialogTitle>
             <AlertDialogDescription>
-              Semua pesan dalam chat ini akan dihapus dari perangkat Anda. Chat akan hilang dari daftar, namun akan muncul kembali jika ada pesan baru. User lain tetap dapat melihat semua pesan.
+              Semua pesan dalam chat ini akan dihapus dari perangkat Anda. Chat tetap berada di daftar. User lain tetap dapat melihat semua pesan.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

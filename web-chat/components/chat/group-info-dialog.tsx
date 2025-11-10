@@ -10,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
 import { User } from '@/types/models'
-import { UserMinus, UserPlus, Camera, Users as UsersIcon, Loader2, Pencil, Search, X, LogOut, ChevronDown, UserCog, ZoomIn, ZoomOut } from 'lucide-react'
+import { UserMinus, UserPlus, Camera, Users as UsersIcon, Loader2, Pencil, Search, X, LogOut, ChevronDown, UserCog, ZoomIn, ZoomOut, Trash2 } from 'lucide-react'
 import { ChatRepository } from '@/lib/repositories/chat.repository'
 import { toast } from 'sonner'
 import { format } from 'date-fns'
@@ -95,6 +95,8 @@ export function GroupInfoDialog({
   const [updatingName, setUpdatingName] = useState(false)
   const [showLeaveDialog, setShowLeaveDialog] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  const [showDeleteGroupDialog, setShowDeleteGroupDialog] = useState(false)
+  const [deletingGroup, setDeletingGroup] = useState(false)
   const [hoveredMemberId, setHoveredMemberId] = useState<string | null>(null)
   const [showImageViewer, setShowImageViewer] = useState(false)
   const [showUserProfile, setShowUserProfile] = useState(false)
@@ -284,6 +286,29 @@ export function GroupInfoDialog({
     setShowLeaveDialog(true)
   }
 
+  const handleDeleteGroup = () => {
+    setShowDeleteGroupDialog(true)
+  }
+
+  const confirmDeleteGroup = async () => {
+    setDeletingGroup(true)
+    const result = await chatRepository.deleteGroup(currentUserId, chatId)
+    setDeletingGroup(false)
+
+    if (result.status === 'success') {
+      toast.success('Grup berhasil dihapus')
+      setShowDeleteGroupDialog(false)
+      onOpenChange(false)
+      if (onLeaveGroup) {
+        onLeaveGroup() // Trigger close/navigation
+      }
+    } else if (result.status === 'error') {
+      toast.error(result.message || 'Gagal menghapus grup')
+    } else {
+      toast.error('Gagal menghapus grup')
+    }
+  }
+
   const confirmLeaveGroup = async () => {
     // Get current user name
     const currentUser = groupMembers.find(m => m.userId === currentUserId)
@@ -459,7 +484,6 @@ export function GroupInfoDialog({
           // Create File from blob
           const file = new File([blob], 'group-avatar.jpg', { type: 'image/jpeg' })
 
-          // Upload to Chatku Asset Server
           const uploadResult = await uploadGroupAvatar(chatId, file)
 
           if (uploadResult.status === 'success') {
@@ -646,124 +670,145 @@ export function GroupInfoDialog({
                       return a.displayName.localeCompare(b.displayName)
                     })
                     .map((member) => {
-                    const isAdmin = groupAdmins.includes(member.userId)
-                    const canManage = isCurrentUserAdmin && member.userId !== currentUserId
-                    const isCurrentUser = member.userId === currentUserId
-                    const isHovered = hoveredMemberId === member.userId
-                    const canPromoteToAdmin = !isAdmin && groupAdmins.length < 5
+                      const isAdmin = groupAdmins.includes(member.userId)
+                      const canManage = isCurrentUserAdmin && member.userId !== currentUserId
+                      const isCurrentUser = member.userId === currentUserId
+                      const isHovered = hoveredMemberId === member.userId
+                      const canPromoteToAdmin = !isAdmin && groupAdmins.length < 5
 
-                    return (
-                      <div
-                        key={member.userId}
-                        className={cn(
-                          "flex items-start gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors group ",
-                          !isCurrentUser && "cursor-pointer"
-                        )}
-                        onMouseEnter={() => setHoveredMemberId(member.userId)}
-                        onMouseLeave={() => setHoveredMemberId(null)}
-                        onClick={() => {
-                          if (!isCurrentUser) {
-                            setSelectedUserForProfile(member)
-                            setShowUserProfile(true)
-                          }
-                        }}
-                      >
-                        <Avatar className="h-12 w-12 shrink-0">
-                          <AvatarImage src={member.imageURL || member.imageUrl} alt="" />
-                          <AvatarFallback className="text-sm font-semibold">
-                            {member.displayName.slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0 max-w-[calc(100%-140px)] pt-1">
-                          <div className="flex items-baseline gap-1 mb-0.5">
-                            <span className="text-sm font-medium">
-                              {member.displayName.length > 35
-                                ? member.displayName.slice(0, 35) + '...'
-                                : member.displayName}
-                            </span>
-                            {isCurrentUser && (
-                              <span className="text-sm text-muted-foreground font-normal shrink-0">(You)</span>
+                      return (
+                        <div
+                          key={member.userId}
+                          className={cn(
+                            "flex items-start gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors group ",
+                            !isCurrentUser && "cursor-pointer"
+                          )}
+                          onMouseEnter={() => setHoveredMemberId(member.userId)}
+                          onMouseLeave={() => setHoveredMemberId(null)}
+                          onClick={() => {
+                            if (!isCurrentUser) {
+                              setSelectedUserForProfile(member)
+                              setShowUserProfile(true)
+                            }
+                          }}
+                        >
+                          <Avatar className="h-12 w-12 shrink-0">
+                            <AvatarImage src={member.imageURL || member.imageUrl} alt="" />
+                            <AvatarFallback className="text-sm font-semibold">
+                              {member.displayName.slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0 max-w-[calc(100%-140px)] pt-1">
+                            <div className="flex items-baseline gap-1 mb-0.5">
+                              <span className="text-sm font-medium">
+                                {member.displayName.length > 35
+                                  ? member.displayName.slice(0, 35) + '...'
+                                  : member.displayName}
+                              </span>
+                              {isCurrentUser && (
+                                <span className="text-sm text-muted-foreground font-normal shrink-0">(You)</span>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground truncate">{member.username || member.email?.split('@')[0]}</p>
+                          </div>
+
+                          {/* Right side: Badge and Dropdown horizontal */}
+                          <div className="flex items-center flex-col justify-start pt-1">
+                            {isAdmin && (
+                              <Badge variant="secondary" className="text-xs px-2 py-0.5 font-normal">
+                                Admin
+                              </Badge>
+                            )}
+                            {canManage && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className={cn(
+                                      "h-8 w-8 transition-opacity",
+                                      isHovered ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                                    )}
+                                    onClick={(e) => {
+                                      e.stopPropagation() // Prevent opening user profile when clicking dropdown
+                                    }}
+                                    aria-label={`Manage ${member.displayName}`}
+                                  >
+                                    <ChevronDown className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                  {isAdmin ? (
+                                    <DropdownMenuItem
+                                      onClick={(e) => {
+                                        e.stopPropagation() // Prevent opening user profile
+                                        handleDemoteFromAdmin(member.userId, member.displayName)
+                                      }}
+                                    >
+                                      <UserCog className="h-4 w-4 mr-2" />
+                                      <span>Hapus dari admin</span>
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem
+                                      onClick={(e) => {
+                                        e.stopPropagation() // Prevent opening user profile
+                                        if (canPromoteToAdmin) {
+                                          handlePromoteToAdmin(member.userId, member.displayName)
+                                        }
+                                      }}
+                                      disabled={!canPromoteToAdmin}
+                                      className={!canPromoteToAdmin ? 'opacity-50 cursor-not-allowed' : ''}
+                                      title={!canPromoteToAdmin ? 'Maksimal 5 admin per grup' : ''}
+                                    >
+                                      <UserCog className="h-4 w-4 mr-2" />
+                                      <span>Jadikan admin grup</span>
+                                      {!canPromoteToAdmin && (
+                                        <span className="ml-auto text-[10px] text-muted-foreground">(Max)</span>
+                                      )}
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation() // Prevent opening user profile
+                                      handleKickMember(member.userId, member.displayName)
+                                    }}
+                                    className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                                  >
+                                    <UserMinus className="h-4 w-4 mr-2" />
+                                    <span>Keluarkan</span>
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground truncate">{member.username || member.email?.split('@')[0]}</p>
                         </div>
-
-                        {/* Right side: Badge and Dropdown horizontal */}
-                        <div className="flex items-center flex-col justify-start pt-1">
-                          {isAdmin && (
-                            <Badge variant="secondary" className="text-xs px-2 py-0.5 font-normal">
-                              Admin
-                            </Badge>
-                          )}
-                          {canManage && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className={cn(
-                                    "h-8 w-8 transition-opacity",
-                                    isHovered ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                                  )}
-                                  onClick={(e) => {
-                                    e.stopPropagation() // Prevent opening user profile when clicking dropdown
-                                  }}
-                                  aria-label={`Manage ${member.displayName}`}
-                                >
-                                  <ChevronDown className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-48">
-                                {isAdmin ? (
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation() // Prevent opening user profile
-                                      handleDemoteFromAdmin(member.userId, member.displayName)
-                                    }}
-                                  >
-                                    <UserCog className="h-4 w-4 mr-2" />
-                                    <span>Hapus dari admin</span>
-                                  </DropdownMenuItem>
-                                ) : (
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation() // Prevent opening user profile
-                                      if (canPromoteToAdmin) {
-                                        handlePromoteToAdmin(member.userId, member.displayName)
-                                      }
-                                    }}
-                                    disabled={!canPromoteToAdmin}
-                                    className={!canPromoteToAdmin ? 'opacity-50 cursor-not-allowed' : ''}
-                                    title={!canPromoteToAdmin ? 'Maksimal 5 admin per grup' : ''}
-                                  >
-                                    <UserCog className="h-4 w-4 mr-2" />
-                                    <span>Jadikan admin grup</span>
-                                    {!canPromoteToAdmin && (
-                                      <span className="ml-auto text-[10px] text-muted-foreground">(Max)</span>
-                                    )}
-                                  </DropdownMenuItem>
-                                )}
-                                <DropdownMenuItem
-                                  onClick={(e) => {
-                                    e.stopPropagation() // Prevent opening user profile
-                                    handleKickMember(member.userId, member.displayName)
-                                  }}
-                                  className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                                >
-                                  <UserMinus className="h-4 w-4 mr-2" />
-                                  <span>Keluarkan</span>
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
                 </div>
               </div>
 
               <Separator />
+
+              {/* Delete Group Button (Admin Only) */}
+              {groupAdmins.includes(currentUserId) && (
+                <div className="px-6 py-4">
+                  <Button
+                    variant="ghost"
+                    onClick={handleDeleteGroup}
+                    className="w-full justify-start gap-3 h-auto py-3 text-white hover:text-white transition-colors"
+                    style={{ backgroundColor: '#E54C38' }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#D43D28'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#E54C38'
+                    }}
+                  >
+                    <Trash2 className="h-5 w-5" />
+                    <span className="text-sm font-medium">Hapus Grup</span>
+                  </Button>
+                </div>
+              )}
 
               {/* Leave Group Button */}
               <div className="px-6 py-4">
@@ -1032,6 +1077,52 @@ export function GroupInfoDialog({
       </Dialog>
 
       {/* Leave Group Confirmation Dialog */}
+      {/* Delete Group Dialog */}
+      <AlertDialog open={showDeleteGroupDialog} onOpenChange={setShowDeleteGroupDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Grup?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin menghapus grup "{groupName}"?
+              <br /><br />
+              <strong>Tindakan ini tidak dapat dibatalkan</strong> dan semua pesan akan dihapus permanen untuk semua anggota.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingGroup}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                confirmDeleteGroup()
+              }}
+              disabled={deletingGroup}
+              className="text-white hover:text-white transition-colors"
+              style={{ backgroundColor: '#E54C38' }}
+              onMouseEnter={(e) => {
+                if (!deletingGroup) {
+                  e.currentTarget.style.backgroundColor = '#D43D28'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!deletingGroup) {
+                  e.currentTarget.style.backgroundColor = '#E54C38'
+                }
+              }}
+            >
+              {deletingGroup ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Menghapus...
+                </>
+              ) : (
+                "Hapus Grup"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Leave Group Dialog */}
       <AlertDialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>

@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { ref, onValue, off } from 'firebase/database';
+import { realtimeDatabase } from '@/lib/firebase/config';
 import { UserStatus } from '@/types/models';
 import { formatDistanceToNow } from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
@@ -15,7 +15,7 @@ interface UserStatusData {
 
 /**
  * Hook to monitor another user's online/offline status
- * Returns real-time status updates from Firestore
+ * Returns real-time status updates from RTDB (migrated from Firestore)
  */
 export function useUserStatus(userId: string | null): UserStatusData {
   const [status, setStatus] = useState<UserStatus>(UserStatus.OFFLINE);
@@ -30,34 +30,49 @@ export function useUserStatus(userId: string | null): UserStatusData {
       return;
     }
 
-    // Listen to user document for status changes
-    const userRef = doc(db(), 'users', userId);
-    const unsubscribe = onSnapshot(
-      userRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          const userStatus = data.status || UserStatus.OFFLINE;
-          const lastSeenTimestamp = data.lastSeen;
+    // Listen to RTDB /status/{userId} for real-time presence
+    const rtdb = realtimeDatabase();
+    const statusRef = ref(rtdb, `/status/${userId}`);
 
-          console.log('[useUserStatus] Status update:', {
-            userId,
-            status: userStatus,
-            lastSeen: lastSeenTimestamp ? new Date(lastSeenTimestamp.toMillis()).toLocaleString() : 'none',
-            hasLastSeen: !!lastSeenTimestamp
-          });
+    const unsubscribe = onValue(
+      statusRef,
+      (snapshot) => {
+        console.log('[useUserStatus] ===== RTDB LISTENER FIRED =====');
+        console.log('[useUserStatus] userId:', userId);
+        console.log('[useUserStatus] snapshot.exists():', snapshot.exists());
+        console.log('[useUserStatus] Raw RTDB data:', snapshot.val());
+
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          const statusFromRTDB = data.status;
+          const lastSeenTimestamp = data.lastSeen; // milliseconds
+
+          console.log('[useUserStatus] statusFromRTDB:', statusFromRTDB);
+          console.log('[useUserStatus] lastSeenTimestamp:', lastSeenTimestamp);
+
+          // Parse status - RTDB returns plain string
+          let userStatus: UserStatus;
+          if (statusFromRTDB === 'ONLINE') {
+            userStatus = UserStatus.ONLINE;
+          } else {
+            userStatus = UserStatus.OFFLINE;
+          }
+
+          console.log('[useUserStatus] Final status:', userStatus);
 
           setStatus(userStatus);
 
           // Handle status display based on availability of data
-          if (userStatus === UserStatus.ONLINE && lastSeenTimestamp) {
+          if (userStatus === UserStatus.ONLINE) {
             // User is actively online
-            setLastSeen(lastSeenTimestamp.toDate());
+            if (lastSeenTimestamp) {
+              setLastSeen(new Date(lastSeenTimestamp));
+            }
             setLastSeenText('online');
-            console.log('[useUserStatus] Displaying: online (active)');
+            console.log('[useUserStatus] Displaying: online');
           } else if (userStatus === UserStatus.OFFLINE && lastSeenTimestamp) {
             // User is offline but has lastSeen timestamp
-            const lastSeenDate = lastSeenTimestamp.toDate();
+            const lastSeenDate = new Date(lastSeenTimestamp);
             setLastSeen(lastSeenDate);
 
             try {
@@ -73,31 +88,30 @@ export function useUserStatus(userId: string | null): UserStatusData {
               setLastSeenText('');
             }
           } else {
-            // No lastSeen data (user never logged in since presence system enabled)
-            // Display empty string (no status text)
+            // No lastSeen data
             setLastSeen(null);
             setLastSeenText('');
-            console.log('[useUserStatus] No lastSeen data, displaying empty');
+            console.log('[useUserStatus] No lastSeen data');
           }
         } else {
-          // User document doesn't exist (deleted user)
-          // Display empty string
-          console.log('[useUserStatus] User document not found:', userId);
+          // User status doesn't exist in RTDB
+          console.log('[useUserStatus] User status not found in RTDB:', userId);
           setStatus(UserStatus.OFFLINE);
           setLastSeen(null);
           setLastSeenText('');
         }
       },
       (error) => {
-        console.error('[useUserStatus] Error listening to user status:', error);
+        console.error('[useUserStatus] Error listening to RTDB:', error);
         setStatus(UserStatus.OFFLINE);
         setLastSeen(null);
-        setLastSeenText(''); // Empty on error
+        setLastSeenText('');
       }
     );
 
     return () => {
-      unsubscribe();
+      // Cleanup RTDB listener
+      off(statusRef, 'value', unsubscribe);
     };
   }, [userId]);
 

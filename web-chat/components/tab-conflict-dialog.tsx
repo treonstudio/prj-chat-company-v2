@@ -34,7 +34,7 @@ export function TabConflictDialog({
         <AlertDialogHeader>
           <AlertDialogTitle className="sr-only">Tab Conflict</AlertDialogTitle>
           <AlertDialogDescription className="text-base text-foreground text-center py-4">
-            Chatku sedang terbuka di jendela lain. Klik &quot;Gunakan di Sini&quot; untuk menggunakan Chatku di jendela ini.
+            BC sedang terbuka di jendela lain. Klik &quot;Gunakan di Sini&quot; untuk menggunakan BC di jendela ini.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter className="flex-row justify-end gap-2 sm:gap-2">

@@ -22,7 +22,7 @@ import { uploadFileToChatkuAPI } from '@/lib/utils/file-upload.utils';
  * Generate a UUID compatible with all browsers
  */
 function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
     const r = Math.random() * 16 | 0;
     const v = c === 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
@@ -75,7 +75,23 @@ export class MessageRepository {
     isGroupChat: boolean,
     allParticipants?: string[]
   ): MessageStatus {
+    console.log('[calculateMessageStatus] Called for message:', message.messageId, {
+      hasStatus: !!message.status,
+      statusValue: message.status,
+      statusType: typeof message.status,
+      senderId: message.senderId,
+      currentUserId: currentUserId
+    });
+
+    // IMPORTANT: If message already has a status field from Firestore, use it
+    // This ensures we respect the status set by delivery receipt service and markAsRead
+    if (message.status) {
+      console.log('[calculateMessageStatus] ✅ Using existing status from Firestore:', message.status);
+      return message.status;
+    }
+
     // Only calculate status for messages sent by current user
+    // (for backward compatibility with old messages without status field)
     if (message.senderId !== currentUserId) {
       return MessageStatus.SENT;
     }
@@ -143,19 +159,47 @@ export class MessageRepository {
 
         const messages = snapshot.docs
           .map((doc) => {
+            const rawData = doc.data();
             const messageData = {
-              ...doc.data(),
+              ...rawData,
               messageId: doc.id,
             } as Message;
 
+            console.log('[MessageRepository] Raw message data from Firestore:', {
+              messageId: doc.id,
+              senderId: rawData.senderId,
+              statusFromFirestore: rawData.status,
+              deliveredTo: rawData.deliveredTo,
+              readBy: rawData.readBy
+            });
+
             // Calculate status if currentUserId is provided
+            console.log('[MessageRepository] Checking if should calculate status:', {
+              hasCurrentUserId: !!currentUserId,
+              currentUserId: currentUserId,
+              hasAllParticipants: !!allParticipants,
+              allParticipants: allParticipants
+            });
+
             if (currentUserId && allParticipants) {
-              messageData.status = this.calculateMessageStatus(
+              console.log('[MessageRepository] 🔄 Calculating status for message:', doc.id);
+
+              const calculatedStatus = this.calculateMessageStatus(
                 messageData,
                 currentUserId,
                 isGroupChat,
                 allParticipants
               );
+
+              console.log('[MessageRepository] Status after calculation:', {
+                messageId: doc.id,
+                before: messageData.status,
+                after: calculatedStatus
+              });
+
+              messageData.status = calculatedStatus;
+            } else {
+              console.log('[MessageRepository] ⚠️ Skipping status calculation - missing currentUserId or allParticipants');
             }
 
             return messageData;
@@ -413,7 +457,6 @@ export class MessageRepository {
       const extension = this.getFileExtension(fileToUpload);
       const fileName = `IMG_${Date.now()}.${extension}`;
 
-      // Upload to Chatku Asset Server with progress tracking and cancel support
       const uploadResult = await uploadFileToChatkuAPI(fileToUpload, onProgress, abortSignal);
 
       if (uploadResult.status !== 'success' || !uploadResult.data) {
@@ -492,7 +535,6 @@ export class MessageRepository {
       const extension = this.getFileExtension(fileToUpload);
       const fileName = `VID_${Date.now()}.${extension}`;
 
-      // Upload to Chatku Asset Server with progress tracking and cancel support
       const uploadResult = await uploadFileToChatkuAPI(fileToUpload, onProgress, abortSignal);
 
       if (uploadResult.status !== 'success' || !uploadResult.data) {
@@ -550,7 +592,6 @@ export class MessageRepository {
       const originalName = documentFile.name;
       const fileName = `DOC_${Date.now()}_${originalName}`;
 
-      // Upload to Chatku Asset Server with cancel support
       const uploadResult = await uploadFileToChatkuAPI(documentFile, onProgress, abortSignal);
 
       if (uploadResult.status !== 'success' || !uploadResult.data) {
@@ -712,6 +753,7 @@ export class MessageRepository {
             updates[`readBy.${userId}`] = timestamp;
             // IMPORTANT: Update status to READ when marking as read
             updates['status'] = MessageStatus.READ;
+            console.log('[MessageRepository] Marking message as READ:', doc.id, 'Updates:', updates);
           }
 
           if (Object.keys(updates).length > 0) {
@@ -836,12 +878,12 @@ export class MessageRepository {
                 : chat
             )
             : [{
-                chatId,
-                chatType: 'DIRECT',
-                otherUserId,
-                otherUserName,
-                ...chatItemUpdate,
-              }, ...existingChats];
+              chatId,
+              chatType: 'DIRECT',
+              otherUserId,
+              otherUserName,
+              ...chatItemUpdate,
+            }, ...existingChats];
 
         await updateDoc(userChatRef, {
           chats: updatedChats,
@@ -921,12 +963,12 @@ export class MessageRepository {
                 : chat
             )
             : [{
-                chatId,
-                chatType: 'GROUP',
-                groupName,
-                ...(groupAvatar && { groupAvatar }),
-                ...chatItemUpdate,
-              }, ...existingChats];
+              chatId,
+              chatType: 'GROUP',
+              groupName,
+              ...(groupAvatar && { groupAvatar }),
+              ...chatItemUpdate,
+            }, ...existingChats];
 
         await updateDoc(userChatRef, {
           chats: updatedChats,
@@ -1179,6 +1221,138 @@ export class MessageRepository {
     } catch (error: any) {
       console.error('Error forwarding message:', error);
       return Resource.error(error.message || 'Failed to forward message');
+    }
+  }
+
+  /**
+   * Forward multiple messages in batch (maintains order)
+   * More efficient than forwarding one by one
+   */
+  async forwardMessages(
+    messageIds: string[],
+    sourceChatId: string,
+    targetChatId: string,
+    currentUserId: string,
+    currentUserName: string
+  ): Promise<Resource<{ successCount: number; failedCount: number }>> {
+    try {
+      if (messageIds.length === 0) {
+        return Resource.error('No messages to forward');
+      }
+
+      const sourceDirectCollection = collection(db(), this.DIRECT_CHATS_COLLECTION, sourceChatId, this.MESSAGES_SUBCOLLECTION);
+      const sourceGroupCollection = collection(db(), this.GROUP_CHATS_COLLECTION, sourceChatId, this.MESSAGES_SUBCOLLECTION);
+
+      // Check if target is a group chat
+      const targetGroupChatDoc = await getDoc(doc(db(), this.GROUP_CHATS_COLLECTION, targetChatId));
+      const isTargetGroupChat = targetGroupChatDoc.exists();
+
+      const targetCollection = isTargetGroupChat
+        ? this.GROUP_CHATS_COLLECTION
+        : this.DIRECT_CHATS_COLLECTION;
+
+      // Fetch all original messages in parallel
+      const messagePromises = messageIds.map(async (messageId) => {
+        // Try direct chat first
+        let messageDoc = await getDoc(doc(sourceDirectCollection, messageId));
+
+        // If not found, try group chat
+        if (!messageDoc.exists()) {
+          messageDoc = await getDoc(doc(sourceGroupCollection, messageId));
+        }
+
+        return {
+          messageId,
+          exists: messageDoc.exists(),
+          data: messageDoc.exists() ? messageDoc.data() as Message : null
+        };
+      });
+
+      const messageResults = await Promise.all(messagePromises);
+
+      // Filter out messages that don't exist
+      const validMessages = messageResults.filter(m => m.exists && m.data);
+
+      if (validMessages.length === 0) {
+        return Resource.error('No valid messages found');
+      }
+
+      // Sort messages by their original timestamp to maintain chronological order
+      validMessages.sort((a, b) => {
+        const aTime = a.data?.timestamp;
+        const bTime = b.data?.timestamp;
+
+        if (!aTime || !bTime) return 0;
+
+        // Compare timestamps (older first)
+        if (aTime.seconds !== bTime.seconds) {
+          return aTime.seconds - bTime.seconds;
+        }
+        return aTime.nanoseconds - bTime.nanoseconds;
+      });
+
+      // Create batch (Firestore limit: 500 operations)
+      const batch = writeBatch(db());
+      const baseTimestamp = Timestamp.now();
+      let batchCount = 0;
+      const batches: any[] = [batch];
+
+      // Create forwarded messages maintaining order
+      // Add 50ms to each message to ensure proper ordering
+      for (let i = 0; i < validMessages.length; i++) {
+        const { data: originalMessage } = validMessages[i];
+        if (!originalMessage) continue;
+
+        // Check batch limit (500 operations per batch)
+        if (batchCount >= 500) {
+          batches.push(writeBatch(db()));
+          batchCount = 0;
+        }
+
+        const currentBatch = batches[batches.length - 1];
+
+        // Create new message reference
+        const messagesRef = collection(db(), targetCollection, targetChatId, this.MESSAGES_SUBCOLLECTION);
+        const newMessageRef = doc(messagesRef);
+
+        // Create timestamp with incremental offset (50ms per message)
+        const messageTimestamp = new Timestamp(
+          baseTimestamp.seconds,
+          baseTimestamp.nanoseconds + (i * 50000000) // 50ms = 50,000,000 nanoseconds
+        );
+
+        // Create forwarded message
+        const forwardedMessage: Message = {
+          messageId: newMessageRef.id,
+          text: originalMessage.text || '',
+          senderId: currentUserId,
+          senderName: currentUserName,
+          timestamp: messageTimestamp,
+          createdAt: messageTimestamp,
+          status: MessageStatus.SENT,
+          type: originalMessage.type,
+          readBy: {},
+          deliveredTo: {},
+          isForwarded: true,
+          ...(originalMessage.mediaUrl && { mediaUrl: originalMessage.mediaUrl }),
+          ...(originalMessage.mediaMetadata && { mediaMetadata: originalMessage.mediaMetadata }),
+          ...(originalMessage.mediaItems && { mediaItems: originalMessage.mediaItems }),
+        };
+
+        currentBatch.set(newMessageRef, forwardedMessage);
+        batchCount++;
+      }
+
+      // Commit all batches
+      await Promise.all(batches.map(b => b.commit()));
+
+      const successCount = validMessages.length;
+      const failedCount = messageIds.length - successCount;
+
+      return Resource.success({ successCount, failedCount });
+    } catch (error: any) {
+      console.error('Error forwarding messages:', error);
+      return Resource.error(error.message || 'Failed to forward messages');
     }
   }
 

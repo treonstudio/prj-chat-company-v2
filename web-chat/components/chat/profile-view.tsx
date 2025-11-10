@@ -223,7 +223,6 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
     setUploadProgress(0)
 
     try {
-      // Upload to Chatku Asset Server with progress tracking
       const uploadResult = await storageRepository.uploadAvatar(
         user.userId,
         croppedImageFile,
@@ -351,13 +350,12 @@ export function ProfileView({ user, onBack, onLogout }: ProfileViewProps) {
             <label className="text-sm text-muted-foreground">Nama</label>
             {editingName && name.length > MAX_PROFILE_NAME_LENGTH * 0.8 && (
               <span
-                className={`text-[10px] ${
-                  name.length > MAX_PROFILE_NAME_LENGTH * 0.95
+                className={`text-[10px] ${name.length > MAX_PROFILE_NAME_LENGTH * 0.95
                     ? 'text-destructive font-semibold'
                     : name.length > MAX_PROFILE_NAME_LENGTH * 0.9
-                    ? 'text-orange-500 font-medium'
-                    : 'text-muted-foreground'
-                }`}
+                      ? 'text-orange-500 font-medium'
+                      : 'text-muted-foreground'
+                  }`}
               >
                 {name.length} / {MAX_PROFILE_NAME_LENGTH}
               </span>

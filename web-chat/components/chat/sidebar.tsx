@@ -148,9 +148,9 @@ export function Sidebar({
   // Update document title with unread count
   useEffect(() => {
     if (totalUnreadCount > 0) {
-      document.title = `(${totalUnreadCount}) Chatku Web`
+      document.title = `(${totalUnreadCount}) BC Web`
     } else {
-      document.title = 'Chatku Web'
+      document.title = 'BC Web'
     }
   }, [totalUnreadCount])
 
@@ -172,238 +172,236 @@ export function Sidebar({
     <div className="flex h-full min-h-0 flex-col relative overflow-hidden" style={{ backgroundColor: '#fafafa' }}>
       {/* Main Sidebar Content */}
       <div
-        className={`absolute inset-0 transition-transform duration-300 ease-in-out ${
-          showProfile ? '-translate-x-full' : 'translate-x-0'
-        }`}
+        className={`absolute inset-0 transition-transform duration-300 ease-in-out ${showProfile ? '-translate-x-full' : 'translate-x-0'
+          }`}
         style={{ backgroundColor: '#fafafa' }}
       >
         <div className="flex h-full min-h-0 flex-col">
-      {/* Sticky header: user info + search */}
-      <div className="sticky top-0 z-10 shadow-sm" style={{ backgroundColor: '#fafafa' }}>
-        <div className="flex items-center justify-between px-4 py-3">
-          <button
-            className="flex items-center gap-3 hover:bg-muted rounded-lg px-2 py-1 -ml-2 transition-colors"
-            onClick={() => setShowProfile(true)}
-          >
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={currentUserAvatarUrl} alt="" />
-              <AvatarFallback aria-hidden>{currentUserName?.slice(0, 2).toUpperCase() || 'U'}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0 text-left">
-              <p className="truncate text-sm font-medium text-left">{currentUserName || 'User'}</p>
-              <p className="truncate text-xs text-muted-foreground text-left">{currentUserData.username || currentUserData.userId || ''}</p>
-            </div>
-          </button>
+          {/* Sticky header: user info + search */}
+          <div className="sticky top-0 z-10 shadow-sm" style={{ backgroundColor: '#fafafa' }}>
+            <div className="flex items-center justify-between px-4 py-3">
+              <button
+                className="flex items-center gap-3 hover:bg-muted rounded-lg px-2 py-1 -ml-2 transition-colors"
+                onClick={() => setShowProfile(true)}
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={currentUserAvatarUrl} alt="" />
+                  <AvatarFallback aria-hidden>{currentUserName?.slice(0, 2).toUpperCase() || 'U'}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 text-left">
+                  <p className="truncate text-sm font-medium text-left">{currentUserName || 'User'}</p>
+                  <p className="truncate text-xs text-muted-foreground text-left">{currentUserData.username || currentUserData.userId || ''}</p>
+                </div>
+              </button>
 
-          <div className="flex items-center gap-2">
-            {(featureFlags.allowChat || featureFlags.allowCreateGroup) && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="New chat menu"
-                  >
-                    <MessageSquarePlus className="h-10 w-10" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-40">
-                  {featureFlags.allowChat && (
-                    <DropdownMenuItem onSelect={() => setShowNewChatDialog(true)}>
-                      New Chat
-                    </DropdownMenuItem>
-                  )}
-                  {featureFlags.allowCreateGroup && (
-                    <DropdownMenuItem onSelect={() => setShowGroupChatDialog(true)}>
-                      New Group
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
-        </div>
-        <div className="px-4 pb-3">
-          <Input
-            placeholder="Search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="bg-white text-foreground placeholder:text-muted-foreground"
-            aria-label="Search chats"
-            autoComplete="off"
-          />
-        </div>
-        <Separator />
-
-        {/* Offline/Slow Connection Banner */}
-        {(!isOnline || isSlow) && (
-          <div className="px-4 py-3 bg-[#FFF4CE] border-b border-[#E8D8A3]">
-            <div className="flex items-start gap-3">
-              <div className="shrink-0 mt-0.5">
-                <TriangleAlert className="h-5 w-5 text-[#8B7000]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-semibold text-[#3B3B3B] mb-0.5">
-                  {!isOnline ? 'Komputer tidak terhubung' : 'Koneksi lambat'}
-                </h3>
-                <p className="text-xs text-[#54656F] leading-relaxed">
-                  {!isOnline
-                    ? 'Pastikan komputer Anda memiliki koneksi Internet aktif.'
-                    : 'Koneksi Internet Anda tampaknya lambat. Pesan mungkin terlambat terkirim.'}
-                </p>
-                {!isOnline && (
-                  <button
-                    onClick={() => window.location.reload()}
-                    className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[#00A884] hover:text-[#008F72] transition-colors"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    <span>Hubungkan ulang</span>
-                  </button>
+              <div className="flex items-center gap-2">
+                {(featureFlags.allowChat || featureFlags.allowCreateGroup) && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="New chat menu"
+                      >
+                        <MessageSquarePlus className="h-10 w-10" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-40">
+                      {featureFlags.allowChat && (
+                        <DropdownMenuItem onSelect={() => setShowNewChatDialog(true)}>
+                          New Chat
+                        </DropdownMenuItem>
+                      )}
+                      {featureFlags.allowCreateGroup && (
+                        <DropdownMenuItem onSelect={() => setShowGroupChatDialog(true)}>
+                          New Group
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
               </div>
             </div>
-          </div>
-        )}
-      </div>
+            <div className="px-4 pb-3">
+              <Input
+                placeholder="Search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="bg-white text-foreground placeholder:text-muted-foreground"
+                aria-label="Search chats"
+                autoComplete="off"
+              />
+            </div>
+            <Separator />
 
-      {/* Chats list */}
-      <ScrollArea className="flex-1 min-h-0">
-        {loading ? (
-          <ul className="divide-y">
-            {/* Chat list skeleton loader */}
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <li key={i} className="px-4 py-3">
+            {/* Offline/Slow Connection Banner */}
+            {(!isOnline || isSlow) && (
+              <div className="px-4 py-3 bg-[#FFF4CE] border-b border-[#E8D8A3]">
                 <div className="flex items-start gap-3">
-                  <div className="h-10 w-10 shrink-0 rounded-full bg-muted animate-pulse" />
-                  <div className="min-w-0 flex-1 space-y-2 pt-0.5">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <div className="h-4 w-32 bg-muted rounded animate-pulse" />
-                      <div className="h-3 w-12 bg-muted rounded animate-pulse" />
-                    </div>
-                    <div className="h-3 w-48 bg-muted rounded animate-pulse" />
+                  <div className="shrink-0 mt-0.5">
+                    <TriangleAlert className="h-5 w-5 text-[#8B7000]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-semibold text-[#3B3B3B] mb-0.5">
+                      {!isOnline ? 'Komputer tidak terhubung' : 'Koneksi lambat'}
+                    </h3>
+                    <p className="text-xs text-[#54656F] leading-relaxed">
+                      {!isOnline
+                        ? 'Pastikan komputer Anda memiliki koneksi Internet aktif.'
+                        : 'Koneksi Internet Anda tampaknya lambat. Pesan mungkin terlambat terkirim.'}
+                    </p>
+                    {!isOnline && (
+                      <button
+                        onClick={() => window.location.reload()}
+                        className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[#00A884] hover:text-[#008F72] transition-colors"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        <span>Hubungkan ulang</span>
+                      </button>
+                    )}
                   </div>
                 </div>
-              </li>
-            ))}
-          </ul>
-        ) : error ? (
-          <div className="flex items-center justify-center p-4">
-            <p className="text-sm text-destructive">{error}</p>
+              </div>
+            )}
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex items-center justify-center p-4">
-            <p className="text-sm text-muted-foreground">
-              {query ? 'No chats found' : 'No chats yet'}
-            </p>
-          </div>
-        ) : (
-          <ul className="divide-y">
-            {filtered.map((c) => {
-              // Handle deleted user
-              const rawName = c.chatType === 'GROUP' ? c.groupName : c.otherUserName
-              const name = rawName && rawName.trim() !== '' ? rawName : 'Deleted User'
-              const isDeletedUser = name === 'Deleted User' && c.chatType !== 'GROUP'
-              const avatar = c.chatType === 'GROUP'
-                ? (c.groupAvatar || groupAvatars[c.chatId])
-                : (isDeletedUser ? undefined : c.otherUserAvatar) // undefined will show fallback icon
-              const isGroup = c.chatType === 'GROUP'
-              const timeAgo = formatChatListTimestamp(c.lastMessageTime)
 
-              // Truncate chat name with ellipsis (max 25 chars)
-              const truncatedName = name.length > 25
-                ? name.slice(0, 25) + '...'
-                : name
-
-              // Check if there's a draft for this chat
-              const draftText = drafts[c.chatId]
-              const hasDraft = !!draftText
-
-              // Use draft message if available, otherwise use last message
-              const displayMessage = hasDraft ? draftText : c.lastMessage
-
-              // Truncate long messages with ellipsis (max 35 chars)
-              const truncatedMessage = displayMessage.length > 35
-                ? displayMessage.slice(0, 35) + '...'
-                : displayMessage
-
-              return (
-                <li key={c.chatId}>
-                  <button
-                    onClick={() => handleChatClick(c.chatId, isGroup, name, avatar || undefined)}
-                    className={cn(
-                      "w-full px-4 py-3 text-left transition-colors",
-                      activeId === c.chatId ? "bg-accent" : "hover:bg-muted",
-                    )}
-                    aria-current={activeId === c.chatId ? "page" : undefined}
-                  >
+          {/* Chats list */}
+          <ScrollArea className="flex-1 min-h-0">
+            {loading ? (
+              <ul className="divide-y">
+                {/* Chat list skeleton loader */}
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <li key={i} className="px-4 py-3">
                     <div className="flex items-start gap-3">
-                      <Avatar className="h-10 w-10 shrink-0">
-                        <AvatarImage src={avatar || "/placeholder-user.jpg"} alt="" />
-                        <AvatarFallback aria-hidden className={cn(
-                          isGroup ? "bg-muted border border-border flex items-center justify-center" : "",
-                          isDeletedUser ? "bg-red-100 text-red-600" : ""
-                        )}>
-                          {isGroup ? (
-                            <Users className="h-5 w-5 text-muted-foreground" />
-                          ) : isDeletedUser ? (
-                            'DU'
-                          ) : (
-                            name?.slice(0, 2).toUpperCase()
-                          )}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1 pt-0.5">
-                        <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                          <p className="truncate text-sm font-semibold flex-1 leading-tight">{truncatedName}</p>
-                          <span className="shrink-0 text-[11px] text-muted-foreground whitespace-nowrap leading-tight">{timeAgo}</span>
+                      <div className="h-10 w-10 shrink-0 rounded-full bg-muted animate-pulse" />
+                      <div className="min-w-0 flex-1 space-y-2 pt-0.5">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+                          <div className="h-3 w-12 bg-muted rounded animate-pulse" />
                         </div>
-                        <div className="flex items-center justify-between gap-2 mt-1">
-                          <p className="text-xs text-muted-foreground flex-1 leading-tight overflow-hidden text-ellipsis whitespace-nowrap break-all line-clamp-1">
-                            {hasDraft && (
-                              <span className="text-green-600 font-medium">Draft: </span>
-                            )}
-                            {truncatedMessage}
-                          </p>
-                          {c.unreadCount > 0 ? (
-                            <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground shrink-0">
-                              {c.unreadCount}
-                            </span>
-                          ) : null}
-                        </div>
+                        <div className="h-3 w-48 bg-muted rounded animate-pulse" />
                       </div>
                     </div>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </ScrollArea>
+                  </li>
+                ))}
+              </ul>
+            ) : error ? (
+              <div className="flex items-center justify-center p-4">
+                <p className="text-sm text-destructive">{error}</p>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex items-center justify-center p-4">
+                <p className="text-sm text-muted-foreground">
+                  {query ? 'No chats found' : 'No chats yet'}
+                </p>
+              </div>
+            ) : (
+              <ul className="divide-y">
+                {filtered.map((c) => {
+                  // Handle deleted user
+                  const rawName = c.chatType === 'GROUP' ? c.groupName : c.otherUserName
+                  const name = rawName && rawName.trim() !== '' ? rawName : 'Deleted User'
+                  const isDeletedUser = name === 'Deleted User' && c.chatType !== 'GROUP'
+                  const avatar = c.chatType === 'GROUP'
+                    ? (c.groupAvatar || groupAvatars[c.chatId])
+                    : (isDeletedUser ? undefined : c.otherUserAvatar) // undefined will show fallback icon
+                  const isGroup = c.chatType === 'GROUP'
+                  const timeAgo = formatChatListTimestamp(c.lastMessageTime)
 
-      {/* Dialogs */}
-      <NewChatDialog
-        open={showNewChatDialog}
-        onOpenChange={setShowNewChatDialog}
-        currentUserId={currentUserId}
-        currentUserName={currentUserName}
-        currentUserAvatar={currentUserData.imageURL || currentUserData.imageUrl}
-        onChatCreated={handleChatCreated}
-      />
+                  // Truncate chat name with ellipsis (max 25 chars)
+                  const truncatedName = name.length > 25
+                    ? name.slice(0, 25) + '...'
+                    : name
 
-      <GroupChatDialog
-        open={showGroupChatDialog}
-        onOpenChange={setShowGroupChatDialog}
-        currentUserId={currentUserId}
-        onGroupCreated={handleChatCreated}
-      />
+                  // Check if there's a draft for this chat
+                  const draftText = drafts[c.chatId]
+                  const hasDraft = !!draftText
+
+                  // Use draft message if available, otherwise use last message
+                  const displayMessage = hasDraft ? draftText : c.lastMessage
+
+                  // Truncate long messages with ellipsis (max 35 chars)
+                  const truncatedMessage = displayMessage.length > 35
+                    ? displayMessage.slice(0, 35) + '...'
+                    : displayMessage
+
+                  return (
+                    <li key={c.chatId}>
+                      <button
+                        onClick={() => handleChatClick(c.chatId, isGroup, name, avatar || undefined)}
+                        className={cn(
+                          "w-full px-4 py-3 text-left transition-colors",
+                          activeId === c.chatId ? "bg-accent" : "hover:bg-muted",
+                        )}
+                        aria-current={activeId === c.chatId ? "page" : undefined}
+                      >
+                        <div className="flex items-start gap-3">
+                          <Avatar className="h-10 w-10 shrink-0">
+                            <AvatarImage src={avatar || "/placeholder-user.jpg"} alt="" />
+                            <AvatarFallback aria-hidden className={cn(
+                              isGroup ? "bg-muted border border-border flex items-center justify-center" : "",
+                              isDeletedUser ? "bg-red-100 text-red-600" : ""
+                            )}>
+                              {isGroup ? (
+                                <Users className="h-5 w-5 text-muted-foreground" />
+                              ) : isDeletedUser ? (
+                                'DU'
+                              ) : (
+                                name?.slice(0, 2).toUpperCase()
+                              )}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1 pt-0.5">
+                            <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                              <p className="truncate text-sm font-semibold flex-1 leading-tight">{truncatedName}</p>
+                              <span className="shrink-0 text-[11px] text-muted-foreground whitespace-nowrap leading-tight">{timeAgo}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2 mt-1">
+                              <p className="text-xs text-muted-foreground flex-1 leading-tight overflow-hidden text-ellipsis whitespace-nowrap break-all line-clamp-1">
+                                {hasDraft && (
+                                  <span className="text-green-600 font-medium">Draft: </span>
+                                )}
+                                {truncatedMessage}
+                              </p>
+                              {c.unreadCount > 0 ? (
+                                <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground shrink-0">
+                                  {c.unreadCount}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </ScrollArea>
+
+          {/* Dialogs */}
+          <NewChatDialog
+            open={showNewChatDialog}
+            onOpenChange={setShowNewChatDialog}
+            currentUserId={currentUserId}
+            currentUserName={currentUserName}
+            currentUserAvatar={currentUserData.imageURL || currentUserData.imageUrl}
+            onChatCreated={handleChatCreated}
+          />
+
+          <GroupChatDialog
+            open={showGroupChatDialog}
+            onOpenChange={setShowGroupChatDialog}
+            currentUserId={currentUserId}
+            onGroupCreated={handleChatCreated}
+          />
         </div>
       </div>
 
       {/* Profile View with Slide Animation */}
       <div
-        className={`absolute inset-0 bg-card transition-transform duration-300 ease-in-out ${
-          showProfile ? 'translate-x-0' : 'translate-x-full'
-        }`}
+        className={`absolute inset-0 bg-card transition-transform duration-300 ease-in-out ${showProfile ? 'translate-x-0' : 'translate-x-full'
+          }`}
       >
         <ProfileView
           user={currentUserData}

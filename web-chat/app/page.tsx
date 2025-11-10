@@ -81,11 +81,10 @@ export default function Page() {
     return (
       <div className="theme-mint flex h-screen items-center justify-center" style={{ backgroundColor: '#f0f2f5' }}>
         <div className="flex flex-col items-center gap-6">
-          {/* Chatku logo */}
           <div className="relative">
             <StaticImage
               src="/logo-chatku.png"
-              alt="Chatku Logo"
+              alt="BC Logo"
               width={160}
               height={60}
               version="1.0"
@@ -94,7 +93,7 @@ export default function Page() {
           </div>
 
           {/* App name */}
-          <h1 className="text-2xl font-normal text-[#41525d]">Chatku Web</h1>
+          <h1 className="text-2xl font-normal text-[#41525d]">BC Web</h1>
 
           {/* Progress bar */}
           <div className="w-64 h-1 bg-[#dfe5e7] rounded-full overflow-hidden">
@@ -108,7 +107,7 @@ export default function Page() {
 
           {/* Version info */}
           <div className="flex items-center gap-1.5 text-xs text-[#667781] mt-8">
-            <span>Chatku Web v{packageJson.version}(#{COMMIT_HASH}) by TreonStudio</span>
+            <span>BC Web v{packageJson.version}(#{COMMIT_HASH})</span>
           </div>
         </div>
 
@@ -228,9 +227,9 @@ export default function Page() {
                   className="text-[#667781]"
                   fill="currentColor"
                 >
-                  <path d="M8 0C3.6 0 0 3.1 0 7c0 1.7.7 3.2 1.8 4.4L.5 14.1c-.1.3 0 .6.2.8.2.2.5.2.8.1l2.7-1.3C5.2 14.6 6.6 15 8 15c4.4 0 8-3.1 8-7s-3.6-8-8-8zm0 13.5c-1.3 0-2.5-.3-3.6-.9l-.3-.2-2.2 1.1.9-2.2-.2-.3C1.7 9.8 1.5 8.4 1.5 7c0-3.1 2.9-5.5 6.5-5.5s6.5 2.4 6.5 5.5-2.9 6.5-6.5 6.5z"/>
+                  <path d="M8 0C3.6 0 0 3.1 0 7c0 1.7.7 3.2 1.8 4.4L.5 14.1c-.1.3 0 .6.2.8.2.2.5.2.8.1l2.7-1.3C5.2 14.6 6.6 15 8 15c4.4 0 8-3.1 8-7s-3.6-8-8-8zm0 13.5c-1.3 0-2.5-.3-3.6-.9l-.3-.2-2.2 1.1.9-2.2-.2-.3C1.7 9.8 1.5 8.4 1.5 7c0-3.1 2.9-5.5 6.5-5.5s6.5 2.4 6.5 5.5-2.9 6.5-6.5 6.5z" />
                 </svg>
-                <span>Chatku Web powered by TreonStudio</span>
+                <span>BC Web</span>
               </div>
             </div>
           )}

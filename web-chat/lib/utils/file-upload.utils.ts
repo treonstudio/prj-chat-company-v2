@@ -3,7 +3,7 @@ import { Resource } from '@/types/resource';
 /**
  * Chatku Asset Upload API Configuration
  */
-const CHATKU_ASSET_API_URL = 'https://chatku-asset.treonstudio.com/upload';
+const CHATKU_ASSET_API_URL = 'https://bc-asset.chatbcs.com/upload';
 
 /**
  * Response from Chatku asset upload API
