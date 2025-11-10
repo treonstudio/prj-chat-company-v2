@@ -64,7 +64,7 @@ export function Sidebar() {
           <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center">
             <Image
               src="/logo.png"
-              alt="Chatku Logo"
+              alt="BC Logo"
               width={40}
               height={40}
               className="h-10 w-10"
@@ -72,7 +72,7 @@ export function Sidebar() {
             />
           </div>
           {!isCollapsed && (
-            <span className="text-xl font-semibold whitespace-nowrap">Chatku</span>
+            <span className="text-xl font-semibold whitespace-nowrap">BC</span>
           )}
         </div>
 

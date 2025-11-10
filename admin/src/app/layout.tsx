@@ -8,8 +8,8 @@ const inter = Inter({ subsets: ['latin'] });
 
 // Metadata for the application
 export const metadata = {
-  title: 'Chatku by Treonstudio',
-  description: 'Chatku by Treonstudio',
+  title: 'BC Admin',
+  description: 'BC Admin',
 };
 
 // Root layout component for the application

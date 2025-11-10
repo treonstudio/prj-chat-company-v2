@@ -137,14 +137,14 @@ function Page() {
             <div className="mb-4 flex justify-center">
               <Image
                 src="/logo.png"
-                alt="Chatku Logo"
+                alt="BC Logo"
                 width={80}
                 height={80}
                 className="h-20 w-auto"
                 priority
               />
             </div>
-            <h1 className="text-3xl font-bold text-gray-700">Chatku Admin</h1>
+            <h1 className="text-3xl font-bold text-gray-700">BC Admin</h1>
             <p className="mt-2 text-sm text-gray-500">Sign in to your account</p>
           </div>
 

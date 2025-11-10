@@ -12,15 +12,7 @@ export function Footer() {
         <div className="flex flex-col items-center justify-between gap-2 text-xs text-gray-400 sm:flex-row">
           <div className="flex items-center gap-2">
             <span>
-              &copy; {currentYear} Chatku by{" "}
-              <a
-                href="https://www.treonstudio.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-500 hover:text-gray-700 hover:underline"
-              >
-                TreonStudio
-              </a>
+              &copy; {currentYear} BC Chat{" "}
               . All rights reserved.
             </span>
           </div>
