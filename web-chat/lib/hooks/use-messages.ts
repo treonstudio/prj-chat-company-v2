@@ -643,28 +643,26 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         shouldCompress,
       });
 
-      // OFFLINE QUEUE: If offline, queue upload instead of sending
+      // OFFLINE QUEUE: If offline, show error instead of queuing
+      // (Queuing isn't implemented yet, so fail fast)
       if (!navigator.onLine) {
-        console.log('[UploadQueue] User offline - queueing image upload');
-
-        // Store upload in memory (will auto-send when online)
-        pendingUploads.set(tempId, {
-          file: imageFile,
-          fileType: 'image',
-          shouldCompress,
-          userId: currentUserId,
-          userName: currentUserName,
-          userAvatar: currentUserAvatar,
+        // Update upload manager to failed
+        uploadManager.updateUpload(uploadId, {
+          status: 'failed',
+          error: 'No internet connection',
+          completedAt: Date.now(),
         });
 
-        // Update status to pending (will auto-send when online)
+        // Update optimistic message to show failure
         setOptimisticMessages(prev =>
           prev.map(msg =>
             msg.messageId === tempId
-              ? { ...msg, status: MessageStatus.PENDING, text: '🖼️ Photo (queued)' }
+              ? { ...msg, status: MessageStatus.FAILED, error: 'No internet connection' }
               : msg
           )
         );
+
+        setError('No internet connection. Please check your network and try again.');
         return;
       }
 
@@ -680,8 +678,6 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
       });
 
       // NOTE: uploading state now managed by MessageComposer internally
-      console.log('[IMAGE UPLOAD] Started');
-
       try {
         const result = await messageRepository.uploadAndSendImage(
           chatId,
@@ -708,13 +704,10 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
           tempId
         );
 
-        console.log('[IMAGE UPLOAD] Repository result:', result.status);
-
         // Clean up abort controller
         uploadAbortControllers.delete(tempId);
 
         if (result.status === 'error') {
-          console.log('[IMAGE UPLOAD] Error:', result.message);
 
           // Check if it was cancelled
           const isCancelled = result.message?.includes('cancelled');
@@ -737,8 +730,6 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
             setError(result.message);
           }
         } else if (result.status === 'success') {
-          console.log('[IMAGE UPLOAD] Success - removing optimistic message');
-
           // Update upload manager
           uploadManager.updateUpload(uploadId, {
             status: 'completed',
@@ -929,28 +920,26 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         shouldCompress,
       });
 
-      // OFFLINE QUEUE: If offline, queue upload instead of sending
+      // OFFLINE QUEUE: If offline, show error instead of queuing
+      // (Queuing isn't implemented yet, so fail fast)
       if (!navigator.onLine) {
-        console.log('[UploadQueue] User offline - queueing video upload');
-
-        // Store upload in memory (will auto-send when online)
-        pendingUploads.set(tempId, {
-          file: videoFile,
-          fileType: 'video',
-          shouldCompress,
-          userId: currentUserId,
-          userName: currentUserName,
-          userAvatar: currentUserAvatar,
+        // Update upload manager to failed
+        uploadManager.updateUpload(uploadId, {
+          status: 'failed',
+          error: 'No internet connection',
+          completedAt: Date.now(),
         });
 
-        // Update status to pending (will auto-send when online)
+        // Update optimistic message to show failure
         setOptimisticMessages(prev =>
           prev.map(msg =>
             msg.messageId === tempId
-              ? { ...msg, status: MessageStatus.PENDING, text: '🎥 Video (queued)' }
+              ? { ...msg, status: MessageStatus.FAILED, error: 'No internet connection' }
               : msg
           )
         );
+
+        setError('No internet connection. Please check your network and try again.');
         return;
       }
 
@@ -1108,31 +1097,6 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
 
       setOptimisticMessages(prev => [optimisticMessage, ...prev]);
 
-      // OFFLINE QUEUE: If offline, queue upload instead of sending
-      if (!navigator.onLine) {
-        console.log('[UploadQueue] User offline - queueing document upload');
-
-        // Store upload in memory (will auto-send when online)
-        pendingUploads.set(tempId, {
-          file: documentFile,
-          fileType: 'document',
-          shouldCompress: false,
-          userId: currentUserId,
-          userName: currentUserName,
-          userAvatar: currentUserAvatar,
-        });
-
-        // Update status to pending (will auto-send when online)
-        setOptimisticMessages(prev =>
-          prev.map(msg =>
-            msg.messageId === tempId
-              ? { ...msg, status: MessageStatus.PENDING, text: `📄 ${documentFile.name} (queued)` }
-              : msg
-          )
-        );
-        return;
-      }
-
       // Register upload in global manager
       const uploadId = uploadManager.addUpload({
         chatId,
@@ -1148,6 +1112,29 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         userAvatar: currentUserAvatar,
         shouldCompress: false,
       });
+
+      // OFFLINE QUEUE: If offline, show error instead of queuing
+      // (Queuing isn't implemented yet, so fail fast)
+      if (!navigator.onLine) {
+        // Update upload manager to failed
+        uploadManager.updateUpload(uploadId, {
+          status: 'failed',
+          error: 'No internet connection',
+          completedAt: Date.now(),
+        });
+
+        // Update optimistic message to show failure
+        setOptimisticMessages(prev =>
+          prev.map(msg =>
+            msg.messageId === tempId
+              ? { ...msg, status: MessageStatus.FAILED, error: 'No internet connection' }
+              : msg
+          )
+        );
+
+        setError('No internet connection. Please check your network and try again.');
+        return;
+      }
 
       // Update upload manager status
       uploadManager.updateUpload(uploadId, {

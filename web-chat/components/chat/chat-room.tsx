@@ -118,6 +118,21 @@ export function ChatRoom({
   // Global upload manager for persistent progress
   const uploadManager = useUploadManager()
 
+  // Clean up old stuck uploads on mount (older than 5 minutes)
+  useEffect(() => {
+    const allUploads = uploadManager.getAllActiveUploads()
+    const now = Date.now()
+    const FIVE_MINUTES = 5 * 60 * 1000
+
+    allUploads.forEach((upload) => {
+      const age = now - upload.createdAt
+      // Remove uploads that are stuck in pending/uploading for more than 5 minutes
+      if ((upload.status === 'pending' || upload.status === 'uploading') && age > FIVE_MINUTES) {
+        uploadManager.removeUpload(upload.id)
+      }
+    })
+  }, [uploadManager])
+
   // Subscribe to active uploads count for this chat to trigger re-renders
   // Use a stable selector that returns a primitive value to avoid infinite loops
   const activeUploadCount = useUploadManager((state) => {
@@ -767,8 +782,8 @@ export function ChatRoom({
     const sliced = reversed.slice(-visibleMessageCount)
 
     // Get active uploads for this chat from upload manager
-    const activeUploads = uploadManager.getUploadsByChat(chatId)
-      .filter(upload => upload.status === 'uploading' || upload.status === 'pending')
+    const allUploads = uploadManager.getUploadsByChat(chatId)
+    const activeUploads = allUploads.filter(upload => upload.status === 'uploading' || upload.status === 'pending')
 
     // Create synthetic messages for active uploads that aren't already in the message list
     const syntheticMessages: Message[] = activeUploads
