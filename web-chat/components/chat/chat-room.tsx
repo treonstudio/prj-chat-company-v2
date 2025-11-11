@@ -50,6 +50,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
+import { useUploadManager } from "@/lib/stores/upload-manager.store"
 
 const userRepository = new UserRepository()
 const chatRepository = new ChatRepository()
@@ -113,6 +114,19 @@ export function ChatRoom({
     editMessage,
     cancelUpload,
   } = useMessages(chatId, isGroupChat, currentUserId)
+
+  // Global upload manager for persistent progress
+  const uploadManager = useUploadManager()
+
+  // Subscribe to uploads map for re-rendering when uploads change
+  const uploadsMap = useUploadManager((state) => state.uploads)
+
+  // Get active uploads for this chat (memoized to avoid infinite loops)
+  const activeUploadsForThisChat = useMemo(() => {
+    return Array.from(uploadsMap.values()).filter(
+      (upload) => upload.chatId === chatId && (upload.status === 'uploading' || upload.status === 'pending')
+    )
+  }, [uploadsMap, chatId])
 
   // Load tile pattern background from cache
   const tilePatternUrl = useStaticAsset('/tile-pattern.png', '1.0')
@@ -783,9 +797,40 @@ export function ChatRoom({
   }, [loading, messages.length])
 
   // Memoize visible messages to avoid re-computing on every render (must be before scroll effects that use it)
+  // Also inject synthetic messages for active uploads in this chat
   const visibleMessages = useMemo(() => {
-    return [...messages].reverse().slice(-visibleMessageCount)
-  }, [messages, visibleMessageCount])
+    const reversed = [...messages].reverse()
+    const sliced = reversed.slice(-visibleMessageCount)
+
+    // Get active uploads for this chat from upload manager
+    const activeUploads = uploadManager.getUploadsByChat(chatId)
+      .filter(upload => upload.status === 'uploading' || upload.status === 'pending')
+
+    // Create synthetic messages for active uploads that aren't already in the message list
+    const syntheticMessages: Message[] = activeUploads
+      .filter(upload => !sliced.some(msg => msg.messageId === upload.tempMessageId))
+      .map(upload => {
+        const emoji = upload.fileType === 'image' ? '🖼️' : upload.fileType === 'video' ? '🎥' : '📄'
+        const phase = upload.phase === 'compressing' ? 'Compressing' : 'Uploading'
+        const progressText = upload.progress > 0 ? `${phase}... ${upload.progress}%` : phase
+
+        return {
+          messageId: upload.tempMessageId,
+          senderId: upload.userId,
+          senderName: upload.userName,
+          senderAvatar: upload.userAvatar,
+          text: `${emoji} ${progressText}`,
+          type: upload.fileType === 'image' ? 'IMAGE' : upload.fileType === 'video' ? 'VIDEO' : 'DOCUMENT',
+          readBy: {},
+          deliveredTo: {},
+          timestamp: { seconds: upload.createdAt / 1000, nanoseconds: 0 } as any,
+          status: MessageStatus.SENDING,
+        } as Message
+      })
+
+    // Merge synthetic messages with existing messages
+    return [...sliced, ...syntheticMessages]
+  }, [messages, visibleMessageCount, chatId, activeUploadsForThisChat])
 
   // Progressive loading with IntersectionObserver (more performant than scroll listener)
   useEffect(() => {
@@ -1547,6 +1592,24 @@ export function ChatRoom({
                       const isMe = m.senderId === currentUserId
                       const computedStatus = computeMessageStatus(m, isMe, isGroupChat, otherUserId, groupMembers)
 
+                      // Check for active upload progress from global upload manager
+                      const uploadTask = uploadManager.getUploadByTempMessageId(m.messageId)
+                      const hasActiveUpload = uploadTask && (uploadTask.status === 'uploading' || uploadTask.status === 'pending')
+
+                      // Override content and status if upload is in progress
+                      let messageContent = m.mediaUrl || m.text
+                      let messageStatus = computedStatus
+
+                      if (hasActiveUpload) {
+                        // Show progress in content
+                        if (uploadTask.progress > 0 && uploadTask.progress < 100) {
+                          const emoji = uploadTask.fileType === 'image' ? '🖼️' : uploadTask.fileType === 'video' ? '🎥' : '📄'
+                          const phase = uploadTask.phase === 'compressing' ? 'Compressing' : 'Uploading'
+                          messageContent = `${emoji} ${phase}... ${uploadTask.progress}%`
+                        }
+                        messageStatus = MessageStatus.SENDING
+                      }
+
                       return (
                         <div
                           key={m.messageId}
@@ -1557,7 +1620,7 @@ export function ChatRoom({
                             data={{
                               id: m.messageId,
                               type: messageType as any,
-                              content: m.mediaUrl || m.text,
+                              content: messageContent,
                               fileName: m.mediaMetadata?.fileName,
                               fileSize: m.mediaMetadata?.fileSize ? `${(m.mediaMetadata.fileSize / 1024 / 1024).toFixed(2)} MB` : undefined,
                               mimeType: m.mediaMetadata?.mimeType,
@@ -1569,7 +1632,7 @@ export function ChatRoom({
                               timestamp: timeStr,
                               isEdited: m.isEdited,
                               editedAt: editedTimeStr,
-                              status: computedStatus,
+                              status: messageStatus,
                               error: m.error,
                               isDeleted: m.isDeleted,
                               isForwarded: m.isForwarded,

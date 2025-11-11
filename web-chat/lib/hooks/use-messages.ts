@@ -913,6 +913,22 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
 
       setOptimisticMessages(prev => [optimisticMessage, ...prev]);
 
+      // Register upload in global manager
+      const uploadId = uploadManager.addUpload({
+        chatId,
+        isGroupChat,
+        file: videoFile,
+        fileName: videoFile.name,
+        fileSize: videoFile.size,
+        fileType: 'video',
+        mimeType: videoFile.type,
+        tempMessageId: tempId,
+        userId: currentUserId,
+        userName: currentUserName,
+        userAvatar: currentUserAvatar,
+        shouldCompress,
+      });
+
       // OFFLINE QUEUE: If offline, queue upload instead of sending
       if (!navigator.onLine) {
         console.log('[UploadQueue] User offline - queueing video upload');
@@ -941,6 +957,13 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
       // Create abort controller for this upload
       const abortController = new AbortController();
       uploadAbortControllers.set(tempId, abortController);
+
+      // Store abort controller in upload manager
+      uploadManager.updateUpload(uploadId, {
+        abortController,
+        status: 'uploading',
+        startedAt: Date.now(),
+      });
 
       // NOTE: uploading state now managed by MessageComposer internally
 
@@ -977,6 +1000,8 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
                     : msg
                 )
               );
+              // Update upload manager with phase
+              uploadManager.updateUpload(uploadId, { phase: 'compressing' });
             }
           },
           (progress) => {
@@ -988,6 +1013,11 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
                   : msg
               )
             );
+            // Update upload manager with progress
+            uploadManager.updateUpload(uploadId, {
+              progress,
+              phase: 'uploading'
+            });
           },
           abortController.signal,
           tempId
@@ -998,6 +1028,14 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
 
         if (result.status === 'error') {
           const isCancelled = result.message?.includes('cancelled');
+
+          // Update upload manager
+          uploadManager.updateUpload(uploadId, {
+            status: isCancelled ? 'cancelled' : 'failed',
+            error: result.message,
+            completedAt: Date.now(),
+          });
+
           setOptimisticMessages(prev =>
             prev.map(msg =>
               msg.messageId === tempId
@@ -1009,14 +1047,34 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
             setError(result.message);
           }
         } else {
+          // Update upload manager
+          uploadManager.updateUpload(uploadId, {
+            status: 'completed',
+            progress: 100,
+            completedAt: Date.now(),
+          });
+
           // SUCCESS: Remove optimistic message immediately
           // Real message will appear from Firestore listener
           setOptimisticMessages(prev =>
             prev.filter(msg => msg.messageId !== tempId)
           );
+
+          // Remove completed upload after a short delay
+          setTimeout(() => {
+            uploadManager.removeUpload(uploadId);
+          }, 3000);
         }
       } catch (error) {
         uploadAbortControllers.delete(tempId);
+
+        // Update upload manager
+        uploadManager.updateUpload(uploadId, {
+          status: 'failed',
+          error: 'Upload failed',
+          completedAt: Date.now(),
+        });
+
         setOptimisticMessages(prev =>
           prev.map(msg =>
             msg.messageId === tempId
@@ -1026,7 +1084,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         );
       }
     },
-    [chatId, isGroupChat, uploadAbortControllers, pendingUploads]
+    [chatId, isGroupChat, uploadAbortControllers, pendingUploads, uploadManager]
   );
 
   const sendDocument = useCallback(
@@ -1075,6 +1133,28 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         return;
       }
 
+      // Register upload in global manager
+      const uploadId = uploadManager.addUpload({
+        chatId,
+        isGroupChat,
+        file: documentFile,
+        fileName: documentFile.name,
+        fileSize: documentFile.size,
+        fileType: 'document',
+        mimeType: documentFile.type,
+        tempMessageId: tempId,
+        userId: currentUserId,
+        userName: currentUserName,
+        userAvatar: currentUserAvatar,
+        shouldCompress: false,
+      });
+
+      // Update upload manager status
+      uploadManager.updateUpload(uploadId, {
+        status: 'uploading',
+        startedAt: Date.now(),
+      });
+
       // NOTE: uploading state now managed by MessageComposer internally
 
       try {
@@ -1085,12 +1165,30 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
           documentFile,
           isGroupChat,
           currentUserAvatar,
-          undefined,
+          (progress) => {
+            // Update message with upload progress
+            setOptimisticMessages(prev =>
+              prev.map(msg =>
+                msg.messageId === tempId
+                  ? { ...msg, text: `📄 Uploading... ${progress}%` }
+                  : msg
+              )
+            );
+            // Update upload manager with progress
+            uploadManager.updateUpload(uploadId, { progress });
+          },
           undefined,
           tempId
         );
 
         if (result.status === 'error') {
+          // Update upload manager
+          uploadManager.updateUpload(uploadId, {
+            status: 'failed',
+            error: result.message,
+            completedAt: Date.now(),
+          });
+
           setOptimisticMessages(prev =>
             prev.map(msg =>
               msg.messageId === tempId
@@ -1100,13 +1198,32 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
           );
           setError(result.message);
         } else {
+          // Update upload manager
+          uploadManager.updateUpload(uploadId, {
+            status: 'completed',
+            progress: 100,
+            completedAt: Date.now(),
+          });
+
           // SUCCESS: Remove optimistic message immediately
           // Real message will appear from Firestore listener
           setOptimisticMessages(prev =>
             prev.filter(msg => msg.messageId !== tempId)
           );
+
+          // Remove completed upload after a short delay
+          setTimeout(() => {
+            uploadManager.removeUpload(uploadId);
+          }, 3000);
         }
       } catch (error) {
+        // Update upload manager
+        uploadManager.updateUpload(uploadId, {
+          status: 'failed',
+          error: 'Upload failed',
+          completedAt: Date.now(),
+        });
+
         setOptimisticMessages(prev =>
           prev.map(msg =>
             msg.messageId === tempId
@@ -1116,7 +1233,7 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
         );
       }
     },
-    [chatId, isGroupChat, pendingUploads]
+    [chatId, isGroupChat, pendingUploads, uploadManager]
   );
 
   const markAsRead = useCallback(

@@ -693,7 +693,7 @@ const ChatMessageComponent = function ChatMessage({
                             {data.status === 'SENDING' ? (
                               <>
                                 {/* Upload/Compress indicator */}
-                                <div className="flex flex-col items-center gap-3">
+                                <div className="flex flex-col items-center gap-3 w-full px-8">
                                   <div className="relative">
                                     {/* Spinner */}
                                     <div className="h-12 w-12 animate-spin rounded-full border-4 border-muted-foreground/20 border-t-primary" />
@@ -715,8 +715,21 @@ const ChatMessageComponent = function ChatMessage({
                                     </div>
                                   </div>
                                   <div className="text-xs text-muted-foreground font-medium">
-                                    Uploading image...
+                                    {data.content && data.content.includes('%') ? data.content.replace('🖼️ ', '') : 'Uploading image...'}
                                   </div>
+                                  {/* Progress bar */}
+                                  {data.content && data.content.includes('%') && (
+                                    <div className="w-full max-w-[200px]">
+                                      <div className="h-2 bg-muted-foreground/20 rounded-full overflow-hidden">
+                                        <div
+                                          className="h-full bg-primary transition-all duration-300 ease-out rounded-full"
+                                          style={{
+                                            width: `${parseInt(data.content.match(/(\d+)%/)?.[1] || '0')}%`
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
                                   {/* Cancel button */}
                                   {onCancel && (
                                     <Button
@@ -868,7 +881,7 @@ const ChatMessageComponent = function ChatMessage({
                           {data.status === 'SENDING' ? (
                             <>
                               {/* Upload/Compress indicator */}
-                              <div className="flex flex-col items-center gap-3">
+                              <div className="flex flex-col items-center gap-3 w-full px-8">
                                 <div className="relative">
                                   {/* Spinner */}
                                   <div className="h-12 w-12 animate-spin rounded-full border-4 border-muted-foreground/20 border-t-primary" />
@@ -916,6 +929,19 @@ const ChatMessageComponent = function ChatMessage({
                                 <div className="text-xs text-muted-foreground font-medium">
                                   {'content' in data ? data.content.replace('🎥 ', '') : 'Uploading video...'}
                                 </div>
+                                {/* Progress bar */}
+                                {('content' in data && data.content.includes('%')) && (
+                                  <div className="w-full max-w-[200px]">
+                                    <div className="h-2 bg-muted-foreground/20 rounded-full overflow-hidden">
+                                      <div
+                                        className="h-full bg-primary transition-all duration-300 ease-out rounded-full"
+                                        style={{
+                                          width: `${parseInt(data.content.match(/(\d+)%/)?.[1] || '0')}%`
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
                                 {/* Cancel button */}
                                 {onCancel && (
                                   <Button
@@ -1061,7 +1087,22 @@ const ChatMessageComponent = function ChatMessage({
                         </div>
                         {data.status === 'SENDING' ? (
                           <div className="flex flex-col gap-2 mt-2">
-                            <div className="text-xs opacity-70">Uploading...</div>
+                            <div className="text-xs opacity-70">
+                              {data.content && data.content.includes('%') ? data.content.replace('📄 ', '') : 'Uploading...'}
+                            </div>
+                            {/* Progress bar */}
+                            {data.content && data.content.includes('%') && (
+                              <div className="w-full">
+                                <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-white transition-all duration-300 ease-out rounded-full"
+                                    style={{
+                                      width: `${parseInt(data.content.match(/(\d+)%/)?.[1] || '0')}%`
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            )}
                             {onCancel && (
                               <Button
                                 size="sm"
