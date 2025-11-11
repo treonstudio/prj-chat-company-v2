@@ -39,7 +39,13 @@ export function MediaPreviewModal({
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [mounted, setMounted] = useState(false)
+  const [imageLoading, setImageLoading] = useState(true)
+  const [loadProgress, setLoadProgress] = useState(0)
+  const [imageObjectUrl, setImageObjectUrl] = useState<string | null>(null)
+  const [videoLoading, setVideoLoading] = useState(true)
+  const [videoObjectUrl, setVideoObjectUrl] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const xhrRef = useRef<XMLHttpRequest | null>(null)
 
   // Ensure we're on the client side
   useEffect(() => {
@@ -52,8 +58,131 @@ export function MediaPreviewModal({
     if (isOpen) {
       setScale(1)
       setPosition({ x: 0, y: 0 })
+      setImageLoading(true)
+      setVideoLoading(true)
+      setLoadProgress(0)
+      setImageObjectUrl(null)
+      setVideoObjectUrl(null)
     }
   }, [isOpen, mediaUrl])
+
+  // Download image with real progress tracking
+  useEffect(() => {
+    if (!isOpen || mediaType !== 'image') return
+
+    // Clean up previous download
+    if (xhrRef.current) {
+      xhrRef.current.abort()
+    }
+    if (imageObjectUrl) {
+      URL.revokeObjectURL(imageObjectUrl)
+    }
+
+    setImageLoading(true)
+    setLoadProgress(0)
+
+    const xhr = new XMLHttpRequest()
+    xhrRef.current = xhr
+
+    xhr.open('GET', mediaUrl, true)
+    xhr.responseType = 'blob'
+
+    // Track download progress
+    xhr.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percentComplete = Math.round((event.loaded / event.total) * 100)
+        setLoadProgress(percentComplete)
+      }
+    }
+
+    // Handle successful download
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        const blob = xhr.response
+        const objectUrl = URL.createObjectURL(blob)
+        setImageObjectUrl(objectUrl)
+        setLoadProgress(100)
+        setImageLoading(false)
+      }
+    }
+
+    // Handle errors
+    xhr.onerror = () => {
+      setImageLoading(false)
+      setLoadProgress(0)
+    }
+
+    xhr.send()
+
+    // Cleanup on unmount or when mediaUrl changes
+    return () => {
+      if (xhrRef.current) {
+        xhrRef.current.abort()
+      }
+      if (imageObjectUrl) {
+        URL.revokeObjectURL(imageObjectUrl)
+      }
+    }
+  }, [isOpen, mediaUrl, mediaType])
+
+  // Download video with real progress tracking
+  useEffect(() => {
+    if (!isOpen || mediaType !== 'video') return
+
+    // Clean up previous download
+    if (xhrRef.current) {
+      xhrRef.current.abort()
+    }
+    if (videoObjectUrl) {
+      URL.revokeObjectURL(videoObjectUrl)
+    }
+
+    setVideoLoading(true)
+    setLoadProgress(0)
+
+    const xhr = new XMLHttpRequest()
+    xhrRef.current = xhr
+
+    xhr.open('GET', mediaUrl, true)
+    xhr.responseType = 'blob'
+
+    // Track download progress
+    xhr.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percentComplete = Math.round((event.loaded / event.total) * 100)
+        setLoadProgress(percentComplete)
+      }
+    }
+
+    // Handle successful download
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        const blob = xhr.response
+        const objectUrl = URL.createObjectURL(blob)
+        setVideoObjectUrl(objectUrl)
+        setLoadProgress(100)
+        setVideoLoading(false)
+      }
+    }
+
+    // Handle errors
+    xhr.onerror = () => {
+      setVideoLoading(false)
+      setLoadProgress(0)
+    }
+
+    xhr.send()
+
+    // Cleanup on unmount or when mediaUrl changes
+    return () => {
+      if (xhrRef.current) {
+        xhrRef.current.abort()
+      }
+      if (videoObjectUrl) {
+        URL.revokeObjectURL(videoObjectUrl)
+      }
+    }
+  }, [isOpen, mediaUrl, mediaType])
 
   // Handle zoom in/out
   const handleZoomIn = () => {
@@ -324,35 +453,73 @@ export function MediaPreviewModal({
         }}
       >
         {mediaType === "image" ? (
-          <div
-            className="relative transition-transform duration-200 ease-out"
-            style={{
-              transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-              maxWidth: "100%",
-              maxHeight: "100%",
-            }}
-          >
-            <Image
-              src={mediaUrl}
-              alt="Preview"
-              width={1920}
-              height={1080}
-              className="object-contain max-w-[100vw] max-h-[100vh] select-none"
-              draggable={false}
-              priority
-            />
-          </div>
+          <>
+            {/* Loading progress bar */}
+            {imageLoading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 z-10">
+                <div className="w-64 space-y-3">
+                  <div className="h-2 bg-white/20 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-white transition-all duration-300 ease-out"
+                      style={{ width: `${loadProgress}%` }}
+                    />
+                  </div>
+                  <p className="text-white text-sm text-center">{loadProgress}%</p>
+                </div>
+              </div>
+            )}
+
+            {imageObjectUrl && (
+              <div
+                className="relative transition-transform duration-200 ease-out"
+                style={{
+                  transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                }}
+              >
+                <Image
+                  src={imageObjectUrl}
+                  alt="Preview"
+                  width={1920}
+                  height={1080}
+                  className="object-contain max-w-[60vw] max-h-[60vh] select-none"
+                  draggable={false}
+                  unoptimized
+                />
+              </div>
+            )}
+          </>
         ) : (
-          <video
-            src={mediaUrl}
-            controls
-            className="max-w-full max-h-full"
-            style={{
-              transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-            }}
-          >
-            Your browser does not support the video tag.
-          </video>
+          <>
+            {/* Loading progress bar for video */}
+            {videoLoading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 z-10">
+                <div className="w-64 space-y-3">
+                  <div className="h-2 bg-white/20 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-white transition-all duration-300 ease-out"
+                      style={{ width: `${loadProgress}%` }}
+                    />
+                  </div>
+                  <p className="text-white text-sm text-center">{loadProgress}%</p>
+                </div>
+              </div>
+            )}
+
+            {videoObjectUrl && (
+              <video
+                src={videoObjectUrl}
+                controls
+                className="max-w-[60vw] max-h-[60vh]"
+                style={{
+                  transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                }}
+              >
+                Your browser does not support the video tag.
+              </video>
+            )}
+          </>
         )}
       </div>
 
