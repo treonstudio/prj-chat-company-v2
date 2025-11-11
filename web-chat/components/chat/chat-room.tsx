@@ -118,15 +118,20 @@ export function ChatRoom({
   // Global upload manager for persistent progress
   const uploadManager = useUploadManager()
 
-  // Subscribe to uploads map for re-rendering when uploads change
-  const uploadsMap = useUploadManager((state) => state.uploads)
-
-  // Get active uploads for this chat (memoized to avoid infinite loops)
-  const activeUploadsForThisChat = useMemo(() => {
-    return Array.from(uploadsMap.values()).filter(
+  // Subscribe to active uploads count for this chat to trigger re-renders
+  // Use a stable selector that returns a primitive value to avoid infinite loops
+  const activeUploadCount = useUploadManager((state) => {
+    return Array.from(state.uploads.values()).filter(
       (upload) => upload.chatId === chatId && (upload.status === 'uploading' || upload.status === 'pending')
+    ).length
+  })
+
+  // Get active uploads for this chat (stable reference unless count changes)
+  const activeUploadsForThisChat = useMemo(() => {
+    return uploadManager.getUploadsByChat(chatId).filter(
+      (upload) => upload.status === 'uploading' || upload.status === 'pending'
     )
-  }, [uploadsMap, chatId])
+  }, [uploadManager, chatId, activeUploadCount])
 
   // Load tile pattern background from cache
   const tilePatternUrl = useStaticAsset('/tile-pattern.png', '1.0')
@@ -150,8 +155,8 @@ export function ChatRoom({
         // Don't close if user is typing in an input or textarea
         const activeElement = document.activeElement
         const isInputFocused = activeElement?.tagName === 'INPUT' ||
-                              activeElement?.tagName === 'TEXTAREA' ||
-                              activeElement?.getAttribute('contenteditable') === 'true'
+          activeElement?.tagName === 'TEXTAREA' ||
+          activeElement?.getAttribute('contenteditable') === 'true'
 
         // Don't close if any dialog/modal is open
         const isDialogOpen = document.querySelector('[role="dialog"]') !== null
@@ -418,12 +423,10 @@ export function ChatRoom({
     let unsubscribeGroupMembers: (() => void)[] = []
 
     async function loadRoomInfo() {
-      console.log('[ChatRoom] Loading room info:', { chatId, isGroupChat })
 
       if (isGroupChat) {
         // For group chats, fetch group info
         const groupResult = await chatRepository.getGroupChat(chatId)
-        console.log('[ChatRoom] Group chat result:', groupResult)
 
         if (groupResult.status === 'success') {
           // CRITICAL: Batch all initial state updates to prevent flickering
@@ -432,12 +435,6 @@ export function ChatRoom({
             setRoomTitle(groupResult.data.name)
             setRoomAvatar(groupResult.data.avatar || groupResult.data.avatarUrl || '')
             setGroupAdmins(groupResult.data.admins || [])
-
-            console.log('[ChatRoom] Group info loaded:', {
-              name: groupResult.data.name,
-              participants: groupResult.data.participants,
-              admins: groupResult.data.admins,
-            })
 
             // Check if current user is still a participant
             const isStillParticipant = groupResult.data.participants.includes(currentUserId)
@@ -456,13 +453,11 @@ export function ChatRoom({
             userRepository.getUserById(userId)
           )
           const memberResults = await Promise.all(memberPromises)
-          console.log('[ChatRoom] Member results:', memberResults)
 
           const members = memberResults.map((r, index) => {
             if (r.status === 'success') {
               // If displayName is missing, set to "Deleted User"
               if (!r.data.displayName || r.data.displayName.trim() === '') {
-                console.log('[ChatRoom] Member has no displayName:', r.data.userId)
                 return {
                   ...r.data,
                   displayName: 'Deleted User',
@@ -472,7 +467,6 @@ export function ChatRoom({
               return r.data
             } else {
               // If user not found, create placeholder
-              console.log('[ChatRoom] Member not found:', groupResult.data.participants[index])
               return {
                 userId: groupResult.data.participants[index],
                 displayName: 'Deleted User',
@@ -482,7 +476,6 @@ export function ChatRoom({
               } as User
             }
           })
-          console.log('[ChatRoom] All members loaded:', members)
 
           // CRITICAL: Use startTransition to prevent blocking render
           startTransition(() => {
@@ -490,7 +483,6 @@ export function ChatRoom({
           })
 
           // Setup real-time listeners for each group member
-          console.log('[ChatRoom] Setting up real-time listeners for group members')
           groupResult.data.participants.forEach((userId) => {
             const unsubscribe = userRepository.listenToUser(
               userId,
@@ -531,7 +523,6 @@ export function ChatRoom({
                 })
               },
               (error: string) => {
-                console.error('[ChatRoom] Error listening to group member:', error)
                 // Mark user as deleted on error
                 setGroupMembers(prevMembers => {
                   return prevMembers.map(member => {
@@ -558,7 +549,6 @@ export function ChatRoom({
         // For direct chats, get the other user's info and listen for changes
         const parts = chatId.replace('direct_', '').split('_')
         const foundOtherUserId = parts.find(id => id !== currentUserId)
-        console.log('[ChatRoom] Direct chat - Other user ID:', foundOtherUserId)
 
         if (foundOtherUserId) {
           startTransition(() => {
@@ -596,7 +586,6 @@ export function ChatRoom({
             },
             (error: string) => {
               // User not found or error
-              console.error('[ChatRoom] Error listening to user:', error)
               startTransition(() => {
                 setRoomTitle('Deleted User')
                 setRoomAvatar('')
@@ -605,7 +594,6 @@ export function ChatRoom({
             }
           )
         } else {
-          console.error('[ChatRoom] Could not find other user ID in chat ID')
           setOtherUserId(null)
         }
       }
@@ -631,8 +619,6 @@ export function ChatRoom({
   useEffect(() => {
     if (!isGroupChat) return
 
-    console.log('[ChatRoom] Setting up real-time listener for group:', chatId)
-
     // Track previous values to prevent unnecessary re-renders
     let prevGroupData = {
       admins: [] as string[],
@@ -647,7 +633,6 @@ export function ChatRoom({
       (snapshot) => {
         if (!snapshot.exists()) {
           // Group deleted
-          console.log('[ChatRoom] Group deleted:', chatId)
           toast.info('Grup telah dihapus')
           onLeaveGroup?.()
           return
@@ -659,14 +644,6 @@ export function ChatRoom({
         const admins = groupData?.admins || []
         const name = groupData?.name || ''
         const avatar = groupData?.avatar || groupData?.avatarUrl || ''
-
-        console.log('[ChatRoom] Real-time group update:', {
-          participants,
-          admins,
-          participantsMap,
-          currentUserInParticipants: participants.includes(currentUserId),
-          currentUserInParticipantsMap: !!participantsMap[currentUserId]
-        })
 
         // CRITICAL: Only update admins if changed (prevent re-render)
         const adminsChanged = JSON.stringify(prevGroupData.admins) !== JSON.stringify(admins)
@@ -696,13 +673,12 @@ export function ChatRoom({
         // Check if current user is still in participantsMap
         if (!participantsMap[currentUserId] && !participants.includes(currentUserId)) {
           // User was removed from group
-          console.log('[ChatRoom] Current user removed from group')
           toast.info('Anda telah dikeluarkan dari grup ini')
           onLeaveGroup?.()
         }
       },
       (error) => {
-        console.error('[ChatRoom] Error listening to group changes:', error)
+
       }
     )
 
@@ -714,8 +690,6 @@ export function ChatRoom({
   useEffect(() => {
     if (!isGroupChat) return
     if (!isOnline) return // Only trigger when back online
-
-    console.log('[ChatRoom] Network reconnected - syncing group data')
 
     // Force re-fetch group data from Firestore
     const groupRef = doc(db(), 'groupChats', chatId)
@@ -743,9 +717,8 @@ export function ChatRoom({
           }
         })
 
-        console.log('[ChatRoom] Group data synced after reconnect:', { admins, name })
       } catch (error) {
-        console.error('[ChatRoom] Failed to sync group data:', error)
+
       }
     }
 
@@ -757,17 +730,6 @@ export function ChatRoom({
   // Mark messages as read when viewing
   useEffect(() => {
     if (messages.length > 0 && !loading) {
-      console.log('[ChatRoom] Messages loaded:', {
-        count: messages.length,
-        messages: messages.map(m => ({
-          messageId: m.messageId,
-          senderId: m.senderId,
-          senderName: m.senderName,
-          type: m.type,
-          timestamp: m.timestamp,
-          isDeleted: m.isDeleted
-        }))
-      })
       markAsRead(currentUserId)
     }
   }, [messages.length, loading, currentUserId, markAsRead])
@@ -937,7 +899,6 @@ export function ChatRoom({
           scrollToEnd() // One final scroll
           hasScrolledToBottom.current = true // Prevent re-scrolling on this chat
           isInitialLoad.current = false
-          console.log('[ChatRoom] Scrolled to bottom for chat:', chatId)
         }, 350)
 
         return () => {
@@ -978,7 +939,7 @@ export function ChatRoom({
 
     // Check if we have a new message (either length increased OR messageId changed)
     const hasNewMessage = messages.length > prevMessagesLengthRef.current ||
-                         (newestMessage && newestMessage.messageId !== lastMessageIdRef.current)
+      (newestMessage && newestMessage.messageId !== lastMessageIdRef.current)
 
     if (hasNewMessage && newestMessage && newestMessage.senderId === currentUserId) {
       // Scroll to bottom for messages sent by current user
@@ -1332,13 +1293,6 @@ export function ChatRoom({
         try {
           const result = await userRepository.getUserById(otherUserId)
           if (result.status === 'success') {
-            console.log('[ChatRoom] User data for profile:', {
-              userId: result.data.userId,
-              displayName: result.data.displayName,
-              imageURL: result.data.imageURL,
-              imageUrl: result.data.imageUrl,
-              hasImage: !!(result.data.imageURL || result.data.imageUrl)
-            })
             setSelectedUser(result.data)
             setShowUserProfileDialog(true)
           }

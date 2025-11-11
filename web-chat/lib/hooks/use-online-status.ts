@@ -14,7 +14,9 @@ export function useOnlineStatus(): ConnectionStatus {
 
   useEffect(() => {
     // Skip on server-side
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined') {
+      return;
+    }
 
     const updateOnlineStatus = () => {
       setStatus((prev) => ({
@@ -27,15 +29,17 @@ export function useOnlineStatus(): ConnectionStatus {
       // @ts-ignore - NetworkInformation API might not be available in all browsers
       const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
 
+
       if (connection) {
         const effectiveType = connection.effectiveType;
-        const isSlow = effectiveType === 'slow-2g' || effectiveType === '2g';
+        const isSlow = effectiveType === 'slow-2g' || effectiveType === '2g' || effectiveType === '3g';
 
         setStatus((prev) => ({
           ...prev,
           isSlow,
           effectiveType,
         }));
+      } else {
       }
     };
 

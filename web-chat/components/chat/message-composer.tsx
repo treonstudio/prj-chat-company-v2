@@ -58,12 +58,6 @@ function MessageComposerComponent({
   const [internalUploading, setInternalUploading] = useState(false);
   const uploading = internalUploading; // ONLY use internal state
 
-  // Debug: Log uploading state changes
-  useEffect(() => {
-    console.log('[MessageComposer] uploading state changed:', uploading, 'internal:', internalUploading, 'parent:', parentUploading, 'IGNORED');
-    console.log('[MessageComposer] Button should be:', uploading ? 'DISABLED' : 'ENABLED');
-  }, [uploading, internalUploading, parentUploading]);
-
   // Debug: Check actual DOM state after render
   useLayoutEffect(() => {
     if (attachButtonRef.current) {
@@ -81,7 +75,6 @@ function MessageComposerComponent({
       flushSync(() => {
         setDropdownKey(prev => prev + 1);
       });
-      console.log('[MessageComposer] Force DropdownMenu re-mount - upload completed');
     }
     prevUploadingRef.current = uploading;
   }, [uploading]);
@@ -325,12 +318,10 @@ function MessageComposerComponent({
       flushSync(() => {
         setInternalUploading(true);
       });
-      console.log('[MessageComposer] Setting internal uploading=true for image');
 
       try {
         await onSendImage(fileToSend, shouldCompress);
       } finally {
-        console.log('[MessageComposer] Setting internal uploading=false for image');
         flushSync(() => {
           setInternalUploading(false);
         });
@@ -404,12 +395,10 @@ function MessageComposerComponent({
       flushSync(() => {
         setInternalUploading(true);
       });
-      console.log('[MessageComposer] Setting internal uploading=true for video');
 
       try {
         await onSendVideo(fileToSend, shouldCompress);
       } finally {
-        console.log('[MessageComposer] Setting internal uploading=false for video');
         flushSync(() => {
           setInternalUploading(false);
         });
@@ -502,12 +491,10 @@ function MessageComposerComponent({
         flushSync(() => {
           setInternalUploading(true);
         });
-        console.log('[MessageComposer] Setting internal uploading=true for document');
 
         try {
           await onSendDocument(file);
         } finally {
-          console.log('[MessageComposer] Setting internal uploading=false for document');
           flushSync(() => {
             setInternalUploading(false);
           });
@@ -536,8 +523,6 @@ function MessageComposerComponent({
       setInternalUploading(true);
     });
 
-    console.log(`[MessageComposer] Uploading ${files.length} ${fileType}(s) with compression=${shouldCompress}`);
-
     try {
       if (fileType === 'image') {
         // For images, use IMAGE_GROUP (single message with multiple images)
@@ -550,7 +535,6 @@ function MessageComposerComponent({
           setCurrentUploadIndex(i);
 
           try {
-            console.log(`[MessageComposer] Uploading video ${i + 1}/${files.length}: ${file.name}`);
             await onSendVideo(file, shouldCompress);
 
             // Small delay between uploads
@@ -558,14 +542,12 @@ function MessageComposerComponent({
               await new Promise(resolve => setTimeout(resolve, 300));
             }
           } catch (error) {
-            console.error(`[MessageComposer] Error uploading video ${file.name}:`, error);
             toast.error(`Gagal mengupload ${file.name}`);
           }
         }
         toast.success(`${files.length} video berhasil diupload`);
       }
     } catch (error) {
-      console.error('[MessageComposer] Bulk upload error:', error);
       toast.error('Gagal mengupload file');
     } finally {
       // Reset state
@@ -584,15 +566,12 @@ function MessageComposerComponent({
       setInternalUploading(true);
     });
 
-    console.log(`[MessageComposer] Uploading ${files.length} document(s)`);
-
     // Upload files sequentially
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       setCurrentUploadIndex(i);
 
       try {
-        console.log(`[MessageComposer] Uploading document ${i + 1}/${files.length}: ${file.name}`);
         await onSendDocument(file);
 
         // Small delay between uploads
@@ -600,7 +579,6 @@ function MessageComposerComponent({
           await new Promise(resolve => setTimeout(resolve, 300));
         }
       } catch (error) {
-        console.error(`[MessageComposer] Error uploading document ${file.name}:`, error);
         toast.error(`Gagal mengupload ${file.name}`);
       }
     }
@@ -610,13 +588,9 @@ function MessageComposerComponent({
       setInternalUploading(false);
       setCurrentUploadIndex(0);
     });
-
-    console.log('[MessageComposer] All documents uploaded successfully');
     toast.success(`${files.length} dokumen berhasil diupload`);
   };
 
-  console.log("[MessageComposer] uploading state:", uploading);
-  console.log("[MessageComposer] disabled state:", disabled);
 
   return (
     <>
@@ -727,13 +701,12 @@ function MessageComposerComponent({
         {featureFlags.allowSendText && message.length > MAX_TEXT_LENGTH * 0.8 && (
           <div className="flex justify-end px-2">
             <span
-              className={`text-[10px] ${
-                message.length > MAX_TEXT_LENGTH * 0.95
-                  ? 'text-destructive font-semibold'
-                  : message.length > MAX_TEXT_LENGTH * 0.9
+              className={`text-[10px] ${message.length > MAX_TEXT_LENGTH * 0.95
+                ? 'text-destructive font-semibold'
+                : message.length > MAX_TEXT_LENGTH * 0.9
                   ? 'text-orange-500 font-medium'
                   : 'text-muted-foreground'
-              }`}
+                }`}
             >
               {message.length.toLocaleString()} / {MAX_TEXT_LENGTH.toLocaleString()}
             </span>
