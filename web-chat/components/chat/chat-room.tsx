@@ -284,13 +284,15 @@ export function ChatRoom({
     if (!isMe) return message.status
 
     // If message has explicit PENDING, SENDING, or FAILED status, respect it
-    // Don't compute based on readBy for these statuses
+    // These are temporary states that shouldn't be overridden
     if (message.status === MessageStatus.PENDING ||
       message.status === MessageStatus.SENDING ||
       message.status === MessageStatus.FAILED) {
       return message.status
     }
 
+    // For SENT, DELIVERED, READ - compute based on readBy/deliveredTo
+    // This allows status to progress from SENT → DELIVERED → READ
     const readBy = message.readBy || {}
     const deliveredTo = message.deliveredTo || {}
     const readByUserIds = Object.keys(readBy)

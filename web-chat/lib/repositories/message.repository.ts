@@ -272,6 +272,7 @@ export class MessageRepository {
         senderName: finalSenderName, // Use the populated senderName
         timestamp,
         createdAt: timestamp,
+        status: MessageStatus.SENT, // Always set SENT status when saving to Firestore
       };
 
       // Remove undefined fields
