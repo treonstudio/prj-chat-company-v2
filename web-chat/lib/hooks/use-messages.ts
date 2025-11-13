@@ -661,8 +661,6 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
               : msg
           )
         );
-
-        setError('No internet connection. Please check your network and try again.');
         return;
       }
 
@@ -726,9 +724,6 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
                 : msg
             )
           );
-          if (!isCancelled) {
-            setError(result.message);
-          }
         } else if (result.status === 'success') {
           // Update upload manager
           uploadManager.updateUpload(uploadId, {
@@ -938,8 +933,6 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
               : msg
           )
         );
-
-        setError('No internet connection. Please check your network and try again.');
         return;
       }
 
@@ -1032,9 +1025,6 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
                 : msg
             )
           );
-          if (!isCancelled) {
-            setError(result.message);
-          }
         } else {
           // Update upload manager
           uploadManager.updateUpload(uploadId, {
@@ -1131,8 +1121,6 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
               : msg
           )
         );
-
-        setError('No internet connection. Please check your network and try again.');
         return;
       }
 
@@ -1183,7 +1171,6 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
                 : msg
             )
           );
-          setError(result.message);
         } else {
           // Update upload manager
           uploadManager.updateUpload(uploadId, {
@@ -1252,17 +1239,31 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
 
   const retryMessage = useCallback(
     async (messageId: string) => {
+      console.log('[RETRY] Starting retry for message:', messageId);
       const failedMessage = optimisticMessages.find(msg => msg.messageId === messageId);
-      if (!failedMessage || failedMessage.status !== MessageStatus.FAILED) return;
+      console.log('[RETRY] Failed message:', failedMessage);
 
-      // Update status to sending
-      setOptimisticMessages(prev =>
-        prev.map(msg =>
-          msg.messageId === messageId
-            ? { ...msg, status: MessageStatus.SENDING, error: undefined }
-            : msg
-        )
-      );
+      if (!failedMessage || failedMessage.status !== MessageStatus.FAILED) {
+        console.log('[RETRY] Not a failed message, aborting');
+        return;
+      }
+
+      // Find the failed upload in upload manager
+      const failedUpload = uploadManager.getUploadByTempMessageId(messageId);
+      console.log('[RETRY] Failed upload from manager:', failedUpload);
+
+      if (!failedUpload) {
+        console.log('[RETRY] No upload found in manager, cannot retry file upload');
+        return;
+      }
+
+      if (!failedUpload.file) {
+        console.log('[RETRY] File not available in upload manager (might be after page refresh)');
+        return;
+      }
+
+      // Remove the failed message from optimistic messages
+      setOptimisticMessages(prev => prev.filter(msg => msg.messageId !== messageId));
 
       // Retry based on message type
       if (failedMessage.type === MessageType.TEXT) {
@@ -1272,12 +1273,50 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
           failedMessage.text,
           failedMessage.senderAvatar
         );
-      }
+      } else if (failedMessage.type === MessageType.IMAGE) {
+        console.log('[RETRY] Retrying image upload, shouldCompress:', failedUpload.shouldCompress);
 
-      // Remove the failed message after retry
-      setOptimisticMessages(prev => prev.filter(msg => msg.messageId !== messageId));
+        // Remove the failed upload from manager before retrying
+        uploadManager.removeUpload(failedUpload.id);
+
+        // Retry image upload (userId, userName, file, shouldCompress, avatar)
+        await sendImage(
+          failedMessage.senderId,
+          failedMessage.senderName,
+          failedUpload.file as File,
+          failedUpload.shouldCompress || false,
+          failedUpload.userAvatar
+        );
+      } else if (failedMessage.type === MessageType.VIDEO) {
+        console.log('[RETRY] Retrying video upload, shouldCompress:', failedUpload.shouldCompress);
+
+        // Remove the failed upload from manager before retrying
+        uploadManager.removeUpload(failedUpload.id);
+
+        // Retry video upload (userId, userName, file, shouldCompress, avatar)
+        await sendVideo(
+          failedMessage.senderId,
+          failedMessage.senderName,
+          failedUpload.file as File,
+          failedUpload.shouldCompress || false,
+          failedUpload.userAvatar
+        );
+      } else if (failedMessage.type === MessageType.DOCUMENT) {
+        console.log('[RETRY] Retrying document upload');
+
+        // Remove the failed upload from manager before retrying
+        uploadManager.removeUpload(failedUpload.id);
+
+        // Retry document upload (userId, userName, file, avatar)
+        await sendDocument(
+          failedMessage.senderId,
+          failedMessage.senderName,
+          failedUpload.file as File,
+          failedUpload.userAvatar
+        );
+      }
     },
-    [optimisticMessages, sendTextMessage, chatId, isGroupChat]
+    [optimisticMessages, sendTextMessage, sendImage, sendVideo, sendDocument, uploadManager, chatId, isGroupChat]
   );
 
   const deleteMessage = useCallback(

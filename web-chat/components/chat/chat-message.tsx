@@ -744,6 +744,52 @@ const ChatMessageComponent = function ChatMessage({
                                   )}
                                 </div>
                               </>
+                            ) : data.status === 'FAILED' && isMe && onRetry ? (
+                              <>
+                                {/* Failed upload indicator */}
+                                <div className="flex flex-col items-center gap-3 w-full px-8">
+                                  <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
+                                    <svg
+                                      className="h-6 w-6 text-destructive"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                      />
+                                    </svg>
+                                  </div>
+                                  <div className="text-xs text-destructive font-medium">
+                                    {data.error || 'Upload failed'}
+                                  </div>
+                                  {/* Retry button */}
+                                  <Button
+                                    size="sm"
+                                    variant="default"
+                                    onClick={() => onRetry(data.id)}
+                                    className="mt-2"
+                                  >
+                                    <svg
+                                      className="h-3 w-3 mr-1"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                      />
+                                    </svg>
+                                    Retry
+                                  </Button>
+                                </div>
+                              </>
                             ) : (
                               <ImageIcon className="h-12 w-12" />
                             )}
@@ -861,7 +907,7 @@ const ChatMessageComponent = function ChatMessage({
                             </div>
 
                             {/* Play button overlay - click to open preview */}
-                            {data.status !== 'SENDING' && (
+                            {data.status !== 'SENDING' && data.status !== 'FAILED' && (
                               <div className="absolute inset-0 flex items-center justify-center">
                                 <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg hover:bg-white transition-colors">
                                   <svg
@@ -956,6 +1002,55 @@ const ChatMessageComponent = function ChatMessage({
                                 )}
                               </div>
                             </>
+                          ) : data.status === 'FAILED' && isMe && onRetry ? (
+                            <>
+                              {/* Failed upload indicator */}
+                              <div className="flex flex-col items-center gap-3 w-full px-8">
+                                <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
+                                  <svg
+                                    className="h-6 w-6 text-destructive"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                    />
+                                  </svg>
+                                </div>
+                                <div className="text-xs text-destructive font-medium">
+                                  {data.error || 'Upload failed'}
+                                </div>
+                                {/* Retry button */}
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    onRetry(data.id)
+                                  }}
+                                  className="mt-2"
+                                >
+                                  <svg
+                                    className="h-3 w-3 mr-1"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                    />
+                                  </svg>
+                                  Retry
+                                </Button>
+                              </div>
+                            </>
                           ) : (
                             <Video className="h-12 w-12 text-muted-foreground" />
                           )}
@@ -1031,8 +1126,8 @@ const ChatMessageComponent = function ChatMessage({
                         </DropdownMenuContent>
                       </DropdownMenu>
 
-                      {/* Play overlay - only show when NOT uploading */}
-                      {data.status !== 'SENDING' && (
+                      {/* Play overlay - only show when NOT uploading and NOT failed */}
+                      {data.status !== 'SENDING' && data.status !== 'FAILED' && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors rounded-md pointer-events-none">
                           <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center">
                             <svg
@@ -1115,6 +1210,34 @@ const ChatMessageComponent = function ChatMessage({
                               </Button>
                             )}
                           </div>
+                        ) : data.status === 'FAILED' && isMe && onRetry ? (
+                          <div className="flex flex-col gap-2 mt-2">
+                            <div className="text-xs text-destructive">
+                              {data.error || 'Upload failed'}
+                            </div>
+                            {/* Retry button */}
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="w-full"
+                              onClick={() => onRetry(data.id)}
+                            >
+                              <svg
+                                className="h-3 w-3 mr-1"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                />
+                              </svg>
+                              Retry
+                            </Button>
+                          </div>
                         ) : (
                           <Button
                             size="sm"
@@ -1144,14 +1267,6 @@ const ChatMessageComponent = function ChatMessage({
                 </span>
                 {isMe && data.status && (
                   <MessageStatusIcon status={data.status} messageId={data.id} />
-                )}
-                {isMe && data.status === MessageStatus.FAILED && onRetry && (
-                  <button
-                    onClick={() => onRetry(data.id)}
-                    className="text-[10px] text-red-400 hover:text-red-300 underline ml-1"
-                  >
-                    Retry
-                  </button>
                 )}
               </div>
             </div>
