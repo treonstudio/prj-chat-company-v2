@@ -822,12 +822,12 @@ export function useMessages(chatId: string | null, isGroupChat: boolean, current
           isGroupChat,
           shouldCompress,
           currentUserAvatar,
-          (current, total) => {
-            // Update message with upload progress
+          (percentage) => {
+            // Update message with upload progress percentage
             setOptimisticMessages(prev =>
               prev.map(msg =>
                 msg.messageId === tempId
-                  ? { ...msg, text: `📷 Uploading ${current}/${total}...` }
+                  ? { ...msg, text: `📷 Uploading ${percentage}%...`, uploadProgress: percentage }
                   : msg
               )
             );

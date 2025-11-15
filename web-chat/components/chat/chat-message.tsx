@@ -827,7 +827,7 @@ const ChatMessageComponent = function ChatMessage({
                 </>
               )}
 
-              {data.type === "image_group" && data.mediaItems && data.mediaItems.length > 0 && (
+              {data.type === "image_group" && (
                 <>
                   {data.isDeleted ? (
                     <div className="flex items-center gap-2 opacity-70">
@@ -835,7 +835,7 @@ const ChatMessageComponent = function ChatMessage({
                         {isMe ? "Anda menghapus pesan ini" : "Pesan ini dihapus"}
                       </span>
                     </div>
-                  ) : (
+                  ) : data.mediaItems && data.mediaItems.length > 0 ? (
                     <div className="relative">
                       <ImageGroup
                         messages={data.mediaItems.map((item, index) => ({
@@ -852,6 +852,109 @@ const ChatMessageComponent = function ChatMessage({
                         }))}
                         isMe={isMe}
                       />
+                    </div>
+                  ) : (
+                    // Show upload progress when mediaItems is empty (uploading state)
+                    <div
+                      className="relative flex flex-col items-center justify-center text-muted-foreground bg-muted rounded-md"
+                      style={{
+                        maxWidth: '330px',
+                        maxHeight: '330px',
+                        minWidth: '200px',
+                        minHeight: '200px',
+                      }}
+                    >
+                      {data.status === 'SENDING' ? (
+                        <>
+                          {/* Upload/Compress indicator */}
+                          <div className="flex flex-col items-center gap-3 w-full px-8">
+                            <div className="relative">
+                              {/* Spinner */}
+                              <div className="h-12 w-12 animate-spin rounded-full border-4 border-muted-foreground/20 border-t-primary" />
+                              {/* Upload icon in center */}
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <svg
+                                  className="h-6 w-6 text-primary"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                                  />
+                                </svg>
+                              </div>
+                            </div>
+                            <div className="text-xs text-muted-foreground font-medium">
+                              {data.content || 'Uploading images...'}
+                            </div>
+                            {/* Progress bar */}
+                            {typeof (data as any).uploadProgress === 'number' && (
+                              <div className="w-full max-w-[200px]">
+                                <div className="h-2 bg-muted-foreground/20 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-primary transition-all duration-300 ease-out rounded-full"
+                                    style={{
+                                      width: `${Math.min(100, Math.max(0, (data as any).uploadProgress))}%`
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            {/* Cancel button */}
+                            {onCancel && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => onCancel(data.id)}
+                                className="mt-2"
+                              >
+                                <X className="h-3 w-3 mr-1" />
+                                Cancel
+                              </Button>
+                            )}
+                          </div>
+                        </>
+                      ) : data.status === 'FAILED' && isMe && onRetry ? (
+                        <>
+                          {/* Failed upload indicator */}
+                          <div className="flex flex-col items-center gap-3 w-full px-8">
+                            <div className="h-12 w-12 rounded-full bg-destructive/10 flex items-center justify-center">
+                              <svg
+                                className="h-6 w-6 text-destructive"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                                />
+                              </svg>
+                            </div>
+                            <div className="text-xs text-destructive font-medium text-center">
+                              {data.error || 'Upload failed'}
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onRetry(data.id)}
+                              className="mt-1"
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">
+                          {data.content || 'Loading...'}
+                        </div>
+                      )}
                     </div>
                   )}
                 </>

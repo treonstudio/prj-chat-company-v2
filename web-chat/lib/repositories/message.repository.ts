@@ -343,7 +343,7 @@ export class MessageRepository {
     isGroupChat: boolean,
     shouldCompress: boolean,
     currentUserAvatar?: string,
-    onProgress?: (current: number, total: number) => void,
+    onProgress?: (overallPercentage: number) => void,
     abortSignal?: AbortSignal,
     tempId?: string
   ): Promise<Resource<void>> {
@@ -351,13 +351,15 @@ export class MessageRepository {
       const mediaItems: MediaItem[] = [];
       const totalFiles = imageFiles.length;
 
+      // Calculate total size of all files
+      const totalSize = imageFiles.reduce((sum, file) => sum + file.size, 0);
+      let uploadedSize = 0;
+
       // Upload all images first
       for (let i = 0; i < imageFiles.length; i++) {
         const imageFile = imageFiles[i];
         let fileToUpload = imageFile;
-
-        // Report progress
-        onProgress?.(i + 1, totalFiles);
+        const fileSize = imageFile.size;
 
         // Check for cancellation
         if (abortSignal?.aborted) {
@@ -377,12 +379,25 @@ export class MessageRepository {
         const extension = this.getFileExtension(fileToUpload);
         const fileName = `IMG_${Date.now()}_${i}.${extension}`;
 
-        // Upload to server
-        const uploadResult = await uploadFileToChatkuAPI(fileToUpload, undefined, abortSignal);
+        // Upload to server with progress tracking
+        const uploadResult = await uploadFileToChatkuAPI(
+          fileToUpload,
+          (filePercentage) => {
+            // Calculate overall progress: (uploaded files + current file progress) / total
+            const currentFileProgress = (fileSize * filePercentage) / 100;
+            const totalUploadedSize = uploadedSize + currentFileProgress;
+            const overallPercentage = Math.round((totalUploadedSize / totalSize) * 100);
+            onProgress?.(overallPercentage);
+          },
+          abortSignal
+        );
 
         if (uploadResult.status !== 'success' || !uploadResult.data) {
           return Resource.error(`Failed to upload image ${i + 1}`);
         }
+
+        // Mark this file as fully uploaded
+        uploadedSize += fileSize;
 
         const downloadUrl = uploadResult.data;
 
